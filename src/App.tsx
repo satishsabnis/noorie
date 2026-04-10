@@ -6,6 +6,7 @@ import SetPassword from './pages/SetPassword'
 import Dashboard from './pages/Dashboard'
 import Appointments from './pages/Appointments'
 import NewAppointment from './pages/NewAppointment'
+import AppointmentDetail from './pages/AppointmentDetail'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -45,6 +46,11 @@ function AppRoutes() {
       <Route path="/new-appointment" element={
         <ProtectedRoute>
           <NewAppointment />
+        </ProtectedRoute>
+      } />
+      <Route path="/appointment/:id" element={
+        <ProtectedRoute>
+          <AppointmentDetail />
         </ProtectedRoute>
       } />
       <Route path="*" element={<Navigate to="/login" replace />} />
