@@ -12,7 +12,7 @@ export async function getStaffRecord(countryCode: string, mobile: string) {
   console.log('getStaffRecord: searching phone =', phone)
   const { data, error } = await supabase
     .from('staff')
-    .select('id, name, role, phone, auth_user_id')
+    .select('id, name, role, phone, auth_user_id, salon_id')
     .eq('phone', phone)
     .maybeSingle()
   if (error) throw error
@@ -22,7 +22,7 @@ export async function getStaffRecord(countryCode: string, mobile: string) {
 export async function getStaffByPhone(phone: string) {
   const { data, error } = await supabase
     .from('staff')
-    .select('id, name, role, phone, auth_user_id')
+    .select('id, name, role, phone, auth_user_id, salon_id')
     .eq('phone', phone)
     .maybeSingle()
   if (error) throw error

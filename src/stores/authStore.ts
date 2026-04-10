@@ -9,6 +9,7 @@ interface StaffRecord {
   role: string
   phone: string | null
   auth_user_id: string | null
+  salon_id: string | null
 }
 
 interface AuthState {
