@@ -353,10 +353,13 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown }: { drilldown: NonNull
 
 // ── Summary card ──────────────────────────────────────────────────────────────
 
-function SummaryCard({ label, value, sub }: { label: string; value: React.ReactNode; sub: React.ReactNode }) {
+function SummaryCard({ label, value, sub, action }: { label: string; value: React.ReactNode; sub: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: '12px 16px', flex: 1 }}>
-      <p style={{ color: '#6b7280', fontSize: 11, margin: '0 0 4px' }}>{label}</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <p style={{ color: '#6b7280', fontSize: 11, margin: 0 }}>{label}</p>
+        {action}
+      </div>
       <p style={{ color: '#034325', fontSize: 22, fontWeight: 500, margin: '0 0 4px', lineHeight: 1.2 }}>{value}</p>
       <p style={{ color: '#6b7280', fontSize: 11, margin: 0 }}>{sub}</p>
     </div>
@@ -543,6 +546,8 @@ export default function Dashboard() {
         .gte('starts_at', `${today}T00:00:00+04:00`)
         .lt('starts_at', `${today}T23:59:59+04:00`)
 
+      console.log('Dashboard fetchCards Q1:', { salonId, today, appts, apptErr })
+
       if (apptErr || !appts) {
         if (!cancelled && firstLoad) { setCardsLoading(false); firstLoad = false }
         return
@@ -558,10 +563,12 @@ export default function Dashboard() {
 
       // Query 2: appointment_services + services + staff per service
       const apptIds = appts.map(a => a.id)
-      const { data: svcRows } = await supabase
+      const { data: svcRows, error: svcErr } = await supabase
         .from('appointment_services')
         .select('appointment_id, price, services ( name ), staff ( name )')
         .in('appointment_id', apptIds)
+
+      console.log('Dashboard fetchCards Q2:', { svcRows, svcErr })
 
       // Build lookup: appointment_id → service list
       const svcMap: Record<string, ApptService[]> = {}
@@ -589,6 +596,8 @@ export default function Dashboard() {
           totalPrice:  services.reduce((s, svc) => s + svc.price, 0),
         }
       })
+
+      console.log('Dashboard setCards:', merged)
 
       if (!cancelled) {
         setCards(merged)
@@ -631,6 +640,14 @@ export default function Dashboard() {
           />
           <SummaryCard
             label="Appointments today"
+            action={
+              <button
+                onClick={() => navigate('/new-appointment')}
+                style={{ backgroundColor: '#034325', color: '#ffffff', fontSize: 11, padding: '4px 12px', borderRadius: 6, border: 'none', cursor: 'pointer' }}
+              >
+                + New
+              </button>
+            }
             value={<Clickable onClick={() => setDrilldown('appointments')}>{mockApptSummary.total}</Clickable>}
             sub={
               <span style={{ fontSize: 11 }}>
