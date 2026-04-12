@@ -23,6 +23,10 @@ interface ApptFetched {
   staffName: string
   services: ApptService[]
   totalPrice: number
+  totalDue: number
+  totalPaid: number
+  balance: number
+  lastPaymentAt: string | null
 }
 
 // ── Mock data (drilldown panels — unchanged) ──────────────────────────────────
@@ -114,6 +118,13 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-GB', {
     timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false,
   })
+}
+
+function fmtDateTime(iso: string) {
+  const d = new Date(iso)
+  const datePart = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short' })
+  const timePart = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false })
+  return `${datePart} · ${timePart}`
 }
 
 // ── Drill-down labels ─────────────────────────────────────────────────────────
@@ -387,6 +398,44 @@ function Clickable({ children, onClick }: { children: React.ReactNode; onClick: 
 function ClientCard({ appt, onClick }: { appt: ApptFetched; onClick: () => void }) {
   const time = fmtTime(appt.starts_at)
 
+  // Unpaid balance — any appointment with partial payment takes priority over status-based rendering
+  if (appt.totalPaid > 0 && appt.balance > 0) {
+    return (
+      <div onClick={onClick} style={{ border: '1.5px solid #991b1b', borderRadius: 8, overflow: 'hidden', cursor: 'pointer' }}>
+        {/* Header */}
+        <div style={{ backgroundColor: '#fff5f5', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: '#111111', fontSize: 13, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {appt.clientName}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <span style={{ color: '#991b1b', fontSize: 11 }}>{time}</span>
+            <span style={{ backgroundColor: '#fee2e2', color: '#991b1b', fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10, whiteSpace: 'nowrap' }}>
+              Unpaid balance
+            </span>
+          </div>
+        </div>
+        {/* Body */}
+        <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {appt.services.map((svc, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={{ fontSize: 12, color: '#111111' }}>{svc.name}</span>
+              <span style={{ fontSize: 12, color: '#6b7280' }}>{svc.staffName}</span>
+            </div>
+          ))}
+          <div style={{ borderTop: '0.5px solid #f0f0f0', paddingTop: 8, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, color: '#991b1b', fontWeight: 500 }}>Balance</span>
+              <span style={{ fontSize: 12, color: '#991b1b', fontWeight: 500 }}>AED {appt.balance.toFixed(2)}</span>
+            </div>
+            {appt.lastPaymentAt && (
+              <span style={{ fontSize: 11, color: '#6b7280' }}>Last payment: {fmtDateTime(appt.lastPaymentAt)}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (appt.status === 'in_progress') {
     return (
       <div onClick={onClick} style={{ border: '1.5px solid #034325', borderRadius: 8, overflow: 'hidden', cursor: 'pointer' }}>
@@ -458,7 +507,7 @@ function ClientCard({ appt, onClick }: { appt: ApptFetched; onClick: () => void 
     )
   }
 
-  // completed
+  // completed (fully paid)
   return (
     <div onClick={onClick} style={{ border: '0.5px solid #e0e0e0', borderRadius: 8, overflow: 'hidden', cursor: 'pointer', opacity: 0.65 }}>
       {/* Header */}
@@ -524,6 +573,14 @@ export default function Dashboard() {
   const [drilldown, setDrilldown] = useState<DrillDown>(null)
   const [cards, setCards] = useState<ApptFetched[]>([])
   const [cardsLoading, setCardsLoading] = useState(true)
+  const [focusTick, setFocusTick] = useState(0)
+
+  // Re-fetch whenever the window regains focus (e.g. navigating back from appointment detail)
+  useEffect(() => {
+    function onFocus() { setFocusTick(t => t + 1) }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -582,8 +639,8 @@ export default function Dashboard() {
         })
       }
 
-      // Merge
-      const merged: ApptFetched[] = appts.map(a => {
+      // Merge appointments + services
+      const merged = appts.map(a => {
         const services = svcMap[a.id] ?? []
         return {
           id:          a.id as string,
@@ -597,10 +654,32 @@ export default function Dashboard() {
         }
       })
 
-      console.log('Dashboard setCards:', merged)
+      // Query 3: payments for today's appointments (desc so first hit per appt = latest)
+      const { data: payRows } = await supabase
+        .from('payments')
+        .select('appointment_id, amount, created_at')
+        .in('appointment_id', apptIds)
+        .order('created_at', { ascending: false })
+
+      const payMap: Record<string, { totalPaid: number; lastPaymentAt: string | null }> = {}
+      for (const row of payRows ?? []) {
+        const aid = row.appointment_id as string
+        if (!payMap[aid]) payMap[aid] = { totalPaid: 0, lastPaymentAt: row.created_at as string }
+        payMap[aid].totalPaid += (row.amount as number) ?? 0
+      }
+
+      const withPayments: ApptFetched[] = merged.map(a => {
+        const pay = payMap[a.id] ?? { totalPaid: 0, lastPaymentAt: null }
+        const totalDue  = a.totalPrice
+        const totalPaid = Math.round(pay.totalPaid * 100) / 100
+        const balance   = Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100)
+        return { ...a, totalDue, totalPaid, balance, lastPaymentAt: pay.lastPaymentAt }
+      })
+
+      console.log('Dashboard setCards:', withPayments)
 
       if (!cancelled) {
-        setCards(merged)
+        setCards(withPayments)
         if (firstLoad) { setCardsLoading(false); firstLoad = false }
       }
     }
@@ -608,13 +687,18 @@ export default function Dashboard() {
     fetchCards()
     const interval = setInterval(fetchCards, 30_000)
     return () => { cancelled = true; clearInterval(interval) }
-  }, [staffRecord?.salon_id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [staffRecord?.salon_id, focusTick]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sort: in_progress → scheduled (by time) → completed
+  // Sort: unpaid-balance → in_progress → scheduled → completed
+  function cardOrder(a: ApptFetched) {
+    if (a.totalPaid > 0 && a.balance > 0) return 0
+    if (a.status === 'in_progress') return 1
+    if (a.status === 'scheduled') return 2
+    return 3
+  }
   const sortedCards = [...cards].sort((a, b) => {
-    const order: Record<string, number> = { in_progress: 0, scheduled: 1, completed: 2 }
-    const ao = order[a.status] ?? 1
-    const bo = order[b.status] ?? 1
+    const ao = cardOrder(a)
+    const bo = cardOrder(b)
     if (ao !== bo) return ao - bo
     return a.starts_at.localeCompare(b.starts_at)
   })

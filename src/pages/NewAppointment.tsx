@@ -6,23 +6,18 @@ import { useAuthStore } from '../stores/authStore'
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
-const mockClients = [
-  { id: '00000000-0000-0000-0000-000000000001', name: 'Priya Sharma',  phone: '+971501234567' },
-  { id: '00000000-0000-0000-0000-000000000002', name: 'Sara Khalid',   phone: '+971502345678' },
-]
-
 const mockServices = [
-  { id: '00000000-0000-0000-0000-000000000020', name: 'Hair Colour',         price: 180, duration: 90  },
-  { id: '00000000-0000-0000-0000-000000000021', name: 'Facial',              price: 150, duration: 60  },
-  { id: '00000000-0000-0000-0000-000000000022', name: 'Keratin Treatment',   price: 220, duration: 120 },
-  { id: '00000000-0000-0000-0000-000000000023', name: 'Blowout',             price: 80,  duration: 45  },
-  { id: '00000000-0000-0000-0000-000000000024', name: 'Hair Cut',            price: 60,  duration: 30  },
-  { id: '00000000-0000-0000-0000-000000000025', name: 'Manicure + Pedicure', price: 120, duration: 60  },
-  { id: '00000000-0000-0000-0000-000000000026', name: 'Gel Nails',           price: 100, duration: 60  },
-  { id: '00000000-0000-0000-0000-000000000027', name: 'Nail Art',            price: 80,  duration: 45  },
-  { id: '00000000-0000-0000-0000-000000000028', name: 'Eyebrow Threading',   price: 30,  duration: 20  },
-  { id: '00000000-0000-0000-0000-000000000029', name: 'Full Body Wax',       price: 200, duration: 90  },
-  { id: '00000000-0000-0000-0000-000000000030', name: 'Lash Lift',           price: 120, duration: 60  },
+  { id: '00000000-0000-0000-0000-000000000020', name: 'Hair Colour',         price: 180, duration_minutes: 90  },
+  { id: '00000000-0000-0000-0000-000000000021', name: 'Facial',              price: 150, duration_minutes: 60  },
+  { id: '00000000-0000-0000-0000-000000000022', name: 'Keratin Treatment',   price: 220, duration_minutes: 120 },
+  { id: '00000000-0000-0000-0000-000000000023', name: 'Blowout',             price: 80,  duration_minutes: 45  },
+  { id: '00000000-0000-0000-0000-000000000024', name: 'Hair Cut',            price: 60,  duration_minutes: 30  },
+  { id: '00000000-0000-0000-0000-000000000025', name: 'Manicure + Pedicure', price: 120, duration_minutes: 60  },
+  { id: '00000000-0000-0000-0000-000000000026', name: 'Gel Nails',           price: 100, duration_minutes: 60  },
+  { id: '00000000-0000-0000-0000-000000000027', name: 'Nail Art',            price: 80,  duration_minutes: 45  },
+  { id: '00000000-0000-0000-0000-000000000028', name: 'Eyebrow Threading',   price: 30,  duration_minutes: 20  },
+  { id: '00000000-0000-0000-0000-000000000029', name: 'Full Body Wax',       price: 200, duration_minutes: 90  },
+  { id: '00000000-0000-0000-0000-000000000030', name: 'Lash Lift',           price: 120, duration_minutes: 60  },
 ]
 
 const mockStaff = [
@@ -55,9 +50,9 @@ const staffServices: Record<string, string[]> = {
 // ── Time slots ────────────────────────────────────────────────────────────────
 
 const TIME_SLOTS: string[] = []
-for (let h = 9; h <= 20; h++) {
+for (let h = 9; h <= 23; h++) {
   TIME_SLOTS.push(`${String(h).padStart(2, '0')}:00`)
-  if (h < 20) TIME_SLOTS.push(`${String(h).padStart(2, '0')}:30`)
+  if (h < 23) TIME_SLOTS.push(`${String(h).padStart(2, '0')}:30`)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -82,7 +77,7 @@ function nextDubaiSlot(): string {
   const h = Math.floor(next / 60)
   const m = next % 60
   if (h < 9) return '09:00'
-  if (h > 20 || (h === 20 && m > 0)) return '20:00'
+  if (h > 23 || (h === 23 && m > 0)) return '23:00'
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
@@ -95,6 +90,12 @@ function addMinutes(time: string, minutes: number): string {
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Client {
+  id: string
+  name: string
+  phone: string
+}
 
 interface ServiceRow {
   rowId: string
@@ -131,21 +132,29 @@ const cellSelectStyle: React.CSSProperties = {
 // ── Client search ─────────────────────────────────────────────────────────────
 
 function ClientSearch({
-  value, onChange,
+  value, onChange, salonId, clients,
 }: {
-  value: typeof mockClients[0] | null
-  onChange: (c: typeof mockClients[0] | null) => void
+  value: Client | null
+  onChange: (c: Client | null) => void
+  salonId: string | null
+  clients: Client[]
 }) {
   const [query, setQuery] = useState(value?.name ?? '')
   const [open, setOpen] = useState(false)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newDob, setNewDob] = useState('')
+  const [addSaving, setAddSaving] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   const filtered = query.trim().length > 0
-    ? mockClients.filter(c =>
+    ? clients.filter(c =>
         c.name.toLowerCase().includes(query.toLowerCase()) ||
         c.phone.includes(query)
       )
-    : mockClients
+    : clients
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -156,6 +165,35 @@ function ClientSearch({
   }, [])
 
   useEffect(() => { setQuery(value?.name ?? '') }, [value])
+
+  function handleAddClientClick() {
+    setOpen(false)
+    setShowAddForm(true)
+    setNewName('')
+    setNewPhone('')
+    setNewDob('')
+    setAddError(null)
+  }
+
+  async function handleSaveClient() {
+    if (!newName.trim()) { setAddError('Name is required'); return }
+    setAddSaving(true)
+    setAddError(null)
+    const { data, error } = await supabase
+      .from('clients')
+      .insert({ salon_id: salonId, name: newName.trim(), phone: newPhone.trim() || null, dob: newDob || null })
+      .select('id, name, phone')
+      .single()
+    if (error || !data) {
+      setAddError(error?.message ?? 'Failed to save client')
+      setAddSaving(false)
+      return
+    }
+    const saved: Client = { id: data.id as string, name: data.name as string, phone: (data.phone as string) ?? '' }
+    onChange(saved)
+    setShowAddForm(false)
+    setAddSaving(false)
+  }
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -168,13 +206,24 @@ function ClientSearch({
         style={inputStyle}
         autoComplete="off"
       />
-      {open && filtered.length > 0 && (
+
+      {/* Dropdown */}
+      {open && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
           backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0',
           borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-          maxHeight: 200, overflowY: 'auto', marginTop: 2,
+          maxHeight: 220, overflowY: 'auto', marginTop: 2,
         }}>
+          {/* + Add Client always first */}
+          <div
+            onMouseDown={handleAddClientClick}
+            style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: '0.5px solid #e0e0e0' }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f0fdf4')}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#ffffff')}
+          >
+            <span style={{ fontSize: 13, color: '#034325', fontWeight: 500 }}>+ Add Client</span>
+          </div>
           {filtered.map(c => (
             <div
               key={c.id}
@@ -187,6 +236,60 @@ function ClientSearch({
               <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 8 }}>{c.phone}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Inline add-client form */}
+      {showAddForm && (
+        <div style={{
+          marginTop: 8, border: '0.5px solid #e0e0e0', borderRadius: 6,
+          padding: '12px 12px 10px', backgroundColor: '#f9fafb',
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <input
+            type="text"
+            placeholder="Full name"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            style={inputStyle}
+            autoFocus
+          />
+          <input
+            type="tel"
+            placeholder="Mobile number"
+            value={newPhone}
+            onChange={e => setNewPhone(e.target.value)}
+            style={inputStyle}
+          />
+          <div>
+            <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 4 }}>Date of birth</label>
+            <input
+              type="date"
+              value={newDob}
+              onChange={e => setNewDob(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          {addError && <p style={{ fontSize: 11, color: '#dc2626', margin: 0 }}>{addError}</p>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
+            <button
+              onClick={handleSaveClient}
+              disabled={addSaving}
+              style={{
+                backgroundColor: '#034325', color: '#ffffff', border: 'none',
+                borderRadius: 6, padding: '7px 16px', fontSize: 12, fontWeight: 600,
+                cursor: addSaving ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {addSaving ? 'Saving…' : 'Save client'}
+            </button>
+            <span
+              onClick={() => setShowAddForm(false)}
+              style={{ fontSize: 12, color: '#6b7280', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Cancel
+            </span>
+          </div>
         </div>
       )}
     </div>
@@ -215,10 +318,10 @@ export default function NewAppointment() {
   const navigate = useNavigate()
   const staffRecord = useAuthStore(s => s.staffRecord)
 
-  const [client, setClient] = useState<typeof mockClients[0] | null>(null)
+  const [client, setClient] = useState<Client | null>(null)
+  const [clients, setClients] = useState<Client[]>([])
   const [date, setDate] = useState(todayStr())
   const [time, setTime] = useState(() => nextDubaiSlot())
-  const [isWalkIn, setIsWalkIn] = useState(false)
   const [notes, setNotes] = useState('')
   const [serviceRows, setServiceRows] = useState<ServiceRow[]>([
     { rowId: 'r1', serviceId: '', staffId: '' },
@@ -226,19 +329,30 @@ export default function NewAppointment() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // ── Fetch clients ────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const salonId = staffRecord?.salon_id
+    if (!salonId) return
+    supabase
+      .from('clients')
+      .select('id, name, phone')
+      .eq('salon_id', salonId)
+      .order('name', { ascending: true })
+      .then(({ data }) => {
+        if (data) setClients(data.map(c => ({ id: c.id as string, name: c.name as string, phone: (c.phone as string) ?? '' })))
+      })
+  }, [staffRecord?.salon_id])
+
   // ── Derived values ──────────────────────────────────────────────────────────
 
   const completeRows = serviceRows.filter(r => r.serviceId && r.staffId)
 
   const totalDuration = serviceRows.reduce((sum, r) => {
-    return sum + (mockServices.find(s => s.id === r.serviceId)?.duration ?? 0)
+    return sum + (mockServices.find(s => s.id === r.serviceId)?.duration_minutes ?? 0)
   }, 0)
 
   const endTime = totalDuration > 0 ? addMinutes(time, totalDuration) : null
-
-  const totalPrice = serviceRows.reduce((sum, r) => {
-    return sum + (mockServices.find(s => s.id === r.serviceId)?.price ?? 0)
-  }, 0)
 
   const canBook = !!client && !!date && !!time && completeRows.length > 0
 
@@ -267,64 +381,66 @@ export default function NewAppointment() {
   // ── Submit ──────────────────────────────────────────────────────────────────
 
   const handleBook = async () => {
-    if (!canBook || !client) return
-    if (date < todayStr()) {
-      setError('Cannot book appointments for past dates')
-      return
-    }
-    setSaving(true)
-    setError(null)
-
+    console.log('handleBook called')
     try {
-      const startsAt = `${date}T${time}:00+04:00`
-      const endsAt = endTime ? `${date}T${endTime}:00+04:00` : startsAt
-      const firstStaff = completeRows[0].staffId
-      const salonId = staffRecord?.salon_id ?? null
-
-      const apptPayload = {
-        salon_id: salonId,
-        client_id: client.id,
-        staff_id: firstStaff,
-        starts_at: startsAt,
-        ends_at: endsAt,
-        is_walk_in: isWalkIn,
-        notes: notes.trim() || null,
-      }
-      const { data: appt, error: apptErr } = await supabase
-        .from('appointments')
-        .insert(apptPayload)
-        .select('id')
-        .single()
-
-      if (apptErr) {
-        setError(apptErr.message)
+      if (!canBook || !client) return
+      if (date < todayStr()) {
+        setError('Cannot book appointments for past dates')
         return
       }
+      setSaving(true)
+      setError(null)
 
-      const svcPayload = completeRows.map(r => {
-        const svc = mockServices.find(s => s.id === r.serviceId)
-        return {
+      try {
+        const startsAt = `${date}T${time}:00+04:00`
+        const endsAt = endTime ? `${date}T${endTime}:00+04:00` : startsAt
+        const firstStaff = completeRows[0].staffId
+        const salonId = staffRecord?.salon_id ?? null
+
+        const apptPayload = {
+          salon_id: salonId,
+          client_id: client.id,
+          staff_id: firstStaff,
+          starts_at: startsAt,
+          ends_at: endsAt,
+          is_walk_in: false,
+          notes: notes.trim() || null,
+        }
+        const { data: appt, error: apptErr } = await supabase
+          .from('appointments')
+          .insert(apptPayload)
+          .select('id')
+          .single()
+
+        if (apptErr) {
+          setError(apptErr.message)
+          return
+        }
+
+        const svcPayload = completeRows.map(r => ({
           appointment_id: appt.id,
           service_id: r.serviceId,
           staff_id: r.staffId,
-          price: svc?.price ?? null,
+          price: 0,
           commission_pct: 0,
+        }))
+        const { error: svcErr } = await supabase
+          .from('appointment_services')
+          .insert(svcPayload)
+
+        if (svcErr) {
+          setError(svcErr.message)
+          return
         }
-      })
-      const { error: svcErr } = await supabase
-        .from('appointment_services')
-        .insert(svcPayload)
 
-      if (svcErr) {
-        setError(svcErr.message)
-        return
+        navigate('/dashboard')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+      } finally {
+        setSaving(false)
       }
-
-      navigate('/appointments')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
-    } finally {
-      setSaving(false)
+      console.error('handleBook error:', err)
     }
   }
 
@@ -365,7 +481,7 @@ export default function NewAppointment() {
             {/* Client */}
             <div>
               <label style={labelStyle}>Client</label>
-              <ClientSearch value={client} onChange={setClient} />
+              <ClientSearch value={client} onChange={setClient} salonId={staffRecord?.salon_id ?? null} clients={clients} />
             </div>
 
             {/* Date + Start time — above services table */}
@@ -391,10 +507,11 @@ export default function NewAppointment() {
                   onChange={e => setTime(e.target.value)}
                   style={selectStyle}
                 >
-                  {(date === todayStr()
-                    ? TIME_SLOTS.filter(t => t > dubaiNowStr())
-                    : TIME_SLOTS
-                  ).map(t => (
+                  {(() => {
+                    if (date !== todayStr()) return TIME_SLOTS
+                    const future = TIME_SLOTS.filter(t => t > dubaiNowStr())
+                    return future.length > 0 ? future : TIME_SLOTS
+                  })().map(t => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
@@ -445,7 +562,7 @@ export default function NewAppointment() {
                               <option value="">Select service…</option>
                               {mockServices.map(s => (
                                 <option key={s.id} value={s.id}>
-                                  {s.name} — AED {s.price}
+                                  {s.name} — {s.duration_minutes} min
                                 </option>
                               ))}
                             </select>
@@ -508,20 +625,6 @@ export default function NewAppointment() {
               </button>
             </div>
 
-            {/* Walk-in toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="checkbox"
-                id="walkIn"
-                checked={isWalkIn}
-                onChange={e => setIsWalkIn(e.target.checked)}
-                style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#034325' }}
-              />
-              <label htmlFor="walkIn" style={{ fontSize: 13, color: '#000000', cursor: 'pointer', userSelect: 'none' }}>
-                Walk-in
-              </label>
-            </div>
-
             {/* Notes */}
             <div>
               <label style={labelStyle}>Notes</label>
@@ -566,35 +669,16 @@ export default function NewAppointment() {
                   const staff = mockStaff.find(s => s.id === r.staffId)!
                   const firstName = staff.name.split(' ')[0]
                   return (
-                    <div
-                      key={r.rowId}
-                      style={{
-                        display: 'flex', justifyContent: 'space-between',
-                        alignItems: 'baseline', padding: '4px 0',
-                      }}
-                    >
+                    <div key={r.rowId} style={{ padding: '4px 0' }}>
                       <span style={{ fontSize: 12, color: '#000000' }}>
                         {svc.name}
                         <span style={{ color: '#6b7280' }}> · {firstName}</span>
-                      </span>
-                      <span style={{ fontSize: 12, color: '#000000', fontWeight: 500 }}>
-                        AED {svc.price}
                       </span>
                     </div>
                   )
                 })}
               </div>
             )}
-
-            {/* Total */}
-            <div style={{ borderTop: '0.5px solid #e0e0e0', marginTop: 12, paddingTop: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#000000' }}>Total</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: '#034325' }}>
-                  AED {totalPrice > 0 ? totalPrice.toFixed(2) : '0.00'}
-                </span>
-              </div>
-            </div>
 
             {error && (
               <p style={{ fontSize: 11, color: '#dc2626', margin: '10px 0 0' }}>{error}</p>

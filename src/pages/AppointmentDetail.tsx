@@ -22,6 +22,13 @@ interface ApptDetail {
   } | null
 }
 
+interface PaymentRow {
+  id: string
+  created_at: string
+  amount: number
+  method: string
+}
+
 interface ServiceRow {
   id: string
   service_id: string
@@ -248,8 +255,10 @@ export default function AppointmentDetail() {
   const [saving, setSaving]     = useState(false)
   const [refreshTick, setRefreshTick] = useState(0)
 
-  const [payAmount, setPayAmount] = useState('')
-  const [payMethod, setPayMethod] = useState<'cash' | 'card'>('cash')
+  const [payments, setPayments]         = useState<PaymentRow[]>([])
+  const [servicePrices, setServicePrices] = useState<Record<string, string>>({})
+  const [payAmount, setPayAmount]         = useState('')
+  const [payMethod, setPayMethod]         = useState<'cash' | 'card'>('cash')
 
   const fileInputRef  = useRef<HTMLInputElement>(null)
   const [pendingPhoto, setPendingPhoto] = useState<{ serviceId: string; field: 'before_photos' | 'after_photos' } | null>(null)
@@ -305,9 +314,28 @@ export default function AppointmentDetail() {
         staffName:       (row.staff as { name: string } | null)?.name ?? '—',
       }))
 
+      // Query 3: payments
+      const { data: payData } = await supabase
+        .from('payments')
+        .select('id, created_at, amount, method')
+        .eq('appointment_id', id)
+        .order('created_at', { ascending: true })
+
+      const priceMap: Record<string, string> = {}
+      for (const svc of mapped) {
+        priceMap[svc.id] = svc.price > 0 ? svc.price.toFixed(2) : ''
+      }
+
       if (!cancelled) {
         setAppt(apptData as unknown as ApptDetail)
         setServices(mapped)
+        setServicePrices(priceMap)
+        setPayments((payData ?? []).map(p => ({
+          id:         p.id as string,
+          created_at: p.created_at as string,
+          amount:     (p.amount as number) ?? 0,
+          method:     (p.method as string) ?? '',
+        })))
         setLoading(false)
       }
     }
@@ -357,7 +385,18 @@ export default function AppointmentDetail() {
   async function handleCollectPayment() {
     if (!appt) return
     setSaving(true)
-    const amount = parseFloat(payAmount || totalDue.toFixed(2))
+
+    // Save entered prices to appointment_services before collecting
+    await Promise.all(services.map(s =>
+      supabase.from('appointment_services')
+        .update({ price: parseFloat(servicePrices[s.id] || '0') || 0 })
+        .eq('id', s.id)
+    ))
+
+    const entered = parseFloat(payAmount)
+    if (isNaN(entered) || entered <= 0) { setSaving(false); return }
+    const amount = Math.min(entered, balance)
+
     const { error: payErr } = await supabase.from('payments').insert({
       salon_id:       appt.salon_id,
       appointment_id: appt.id,
@@ -367,10 +406,16 @@ export default function AppointmentDetail() {
       status:         'completed',
     })
     if (!payErr) {
-      await supabase.from('appointments').update({ status: 'completed' }).eq('id', appt.id)
+      const newBalance = Math.round((balance - amount) * 100) / 100
+      if (newBalance <= 0) {
+        await supabase.from('appointments').update({ status: 'completed' }).eq('id', appt.id)
+      }
+      setSaving(false)
+      navigate('/dashboard')
+      return
     }
     setSaving(false)
-    navigate('/dashboard')
+    setPayAmount('')
     refresh()
   }
 
@@ -409,8 +454,12 @@ export default function AppointmentDetail() {
 
   const allSvcCompleted = services.length > 0 && services.every(s => s.status === 'completed')
   const totalDue        = services.reduce((sum, s) => sum + s.price, 0)
+  const enteredTotal    = services.reduce((sum, s) => sum + (parseFloat(servicePrices[s.id] || '0') || 0), 0)
+  const totalPaid       = payments.reduce((sum, p) => sum + p.amount, 0)
+  const balance         = Math.max(0, Math.round((enteredTotal - totalPaid) * 100) / 100)
+  const allPricesSet    = services.length > 0 && services.every(s => parseFloat(servicePrices[s.id] || '0') > 0)
   const isTerminal      = appt?.status === 'cancelled' || appt?.status === 'no_show'
-  const isPaid          = appt?.status === 'completed'
+  const isCompleted     = appt?.status === 'completed'
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -483,57 +532,96 @@ export default function AppointmentDetail() {
                   Payment — available after all services complete
                 </p>
               </div>
-            ) : isPaid ? (
-              <div style={{ border: '0.5px solid #034325', borderRadius: 8, padding: '14px 16px', backgroundColor: '#f0fdf4' }}>
-                <p style={{ fontSize: 12, color: '#034325', fontWeight: 600, margin: 0, textAlign: 'center' }}>
-                  Payment collected · AED {totalDue.toFixed(2)}
-                </p>
-              </div>
-            ) : (
+            ) : (  /* allSvcCompleted && !isTerminal — includes completed status (read-only when balance = 0) */
               <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 16 }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: '#034325', margin: '0 0 12px' }}>Payment</p>
 
-                {/* Per-service rows */}
+                {/* Per-service rows with editable price inputs (read-only when completed) */}
                 {services.map(svc => (
-                  <div key={svc.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '0.5px solid #f0f0f0' }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>{svc.serviceName}</span>
-                    <span style={{ fontSize: 12, color: '#034325' }}>AED {svc.price.toFixed(2)}</span>
+                  <div key={svc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid #f0f0f0', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: '#6b7280', flex: 1 }}>{svc.serviceName}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: '#9ca3af' }}>AED</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={servicePrices[svc.id] ?? ''}
+                        onChange={e => !isCompleted && setServicePrices(prev => ({ ...prev, [svc.id]: e.target.value }))}
+                        readOnly={isCompleted}
+                        placeholder="0.00"
+                        style={{ width: 72, fontSize: 12, fontWeight: 500, color: '#034325', border: '0.5px solid #e0e0e0', borderRadius: 4, padding: '4px 6px', outline: 'none', textAlign: 'right', backgroundColor: isCompleted ? '#f9fafb' : '#ffffff' }}
+                      />
+                    </div>
                   </div>
                 ))}
 
                 {/* Total row */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 12px', borderTop: '0.5px solid #e0e0e0', marginTop: 4 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#000000' }}>Total</span>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: '#034325' }}>AED {totalDue.toFixed(2)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: '#034325' }}>AED {enteredTotal.toFixed(2)}</span>
                 </div>
 
-                {/* Amount + method */}
-                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 4 }}>Amount</label>
-                    <input
-                      type="number"
-                      value={payAmount || totalDue.toFixed(2)}
-                      onChange={e => setPayAmount(e.target.value)}
-                      style={{ width: '100%', fontSize: 13, fontWeight: 500, color: '#034325', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '7px 10px', outline: 'none', boxSizing: 'border-box' }}
-                    />
+                {/* Payment history */}
+                <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 6px' }}>Payments collected</p>
+                {payments.length === 0 ? (
+                  <p style={{ fontSize: 11, color: '#9ca3af', margin: '0 0 10px' }}>No payments yet</p>
+                ) : (
+                  <div style={{ marginBottom: 10 }}>
+                    {payments.map(p => (
+                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '0.5px solid #f0f0f0' }}>
+                        <span style={{ fontSize: 11, color: '#6b7280' }}>{fmtDateTime(p.created_at)}</span>
+                        <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 3, backgroundColor: '#f9fafb', border: '0.5px solid #e0e0e0', color: '#6b7280' }}>
+                          {p.method === 'cash' ? 'Cash' : 'Card'}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: '#034325' }}>AED {p.amount.toFixed(2)}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 4 }}>Method</label>
-                    <select
-                      value={payMethod}
-                      onChange={e => setPayMethod(e.target.value as 'cash' | 'card')}
-                      style={{ width: '100%', fontSize: 12, color: '#000000', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '7px 10px', outline: 'none', cursor: 'pointer', backgroundColor: '#ffffff', boxSizing: 'border-box' }}
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="card">Card</option>
-                    </select>
-                  </div>
+                )}
+
+                {/* Balance row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 0', borderTop: '0.5px solid #e0e0e0', marginBottom: balance > 0 ? 12 : 0 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#000000' }}>Balance</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: balance > 0 ? '#991b1b' : '#034325' }}>
+                    {balance > 0 ? `AED ${balance.toFixed(2)} remaining` : 'Paid in full'}
+                  </span>
                 </div>
 
-                <button disabled={saving} onClick={handleCollectPayment} style={btnPrimary}>
-                  {saving ? 'Processing…' : 'Collect payment'}
-                </button>
+                {/* Collect payment form — only when balance remains */}
+                {balance > 0 && (
+                  <>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 4 }}>Amount</label>
+                        <input
+                          type="number"
+                          min={0.01}
+                          max={balance}
+                          step={0.01}
+                          value={payAmount}
+                          onChange={e => setPayAmount(e.target.value)}
+                          placeholder={balance.toFixed(2)}
+                          style={{ width: '100%', fontSize: 13, fontWeight: 500, color: '#034325', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '7px 10px', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 4 }}>Method</label>
+                        <select
+                          value={payMethod}
+                          onChange={e => setPayMethod(e.target.value as 'cash' | 'card')}
+                          style={{ width: '100%', fontSize: 12, color: '#000000', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '7px 10px', outline: 'none', cursor: 'pointer', backgroundColor: '#ffffff', boxSizing: 'border-box' }}
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="card">Card</option>
+                        </select>
+                      </div>
+                    </div>
+                    <button disabled={saving} onClick={handleCollectPayment} style={btnPrimary}>
+                      {saving ? 'Processing…' : 'Collect payment'}
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
