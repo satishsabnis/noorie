@@ -45,9 +45,6 @@ const mockAllAppts = [
   { id: 'a11', client: 'Chloe Martin',        service: 'Lash Lift',           staff: 'Sunita Rao',   time: '14:30', status: 'scheduled',   walkIn: false, payment: 0   },
 ]
 
-const mockRevenue    = { amount: 1240, payments: 7 }
-const mockTopRunner  = { name: 'Aisha Malik', revenue: 520, appointments: 4 }
-const mockApptSummary = { total: 11, completed: 4, walkIns: 2, noShow: 0 }
 
 const mockBirthdays = [
   { id: 'b1', name: 'Priya Sharma', date: 'Apr 11', phone: '+971501234567' },
@@ -574,6 +571,9 @@ export default function Dashboard() {
   const [cards, setCards] = useState<ApptFetched[]>([])
   const [cardsLoading, setCardsLoading] = useState(true)
   const [focusTick, setFocusTick] = useState(0)
+  const [summaryRevenue,      setSummaryRevenue]      = useState({ total: 0, paymentsCount: 0 })
+  const [summaryAppointments, setSummaryAppointments] = useState({ total: 0, completed: 0, walkIns: 0, noShow: 0 })
+  const [summaryTopRunner,    setSummaryTopRunner]    = useState<{ name: string; revenue: number; appointments: number } | null>(null)
 
   // Re-fetch whenever the window regains focus (e.g. navigating back from appointment detail)
   useEffect(() => {
@@ -610,22 +610,40 @@ export default function Dashboard() {
         return
       }
 
+      // Derive summary appointments from Q1
+      const apptIds = appts.map(a => a.id)
+      const summaryAppts = {
+        total:     appts.length,
+        completed: appts.filter(a => a.status === 'completed').length,
+        walkIns:   appts.filter(a => (a.is_walk_in as boolean)).length,
+        noShow:    appts.filter(a => a.status === 'no_show').length,
+      }
+
       if (appts.length === 0) {
         if (!cancelled) {
           setCards([])
+          setSummaryAppointments(summaryAppts)
+          setSummaryRevenue({ total: 0, paymentsCount: 0 })
+          setSummaryTopRunner(null)
           if (firstLoad) { setCardsLoading(false); firstLoad = false }
         }
         return
       }
 
-      // Query 2: appointment_services + services + staff per service
-      const apptIds = appts.map(a => a.id)
-      const { data: svcRows, error: svcErr } = await supabase
-        .from('appointment_services')
-        .select('appointment_id, price, services ( name ), staff ( name )')
-        .in('appointment_id', apptIds)
+      // Query 2 + 3 in parallel: services and payments
+      const [{ data: svcRows, error: svcErr }, { data: payRows }] = await Promise.all([
+        supabase
+          .from('appointment_services')
+          .select('appointment_id, price, services ( name ), staff ( name )')
+          .in('appointment_id', apptIds),
+        supabase
+          .from('payments')
+          .select('appointment_id, amount, created_at')
+          .in('appointment_id', apptIds)
+          .order('created_at', { ascending: false }),
+      ])
 
-      console.log('Dashboard fetchCards Q2:', { svcRows, svcErr })
+      console.log('Dashboard fetchCards Q2+Q3:', { svcRows, svcErr, payRows })
 
       // Build lookup: appointment_id → service list
       const svcMap: Record<string, ApptService[]> = {}
@@ -654,13 +672,7 @@ export default function Dashboard() {
         }
       })
 
-      // Query 3: payments for today's appointments (desc so first hit per appt = latest)
-      const { data: payRows } = await supabase
-        .from('payments')
-        .select('appointment_id, amount, created_at')
-        .in('appointment_id', apptIds)
-        .order('created_at', { ascending: false })
-
+      // Build payment map
       const payMap: Record<string, { totalPaid: number; lastPaymentAt: string | null }> = {}
       for (const row of payRows ?? []) {
         const aid = row.appointment_id as string
@@ -676,10 +688,37 @@ export default function Dashboard() {
         return { ...a, totalDue, totalPaid, balance, lastPaymentAt: pay.lastPaymentAt }
       })
 
+      // Derive summary revenue from payRows
+      const revTotal = Math.round((payRows ?? []).reduce((s, r) => s + ((r.amount as number) ?? 0), 0) * 100) / 100
+      const revCount = (payRows ?? []).length
+
+      // Derive top runner: staff with highest revenue from completed appointment services
+      const completedIds = new Set(appts.filter(a => a.status === 'completed').map(a => a.id as string))
+      const staffRevMap: Record<string, { revenue: number; apptIds: Set<string> }> = {}
+      for (const row of svcRows ?? []) {
+        const apptId = row.appointment_id as string
+        if (!completedIds.has(apptId)) continue
+        const staffName = (row.staff as { name: string } | null)?.name ?? ''
+        if (!staffName) continue
+        if (!staffRevMap[staffName]) staffRevMap[staffName] = { revenue: 0, apptIds: new Set() }
+        staffRevMap[staffName].revenue += (row.price as number) ?? 0
+        staffRevMap[staffName].apptIds.add(apptId)
+      }
+      let topRunner: { name: string; revenue: number; appointments: number } | null = null
+      for (const [name, data] of Object.entries(staffRevMap)) {
+        const rev = Math.round(data.revenue * 100) / 100
+        if (!topRunner || rev > topRunner.revenue) {
+          topRunner = { name, revenue: rev, appointments: data.apptIds.size }
+        }
+      }
+
       console.log('Dashboard setCards:', withPayments)
 
       if (!cancelled) {
         setCards(withPayments)
+        setSummaryAppointments(summaryAppts)
+        setSummaryRevenue({ total: revTotal, paymentsCount: revCount })
+        setSummaryTopRunner(topRunner)
         if (firstLoad) { setCardsLoading(false); firstLoad = false }
       }
     }
@@ -714,13 +753,13 @@ export default function Dashboard() {
         <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
           <SummaryCard
             label="Revenue today"
-            value={<Clickable onClick={() => setDrilldown('revenue-today')}>AED {mockRevenue.amount.toLocaleString()}</Clickable>}
-            sub={<span style={{ color: '#6b7280', fontSize: 11 }}>{mockRevenue.payments} payments collected</span>}
+            value={<Clickable onClick={() => setDrilldown('revenue-today')}>AED {summaryRevenue.total.toLocaleString()}</Clickable>}
+            sub={<span style={{ color: '#6b7280', fontSize: 11 }}>{summaryRevenue.paymentsCount} payments collected</span>}
           />
           <SummaryCard
             label="Top runner today"
-            value={<Clickable onClick={() => setDrilldown('toprunner')}><span style={{ fontSize: 18 }}>{mockTopRunner.name}</span></Clickable>}
-            sub={<span style={{ color: '#6b7280', fontSize: 11 }}>AED {mockTopRunner.revenue} · {mockTopRunner.appointments} appointments</span>}
+            value={<Clickable onClick={() => setDrilldown('toprunner')}><span style={{ fontSize: 18 }}>{summaryTopRunner?.name ?? '—'}</span></Clickable>}
+            sub={<span style={{ color: '#6b7280', fontSize: 11 }}>AED {summaryTopRunner?.revenue ?? 0} · {summaryTopRunner?.appointments ?? 0} appointments</span>}
           />
           <SummaryCard
             label="Appointments today"
@@ -732,13 +771,13 @@ export default function Dashboard() {
                 + New
               </button>
             }
-            value={<Clickable onClick={() => setDrilldown('appointments')}>{mockApptSummary.total}</Clickable>}
+            value={<Clickable onClick={() => setDrilldown('appointments')}>{summaryAppointments.total}</Clickable>}
             sub={
               <span style={{ fontSize: 11 }}>
-                <Clickable onClick={() => setDrilldown('completed')}><span style={{ color: '#034325' }}>{mockApptSummary.completed} completed</span></Clickable>
+                <Clickable onClick={() => setDrilldown('completed')}><span style={{ color: '#034325' }}>{summaryAppointments.completed} completed</span></Clickable>
                 <span style={{ color: '#6b7280' }}> · </span>
-                <Clickable onClick={() => setDrilldown('walkins')}><span style={{ color: '#034325' }}>{mockApptSummary.walkIns} walk-ins</span></Clickable>
-                <span style={{ color: '#6b7280' }}> · {mockApptSummary.noShow} no-show</span>
+                <Clickable onClick={() => setDrilldown('walkins')}><span style={{ color: '#034325' }}>{summaryAppointments.walkIns} walk-ins</span></Clickable>
+                <span style={{ color: '#6b7280' }}> · {summaryAppointments.noShow} no-show</span>
               </span>
             }
           />
