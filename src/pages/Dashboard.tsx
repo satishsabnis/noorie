@@ -29,6 +29,27 @@ interface ApptFetched {
   lastPaymentAt: string | null
 }
 
+interface BriefSlot {
+  staffName: string
+  freeSlots: { from: string; to: string }[]
+}
+
+interface BriefLapsedClient {
+  name: string
+  phone: string
+  daysSinceVisit: number
+  lastService: string
+  totalSpend: number
+  birthdayInDays: number | null
+}
+
+interface BriefUnpaid {
+  clientName: string
+  phone: string
+  amountOwed: number
+  appointmentDate: string
+}
+
 // ── Mock data (drilldown panels — unchanged) ──────────────────────────────────
 
 const mockAllAppts = [
@@ -122,6 +143,53 @@ function fmtDateTime(iso: string) {
   const datePart = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short' })
   const timePart = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false })
   return `${datePart} · ${timePart}`
+}
+
+function dubaiDateTimeLabel(): string {
+  const now = new Date()
+  const weekday = now.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', weekday: 'long' })
+  const day     = now.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric' })
+  const month   = now.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', month: 'short' })
+  const year    = now.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', year: 'numeric' })
+  const time    = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: true })
+  return `${weekday}, ${day} ${month} ${year} · ${time}`
+}
+
+function minutesToHHMM(mins: number): string {
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
+}
+
+function dubaiMinutesFromISO(iso: string): number {
+  const d = new Date(iso)
+  const s = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false })
+  const [h, m] = s.split(':').map(Number)
+  return h * 60 + m
+}
+
+function findFreeSlots(appts: { startMins: number; endMins: number }[]): { from: string; to: string }[] {
+  const OPEN = 9 * 60; const CLOSE = 21 * 60; const MIN_GAP = 30
+  const sorted = [...appts].sort((a, b) => a.startMins - b.startMins)
+  const slots: { from: string; to: string }[] = []
+  let cursor = OPEN
+  for (const a of sorted) {
+    if (a.startMins > cursor) {
+      const end = Math.min(a.startMins, CLOSE)
+      if (end - cursor >= MIN_GAP) slots.push({ from: minutesToHHMM(cursor), to: minutesToHHMM(end) })
+    }
+    cursor = Math.max(cursor, a.endMins)
+  }
+  if (CLOSE - cursor >= MIN_GAP) slots.push({ from: minutesToHHMM(cursor), to: minutesToHHMM(CLOSE) })
+  return slots
+}
+
+function daysUntilBirthday(dob: string): number | null {
+  if (!dob) return null
+  const dubai = new Date(Date.now() + 4 * 60 * 60 * 1000)
+  const y = dubai.getUTCFullYear(), mo = dubai.getUTCMonth(), d = dubai.getUTCDate()
+  const [, mm, dd] = dob.split('-').map(Number)
+  let bday = new Date(Date.UTC(y, mm - 1, dd))
+  if (bday < new Date(Date.UTC(y, mo, d))) bday = new Date(Date.UTC(y + 1, mm - 1, dd))
+  return Math.round((bday.getTime() - new Date(Date.UTC(y, mo, d)).getTime()) / 86_400_000)
 }
 
 // ── Drill-down labels ─────────────────────────────────────────────────────────
@@ -562,6 +630,231 @@ function BirthdayStrip() {
   )
 }
 
+// ── Brief query functions ─────────────────────────────────────────────────────
+
+async function fetchBriefSlots(salonId: string): Promise<BriefSlot[]> {
+  const today = todayStr()
+  const [{ data: staffRows }, { data: apptRows }] = await Promise.all([
+    supabase.from('staff').select('id, name').eq('salon_id', salonId),
+    supabase.from('appointments')
+      .select('staff_id, starts_at, ends_at')
+      .eq('salon_id', salonId)
+      .gte('starts_at', `${today}T00:00:00+04:00`)
+      .lt('starts_at', `${today}T23:59:59+04:00`),
+  ])
+  if (!staffRows) return []
+  const byStaff: Record<string, { startMins: number; endMins: number }[]> = {}
+  for (const a of apptRows ?? []) {
+    const sid = a.staff_id as string
+    if (!byStaff[sid]) byStaff[sid] = []
+    byStaff[sid].push({
+      startMins: dubaiMinutesFromISO(a.starts_at as string),
+      endMins:   dubaiMinutesFromISO(a.ends_at as string),
+    })
+  }
+  return staffRows
+    .map(s => ({ staffName: s.name as string, freeSlots: findFreeSlots(byStaff[s.id as string] ?? []) }))
+    .filter(s => s.freeSlots.length > 0)
+}
+
+async function fetchBriefLapsedClient(salonId: string): Promise<BriefLapsedClient | null> {
+  const { data: clientRows } = await supabase
+    .from('clients').select('id, name, phone, dob').eq('salon_id', salonId)
+  if (!clientRows || clientRows.length === 0) return null
+  const clientIds = clientRows.map(c => c.id as string)
+  const [{ data: apptRows }, { data: payRows }] = await Promise.all([
+    supabase.from('appointments')
+      .select('client_id, starts_at, appointment_services ( services ( name ) )')
+      .eq('salon_id', salonId).eq('status', 'completed')
+      .in('client_id', clientIds).order('starts_at', { ascending: false }),
+    supabase.from('payments').select('client_id, amount').in('client_id', clientIds),
+  ])
+  const lastVisitMap: Record<string, { date: string; service: string }> = {}
+  for (const a of apptRows ?? []) {
+    const cid = a.client_id as string
+    if (lastVisitMap[cid]) continue
+    const svcs = (a.appointment_services as { services: { name: string } | null }[]) ?? []
+    lastVisitMap[cid] = { date: a.starts_at as string, service: svcs[0]?.services?.name ?? '—' }
+  }
+  const spendMap: Record<string, number> = {}
+  for (const p of payRows ?? []) {
+    const cid = p.client_id as string
+    spendMap[cid] = (spendMap[cid] ?? 0) + ((p.amount as number) ?? 0)
+  }
+  const todayMs = new Date(Date.now() + 4 * 60 * 60 * 1000).getTime()
+  const lapsed: BriefLapsedClient[] = []
+  for (const c of clientRows) {
+    const cid = c.id as string
+    const last = lastVisitMap[cid]
+    if (!last) continue
+    const daysSince = Math.floor((todayMs - new Date(last.date).getTime()) / 86_400_000)
+    if (daysSince <= 30) continue
+    const birthdayInDays = c.dob ? daysUntilBirthday(c.dob as string) : null
+    lapsed.push({
+      name: c.name as string,
+      phone: (c.phone as string) ?? '',
+      daysSinceVisit: daysSince,
+      lastService: last.service,
+      totalSpend: Math.round((spendMap[cid] ?? 0) * 100) / 100,
+      birthdayInDays,
+    })
+  }
+  lapsed.sort((a, b) => {
+    const aB = a.birthdayInDays !== null && a.birthdayInDays <= 14
+    const bB = b.birthdayInDays !== null && b.birthdayInDays <= 14
+    if (aB && !bB) return -1
+    if (!aB && bB) return 1
+    return b.totalSpend - a.totalSpend
+  })
+  return lapsed[0] ?? null
+}
+
+async function fetchBriefUnpaid(salonId: string): Promise<BriefUnpaid[]> {
+  const { data: apptRows } = await supabase
+    .from('appointments')
+    .select('id, starts_at, clients ( name, phone )')
+    .eq('salon_id', salonId).eq('status', 'completed')
+  if (!apptRows || apptRows.length === 0) return []
+  const apptIds = apptRows.map(a => a.id as string)
+  const [{ data: svcRows }, { data: payRows }] = await Promise.all([
+    supabase.from('appointment_services').select('appointment_id, price').in('appointment_id', apptIds),
+    supabase.from('payments').select('appointment_id, amount').in('appointment_id', apptIds),
+  ])
+  const svcMap: Record<string, number> = {}
+  for (const s of svcRows ?? []) {
+    const aid = s.appointment_id as string
+    svcMap[aid] = (svcMap[aid] ?? 0) + ((s.price as number) ?? 0)
+  }
+  const payMap: Record<string, number> = {}
+  for (const p of payRows ?? []) {
+    const aid = p.appointment_id as string
+    payMap[aid] = (payMap[aid] ?? 0) + ((p.amount as number) ?? 0)
+  }
+  const results: BriefUnpaid[] = []
+  for (const a of apptRows) {
+    const aid = a.id as string
+    const balance = Math.round(((svcMap[aid] ?? 0) - (payMap[aid] ?? 0)) * 100) / 100
+    if (balance <= 0) continue
+    const client = a.clients as { name: string; phone: string | null } | null
+    results.push({
+      clientName: client?.name ?? 'Client',
+      phone: client?.phone ?? '',
+      amountOwed: balance,
+      appointmentDate: a.starts_at as string,
+    })
+  }
+  results.sort((a, b) => b.amountOwed - a.amountOwed)
+  return results.slice(0, 3)
+}
+
+// ── Morning Brief component ───────────────────────────────────────────────────
+
+function MorningBrief({
+  slots, lapsedClient, unpaid, loading,
+  errors,
+}: {
+  slots: BriefSlot[]
+  lapsedClient: BriefLapsedClient | null
+  unpaid: BriefUnpaid[]
+  loading: boolean
+  errors: { slots: boolean; lapsed: boolean; unpaid: boolean }
+}) {
+  const [dtLabel, setDtLabel] = useState(dubaiDateTimeLabel())
+  useEffect(() => {
+    const t = setInterval(() => setDtLabel(dubaiDateTimeLabel()), 60_000)
+    return () => clearInterval(t)
+  }, [])
+
+  const cardBase: React.CSSProperties = {
+    backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 8, padding: '12px 14px',
+  }
+  const skeletonCard: React.CSSProperties = {
+    ...cardBase, backgroundColor: 'rgba(255,255,255,0.05)',
+  }
+  const bodyText = (s: string) => (
+    <p style={{ fontSize: 12, color: '#ffffff', margin: 0, lineHeight: 1.6 }}>{s}</p>
+  )
+  const errText = () => (
+    <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>Unable to load — check connection.</p>
+  )
+  const loadText = () => (
+    <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: 0 }}>Loading...</p>
+  )
+
+  return (
+    <div style={{
+      backgroundColor: '#034325', borderRadius: 10, padding: '16px 20px',
+      margin: '14px 16px', marginBottom: 14,
+    }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 11, color: '#00BF00', margin: '0 0 3px' }}>{dtLabel}</p>
+          <p style={{ fontSize: 16, fontWeight: 500, color: '#ffffff', margin: 0 }}>Morning Brief</p>
+        </div>
+        <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', margin: 0, textAlign: 'right', lineHeight: 1.5 }}>
+          Powered by<br />Noorie AI
+        </p>
+      </div>
+
+      {/* Three insight cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+        {/* Card 1 — Empty slots */}
+        <div style={{ ...(loading ? skeletonCard : cardBase), borderLeft: '3px solid #00BF00' }}>
+          <p style={{ fontSize: 11, fontWeight: 500, color: '#00BF00', margin: '0 0 6px' }}>Fill today's gaps</p>
+          {loading ? loadText()
+            : errors.slots ? errText()
+            : slots.length === 0
+              ? bodyText('All staff fully booked today.')
+              : bodyText(slots.map(s => {
+                  const first = s.staffName.split(' ')[0]
+                  const last = s.freeSlots[s.freeSlots.length - 1]
+                  return last.to === '21:00'
+                    ? `${first} has nothing after ${last.from}`
+                    : `${first} is free ${s.freeSlots[0].from}–${s.freeSlots[0].to}`
+                }).join(' · '))
+          }
+        </div>
+
+        {/* Card 2 — Lapsed client */}
+        <div style={{ ...(loading ? skeletonCard : cardBase), borderLeft: '3px solid #C9A227' }}>
+          <p style={{ fontSize: 11, fontWeight: 500, color: '#C9A227', margin: '0 0 6px' }}>Client to call today</p>
+          {loading ? loadText()
+            : errors.lapsed ? errText()
+            : !lapsedClient
+              ? bodyText('All active clients visited recently.')
+              : bodyText(
+                  `${lapsedClient.name} — ${lapsedClient.daysSinceVisit} days since last visit · Last booked ${lapsedClient.lastService} · ${lapsedClient.phone}`
+                  + (lapsedClient.birthdayInDays !== null && lapsedClient.birthdayInDays <= 14
+                      ? ` · Birthday in ${lapsedClient.birthdayInDays} days`
+                      : '')
+                )
+          }
+        </div>
+
+        {/* Card 3 — Unpaid balances */}
+        <div style={{ ...(loading ? skeletonCard : cardBase), borderLeft: '3px solid rgba(255,255,255,0.3)' }}>
+          <p style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.6)', margin: '0 0 6px' }}>Outstanding payments</p>
+          {loading ? loadText()
+            : errors.unpaid ? errText()
+            : unpaid.length === 0
+              ? bodyText('No outstanding balances.')
+              : <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {unpaid.map((u, i) => (
+                    <p key={i} style={{ fontSize: 12, color: '#ffffff', margin: 0, lineHeight: 1.5 }}>
+                      {u.clientName} owes AED {u.amountOwed.toFixed(2)} — last visit {fmtDateTime(u.appointmentDate)} · {u.phone}
+                    </p>
+                  ))}
+                </div>
+          }
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -574,6 +867,11 @@ export default function Dashboard() {
   const [summaryRevenue,      setSummaryRevenue]      = useState({ total: 0, paymentsCount: 0 })
   const [summaryAppointments, setSummaryAppointments] = useState({ total: 0, completed: 0, walkIns: 0, noShow: 0 })
   const [summaryTopRunner,    setSummaryTopRunner]    = useState<{ name: string; revenue: number; appointments: number } | null>(null)
+  const [briefSlots,          setBriefSlots]          = useState<BriefSlot[]>([])
+  const [briefLapsedClient,   setBriefLapsedClient]   = useState<BriefLapsedClient | null>(null)
+  const [briefUnpaid,         setBriefUnpaid]         = useState<BriefUnpaid[]>([])
+  const [briefLoading,        setBriefLoading]        = useState(true)
+  const [briefErrors,         setBriefErrors]         = useState({ slots: false, lapsed: false, unpaid: false })
 
   // Re-fetch whenever the window regains focus (e.g. navigating back from appointment detail)
   useEffect(() => {
@@ -723,8 +1021,31 @@ export default function Dashboard() {
       }
     }
 
-    fetchCards()
-    const interval = setInterval(fetchCards, 30_000)
+    async function fetchBrief() {
+      const salonId = staffRecord?.salon_id
+      if (!salonId || cancelled) return
+      setBriefLoading(true)
+      const [slotsRes, lapsedRes, unpaidRes] = await Promise.all([
+        fetchBriefSlots(salonId).then(d => ({ d, e: false })).catch(() => ({ d: [] as BriefSlot[], e: true })),
+        fetchBriefLapsedClient(salonId).then(d => ({ d, e: false })).catch(() => ({ d: null as BriefLapsedClient | null, e: true })),
+        fetchBriefUnpaid(salonId).then(d => ({ d, e: false })).catch(() => ({ d: [] as BriefUnpaid[], e: true })),
+      ])
+      if (!cancelled) {
+        setBriefSlots(slotsRes.d)
+        setBriefLapsedClient(lapsedRes.d)
+        setBriefUnpaid(unpaidRes.d)
+        setBriefErrors({ slots: slotsRes.e, lapsed: lapsedRes.e, unpaid: unpaidRes.e })
+        setBriefLoading(false)
+      }
+    }
+
+    async function run() {
+      await fetchCards()
+      await fetchBrief()
+    }
+
+    run()
+    const interval = setInterval(run, 30_000)
     return () => { cancelled = true; clearInterval(interval) }
   }, [staffRecord?.salon_id, focusTick]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -748,6 +1069,15 @@ export default function Dashboard() {
       <Topbar onDashboardClick={() => setDrilldown(null)} />
 
       <div style={{ marginTop: 52, flex: 1, display: 'flex', flexDirection: 'column' }}>
+
+        {/* ── Morning Brief ── */}
+        <MorningBrief
+          slots={briefSlots}
+          lapsedClient={briefLapsedClient}
+          unpaid={briefUnpaid}
+          loading={briefLoading}
+          errors={briefErrors}
+        />
 
         {/* ── Summary strip ── */}
         <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>

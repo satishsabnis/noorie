@@ -9,6 +9,7 @@ import NewAppointment from './pages/NewAppointment'
 import AppointmentDetail from './pages/AppointmentDetail'
 import Clients from './pages/Clients'
 import ClientProfile from './pages/ClientProfile'
+import Staff from './pages/Staff'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -17,11 +18,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { isLoading, initialize } = useAuthStore()
+  const { isLoading, isAuthenticated, initialize } = useAuthStore()
 
   useEffect(() => {
     initialize()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  console.log('auth state:', { isAuthenticated, isLoading })
 
   if (isLoading) {
     return (
@@ -63,6 +66,11 @@ function AppRoutes() {
       <Route path="/client/:id" element={
         <ProtectedRoute>
           <ClientProfile />
+        </ProtectedRoute>
+      } />
+      <Route path="/staff" element={
+        <ProtectedRoute>
+          <Staff />
         </ProtectedRoute>
       } />
       <Route path="*" element={<Navigate to="/login" replace />} />
