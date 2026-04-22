@@ -63,7 +63,13 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     set({ isLoading: false })
 
+    let currentUserId: string | null = null
+
     supabase.auth.onAuthStateChange(async (event, session) => {
+      const newUserId = session?.user?.id ?? null
+      if (newUserId === currentUserId) return
+      currentUserId = newUserId
+
       if (session?.user) {
         const phone = session.user.email?.replace('@noorie.internal', '') ?? ''
         const staff = await getStaffByPhone(phone).catch(() => null)

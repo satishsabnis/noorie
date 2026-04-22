@@ -10,6 +10,7 @@ import AppointmentDetail from './pages/AppointmentDetail'
 import Clients from './pages/Clients'
 import ClientProfile from './pages/ClientProfile'
 import Staff from './pages/Staff'
+import StaffForm from './pages/StaffForm'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -17,14 +18,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function OwnerRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, staffRecord } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const role = staffRecord?.role
+  if (role !== 'owner' && role !== 'supervisor') return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 function AppRoutes() {
-  const { isLoading, isAuthenticated, initialize } = useAuthStore()
+  const { isLoading, initialize } = useAuthStore()
 
   useEffect(() => {
     initialize()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  console.log('auth state:', { isAuthenticated, isLoading })
 
   if (isLoading) {
     return (
@@ -72,6 +79,16 @@ function AppRoutes() {
         <ProtectedRoute>
           <Staff />
         </ProtectedRoute>
+      } />
+      <Route path="/staff/new" element={
+        <OwnerRoute>
+          <StaffForm />
+        </OwnerRoute>
+      } />
+      <Route path="/staff/:id" element={
+        <OwnerRoute>
+          <StaffForm />
+        </OwnerRoute>
       } />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

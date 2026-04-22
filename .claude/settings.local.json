@@ -9,7 +9,10 @@
       "Bash(taskkill /F /IM node.exe)",
       "Bash(cmd /c \"taskkill /F /IM node.exe\")",
       "Bash(cmd /c \"taskkill /F /IM node.exe 2>&1 & echo done\")",
-      "Bash(cmd /c \"tasklist | findstr node.exe\")"
+      "Bash(cmd /c \"tasklist | findstr node.exe\")",
+      "Bash(npx tsc:*)",
+      "mcp__claude_ai_Supabase__get_publishable_keys",
+      "Bash(cmd /c \"taskkill /F /IM node.exe 2>&1 & echo killed\")"
     ]
   }
 }
