@@ -462,6 +462,17 @@ function SectionServices({ salonId }: { salonId: string }) {
     }
   }
 
+  async function toggleActive(id: string, currentActive: boolean) {
+    try {
+      const { error } = await supabase.from('services').update({ is_active: !currentActive }).eq('id', id)
+      if (error) { console.error('[Admin] Services toggleActive error:', error); setError(error.message); return }
+      load()
+    } catch (err) {
+      console.error('[Admin] Services toggleActive exception:', err)
+      setError('Unexpected error — check console.')
+    }
+  }
+
   async function addService() {
     if (!newName.trim() || !newDur.trim()) return
     setAdding(true)
@@ -513,6 +524,7 @@ function SectionServices({ salonId }: { salonId: string }) {
                     ) : (
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button onClick={() => { setEditId(svc.id); setEditName(svc.name); setEditDur(String(svc.duration_minutes)) }} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Edit</button>
+                        <button onClick={() => toggleActive(svc.id, svc.active)} style={{ fontSize: 11, border: `0.5px solid ${svc.active ? '#6b7280' : '#034325'}`, color: svc.active ? '#6b7280' : '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>{svc.active ? 'Suspend' : 'Resume'}</button>
                         <button onClick={() => { setDeleteId(svc.id); setDeleteBlocked(false); setError(null) }} style={{ fontSize: 11, border: '0.5px solid #991b1b', color: '#991b1b', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Delete</button>
                       </div>
                     )}
