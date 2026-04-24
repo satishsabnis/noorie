@@ -732,6 +732,8 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
   const [c, setC] = useState(config)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [techSeeRevenue, setTechSeeRevenue] = useState(true)
+  const [techCollectPayments, setTechCollectPayments] = useState(true)
   useEffect(() => { setC(config); setDirty(false) }, [config])
   function up<K extends keyof ConfigData>(k: K, v: ConfigData[K]) { setC(p => ({ ...p, [k]: v })); setDirty(true) }
 
@@ -757,6 +759,11 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
         <p style={subHeading}>Supervisor permissions</p>
         <ToggleRow label="Can see today's revenue" on={c.staff_can_see_revenue} onChange={v => up('staff_can_see_revenue', v)} />
         <ToggleRow label="Can edit appointments" on={c.staff_can_edit_appointments} onChange={v => up('staff_can_edit_appointments', v)} />
+      </div>
+      <div style={cardStyle}>
+        <p style={subHeading}>Technician permissions</p>
+        <ToggleRow label="Can see own revenue only" on={techSeeRevenue} onChange={setTechSeeRevenue} />
+        <ToggleRow label="Can collect payments" on={techCollectPayments} onChange={setTechCollectPayments} />
       </div>
       <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setDirty(false) }} />
     </div>
