@@ -253,7 +253,7 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
       console.log('[Admin] Salon salons update:', { data: d1, error: e1 })
       if (e1) { setError(e1.message); setSaving(false); return }
       const { data: d2, error: e2 } = await supabase.from('salon_config').update({
-        payroll_mode: c.payroll_mode, payroll_mode_cycle: c.payroll_mode_cycle,
+        payroll_mode: c.payroll_mode, payroll_mode_cycle: c.payroll_mode_cycle, operating_hours: hours,
       }).eq('salon_id', salonId).select()
       console.log('[Admin] Salon salon_config update:', { data: d2, error: e2 })
       if (e2) { setError(e2.message); setSaving(false); return }
