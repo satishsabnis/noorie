@@ -7,7 +7,7 @@ import { useAuthStore } from '../stores/authStore'
 
 const SECTIONS = [
   'Salon details', 'Services', 'Payments', 'WhatsApp',
-  'Loyalty points', 'Noorie AI', 'Staff settings', 'Payroll',
+  'Loyalty points', 'Noorie AI', 'Staff settings',
 ] as const
 type Section = typeof SECTIONS[number]
 
@@ -53,11 +53,10 @@ interface ConfigData {
   competitor_last_scan: string | null
   staff_can_see_revenue: boolean; staff_can_edit_appointments: boolean
   technician_see_own_revenue: boolean; technician_collect_payments: boolean
-  payroll_mode: string; payroll_cycle: string
+  payroll_mode: string; payroll_mode_cycle: string
 }
 
 interface ServiceRow { id: string; name: string; duration_minutes: number; active: boolean }
-interface StaffPayroll { id: string; name: string; role: string; monthly_salary: number; commission_pct: number }
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -92,7 +91,7 @@ const defaultConfig: ConfigData = {
   competitor_last_scan: null,
   staff_can_see_revenue: true, staff_can_edit_appointments: true,
   technician_see_own_revenue: true, technician_collect_payments: true,
-  payroll_mode: 'commission', payroll_cycle: 'monthly',
+  payroll_mode: 'commission', payroll_mode_cycle: 'monthly',
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -213,22 +212,31 @@ function SectionSalon({ salon, config, salonId, onRefresh }: {
 }) {
   const [s, setS] = useState(salon)
   const [hours, setHours] = useState<OperatingHours>(config.operating_hours ?? defaultHours)
+  const [c, setC] = useState({ payroll_mode: config.payroll_mode, payroll_mode_cycle: config.payroll_mode_cycle })
   const [committed, setCommitted] = useState(salon)
   const [committedH, setCommittedH] = useState<OperatingHours>(config.operating_hours ?? defaultHours)
+  const [committedC, setCommittedC] = useState({ payroll_mode: config.payroll_mode, payroll_mode_cycle: config.payroll_mode_cycle })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [openInfo, setOpenInfo] = useState(true)
   const [openHours, setOpenHours] = useState(false)
+  const [openPayroll, setOpenPayroll] = useState(false)
 
-  useEffect(() => { setS(salon); setCommitted(salon); setHours(config.operating_hours ?? defaultHours); setCommittedH(config.operating_hours ?? defaultHours) }, [salon, config])
+  useEffect(() => {
+    setS(salon); setCommitted(salon)
+    setHours(config.operating_hours ?? defaultHours); setCommittedH(config.operating_hours ?? defaultHours)
+    const p = { payroll_mode: config.payroll_mode, payroll_mode_cycle: config.payroll_mode_cycle }
+    setC(p); setCommittedC(p)
+  }, [salon, config])
 
   function upS(k: keyof SalonData, v: string) { setS(p => ({ ...p, [k]: v })) }
   function upH(day: Day, k: keyof DayConfig, v: string | boolean) {
     setHours(p => ({ ...p, [day]: { ...p[day], [k]: v } }))
   }
+  function upC(k: keyof typeof c, v: string) { setC(p => ({ ...p, [k]: v })) }
 
-  const dirty = JSON.stringify(s) !== JSON.stringify(committed) || JSON.stringify(hours) !== JSON.stringify(committedH)
+  const dirty = JSON.stringify(s) !== JSON.stringify(committed) || JSON.stringify(hours) !== JSON.stringify(committedH) || JSON.stringify(c) !== JSON.stringify(committedC)
 
   const isUAE = s.country === 'United Arab Emirates'
 
@@ -241,8 +249,11 @@ function SectionSalon({ salon, config, salonId, onRefresh }: {
         service_pricing_mode: s.service_pricing_mode,
       }).eq('id', salonId)
       if (e1) { console.error('[Admin] Salon save error:', e1); setError(e1.message); setSaving(false); return }
-      setCommitted(s)
-      setCommittedH(hours)
+      const { error: e2 } = await supabase.from('salon_config').update({
+        payroll_mode: c.payroll_mode, payroll_mode_cycle: c.payroll_mode_cycle,
+      }).eq('salon_id', salonId)
+      if (e2) { console.error('[Admin] Salon config save error:', e2); setError(e2.message); setSaving(false); return }
+      setCommitted(s); setCommittedH(hours); setCommittedC(c)
       setSaving(false); setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
@@ -319,7 +330,7 @@ function SectionSalon({ salon, config, salonId, onRefresh }: {
       </div>
 
       {/* Accordion 2 — Operating hours */}
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 10 }}>
         <AccordionHeader label="Operating hours" open={openHours} onToggle={() => setOpenHours(p => !p)} />
         {openHours && (
           <div style={{ border: '0.5px solid #e0e0e0', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: 16, backgroundColor: '#ffffff' }}>
@@ -353,13 +364,48 @@ function SectionSalon({ salon, config, salonId, onRefresh }: {
         )}
       </div>
 
+      {/* Accordion 3 — Payroll settings */}
+      <div style={{ marginBottom: 14 }}>
+        <AccordionHeader label="Payroll settings" open={openPayroll} onToggle={() => setOpenPayroll(p => !p)} />
+        {openPayroll && (
+          <div style={{ border: '0.5px solid #e0e0e0', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: 16, backgroundColor: '#ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+              {/* Left — Payroll mode */}
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Payroll mode</label>
+                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                  {[['commission', 'Commission only'], ['salary', 'Salary only'], ['salary_commission', 'Salary + commission']].map(([val, label]) => (
+                    <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                      <input type="radio" name="salon_payroll_mode" value={val} checked={c.payroll_mode === val}
+                        onChange={() => upC('payroll_mode', val)}
+                        style={{ accentColor: '#034325' }} />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {/* Right — Payroll cycle */}
+              <div style={{ borderLeft: '0.5px solid #e0e0e0', paddingLeft: 32, flexShrink: 0 }}>
+                <label style={labelStyle}>Payroll cycle</label>
+                <select value={c.payroll_mode_cycle} onChange={e => upC('payroll_mode_cycle', e.target.value)}
+                  style={{ ...fieldStyle, appearance: 'none', cursor: 'pointer', width: 130 }}>
+                  <option value="monthly">Monthly</option>
+                  <option value="bi-weekly">Bi-weekly</option>
+                  <option value="weekly">Weekly</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {saved && (
         <div style={{ backgroundColor: '#f0fdf4', border: '0.5px solid #034325', borderRadius: 6, padding: '8px 14px', marginBottom: 10 }}>
           <p style={{ fontSize: 12, color: '#034325', fontWeight: 500, margin: 0 }}>Changes saved</p>
         </div>
       )}
       {error && <p style={{ fontSize: 12, color: '#991b1b', margin: '0 0 10px' }}>{error}</p>}
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setS(committed); setHours(committedH) }} />
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setS(committed); setHours(committedH); setC(committedC) }} />
     </div>
   )
 }
@@ -773,95 +819,6 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
   )
 }
 
-// ── Section: Payroll ──────────────────────────────────────────────────────────
-
-function SectionPayroll({ config, staff, salonId, onRefresh }: { config: ConfigData; staff: StaffPayroll[]; salonId: string; onRefresh: () => void }) {
-  const [c, setC] = useState(config)
-  const [rows, setRows] = useState<StaffPayroll[]>(staff)
-  const [dirty, setDirty] = useState(false)
-  const [saving, setSaving] = useState(false)
-  useEffect(() => { setC(config); setRows(staff); setDirty(false) }, [config, staff])
-  function upC<K extends keyof ConfigData>(k: K, v: ConfigData[K]) { setC(p => ({ ...p, [k]: v })); setDirty(true) }
-  function upRow(id: string, k: 'monthly_salary' | 'commission_pct', raw: string) {
-    const v = Number(raw); setRows(p => p.map(r => r.id === id ? { ...r, [k]: isNaN(v) ? 0 : v } : r)); setDirty(true)
-  }
-
-  async function save() {
-    setSaving(true)
-    try {
-      const { error: e1 } = await supabase.from('salon_config').update({
-        payroll_mode: c.payroll_mode,
-      }).eq('salon_id', salonId)
-      if (e1) console.error('[Admin] Payroll config save error:', e1)
-      const results = await Promise.all(rows.map(r =>
-        supabase.from('staff').update({ monthly_salary: r.monthly_salary, commission_pct: r.commission_pct }).eq('id', r.id)
-      ))
-      results.forEach(({ error }, i) => { if (error) console.error(`[Admin] Payroll staff[${i}] save error:`, error) })
-      setSaving(false); setDirty(false); onRefresh()
-    } catch (err) {
-      console.error('[Admin] Payroll save exception:', err)
-      setSaving(false)
-    }
-  }
-
-  const TH: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', padding: '8px 10px', borderBottom: '0.5px solid #e0e0e0' }
-  const TD: React.CSSProperties = { fontSize: 12, padding: '8px 10px', borderBottom: '0.5px solid #f0f0f0', verticalAlign: 'middle' }
-
-  return (
-    <div>
-      <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Payroll</p>
-      <div style={cardStyle}>
-        <p style={subHeading}>Payroll mode</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-          {[['commission', 'Commission only'], ['salary', 'Salary only'], ['salary_commission', 'Salary + commission']].map(([val, label]) => (
-            <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-              <input type="radio" name="payroll_mode" value={val} checked={c.payroll_mode === val}
-                onChange={() => upC('payroll_mode', val)}
-                style={{ accentColor: '#034325' }} />
-              {label}
-            </label>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle}>Payroll cycle</label>
-            <select value={c.payroll_cycle} onChange={e => upC('payroll_cycle', e.target.value)} style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }}>
-              <option value="monthly">Monthly</option>
-              <option value="bi-weekly">Bi-weekly</option>
-              <option value="weekly">Weekly</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {c.payroll_mode !== 'commission' && (
-        <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr>
-              <th style={TH}>Staff member</th>
-              <th style={TH}>Role</th>
-              <th style={TH}>Monthly salary (AED)</th>
-              <th style={TH}>Commission %</th>
-            </tr></thead>
-            <tbody>
-              {rows.map(r => (
-                <tr key={r.id}>
-                  <td style={{ ...TD, color: '#111', fontWeight: 500 }}>{r.name}</td>
-                  <td style={{ ...TD, color: '#6b7280', textTransform: 'capitalize' }}>{r.role}</td>
-                  <td style={TD}><input type="text" inputMode="numeric" pattern="[0-9]*" value={r.monthly_salary} onChange={e => upRow(r.id, 'monthly_salary', e.target.value)} onFocus={e => e.target.select()} style={{ ...inputStyle, width: 120 }} /></td>
-                  <td style={TD}><input type="number" value={r.commission_pct} onChange={e => upRow(r.id, 'commission_pct', parseFloat(e.target.value) || 0)} style={{ ...inputStyle, width: 80 }} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setRows(staff); setDirty(false) }} />
-    </div>
-  )
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Admin() {
@@ -872,15 +829,13 @@ export default function Admin() {
   const [salon,    setSalon]    = useState<SalonData>(defaultSalon)
   const [config,   setConfig]   = useState<ConfigData>(defaultConfig)
   const [services, setServices] = useState<ServiceRow[]>([])
-  const [payrollStaff, setPayrollStaff] = useState<StaffPayroll[]>([])
   const [loading,  setLoading]  = useState(true)
 
   const fetchAll = useCallback(async () => {
     if (!salonId) { setLoading(false); return }
-    const [{ data: salonData }, { data: configData }, { data: staffData }] = await Promise.all([
+    const [{ data: salonData }, { data: configData }] = await Promise.all([
       supabase.from('salons').select('id,name,address_line1,address_line2,city,country,phone,email,service_pricing_mode').eq('id', salonId).single(),
       supabase.from('salon_config').select('*').eq('salon_id', salonId).single(),
-      supabase.from('staff').select('id,name,role,monthly_salary,commission_pct').eq('salon_id', salonId).neq('status', 'deleted').order('name'),
     ])
     if (salonData) setSalon({
       id:                   salonData.id               as string,
@@ -894,13 +849,6 @@ export default function Admin() {
       service_pricing_mode: (salonData.service_pricing_mode as string) ?? 'manual',
     })
     if (configData) setConfig({ ...defaultConfig, ...configData, id: configData.id as string })
-    if (staffData) setPayrollStaff(staffData.map(s => ({
-      id:             s.id              as string,
-      name:           s.name            as string,
-      role:           (s.role           as string) ?? '',
-      monthly_salary: (s.monthly_salary as number) ?? 0,
-      commission_pct: (s.commission_pct as number) ?? 0,
-    })))
     setLoading(false)
   }, [salonId])
 
@@ -949,7 +897,6 @@ export default function Admin() {
           {activeSection === 'Loyalty points'  && <SectionLoyalty config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Noorie AI'       && <SectionAI config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Staff settings'  && <SectionStaffSettings config={config} salonId={salonId} onRefresh={fetchAll} />}
-          {activeSection === 'Payroll'         && <SectionPayroll config={config} staff={payrollStaff} salonId={salonId} onRefresh={fetchAll} />}
         </div>
       </div>
 
