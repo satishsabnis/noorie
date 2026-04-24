@@ -241,6 +241,8 @@ function SectionSalon({ salon, config, salonId, onRefresh }: {
   const isUAE = s.country === 'United Arab Emirates'
 
   async function save() {
+    console.log('salonId at save:', salonId)
+    if (!salonId) { setError('Salon ID missing'); return }
     setSaving(true); setError(null)
     try {
       const { data: d1, error: e1 } = await supabase.from('salons').update({
