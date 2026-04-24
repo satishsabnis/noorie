@@ -782,8 +782,8 @@ function SectionPayroll({ config, staff, salonId, onRefresh }: { config: ConfigD
   const [saving, setSaving] = useState(false)
   useEffect(() => { setC(config); setRows(staff); setDirty(false) }, [config, staff])
   function upC<K extends keyof ConfigData>(k: K, v: ConfigData[K]) { setC(p => ({ ...p, [k]: v })); setDirty(true) }
-  function upRow(id: string, k: 'monthly_salary' | 'commission_pct', v: number) {
-    setRows(p => p.map(r => r.id === id ? { ...r, [k]: v } : r)); setDirty(true)
+  function upRow(id: string, k: 'monthly_salary' | 'commission_pct', raw: string) {
+    const v = Number(raw); setRows(p => p.map(r => r.id === id ? { ...r, [k]: isNaN(v) ? 0 : v } : r)); setDirty(true)
   }
 
   async function save() {
@@ -848,7 +848,7 @@ function SectionPayroll({ config, staff, salonId, onRefresh }: { config: ConfigD
                 <tr key={r.id}>
                   <td style={{ ...TD, color: '#111', fontWeight: 500 }}>{r.name}</td>
                   <td style={{ ...TD, color: '#6b7280', textTransform: 'capitalize' }}>{r.role}</td>
-                  <td style={TD}><input type="number" value={r.monthly_salary} onChange={e => upRow(r.id, 'monthly_salary', parseInt(e.target.value, 10) || 0)} onFocus={e => e.target.select()} style={{ ...inputStyle, width: 120 }} /></td>
+                  <td style={TD}><input type="text" inputMode="numeric" pattern="[0-9]*" value={r.monthly_salary} onChange={e => upRow(r.id, 'monthly_salary', e.target.value)} onFocus={e => e.target.select()} style={{ ...inputStyle, width: 120 }} /></td>
                   <td style={TD}><input type="number" value={r.commission_pct} onChange={e => upRow(r.id, 'commission_pct', parseFloat(e.target.value) || 0)} style={{ ...inputStyle, width: 80 }} /></td>
                 </tr>
               ))}
