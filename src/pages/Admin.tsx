@@ -740,11 +740,12 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
   async function save() {
     setSaving(true)
     try {
-      const { error } = await supabase.from('salon_config').update({
+      const { data, error } = await supabase.from('salon_config').update({
         staff_can_see_revenue: c.staff_can_see_revenue,
         staff_can_edit_appointments: c.staff_can_edit_appointments,
-      }).eq('salon_id', salonId)
-      if (error) console.error('[Admin] Staff settings save error:', error)
+      }).eq('salon_id', salonId).select()
+      console.log('[Admin] Staff settings save result:', { data, error })
+      if (error) { console.error('[Admin] Staff settings save error:', error); setSaving(false); return }
       setSaving(false); setDirty(false); onRefresh()
     } catch (err) {
       console.error('[Admin] Staff settings save exception:', err)
