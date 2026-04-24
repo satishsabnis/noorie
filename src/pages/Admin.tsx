@@ -831,7 +831,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-haiku-4-5-20251001',
           max_tokens: 4000,
           tools: [{ type: 'web_search_20250305', name: 'web_search' }],
           system: 'You are a salon business intelligence analyst. Research competing beauty salons and provide a structured competitive analysis. Respond ONLY in valid JSON with no markdown backticks or preamble.',
