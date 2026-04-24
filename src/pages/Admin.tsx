@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
@@ -774,6 +774,8 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
   const [scanError, setScanError] = useState<string | null>(null)
   const [report, setReport] = useState<CompetitorReport | null>(null)
   const [lastScan, setLastScan] = useState<string | null>(config.competitor_last_scan)
+  const [copiedSection, setCopiedSection] = useState<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => { setC(config); setDirty(false); setLastScan(config.competitor_last_scan) }, [config])
 
@@ -802,13 +804,22 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
     }
   }
 
+  function cancelScan() {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setScanning(false)
+  }
+
   async function runScan() {
+    const controller = new AbortController()
+    abortRef.current = controller
     setScanning(true); setScanError(null)
     try {
       const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string
       const userMsg = `Research beauty salons competing with ${salon.name} in ${salon.city}, ${salon.country}. Provide a JSON report with these keys: competitors (array of objects with name, location, services, price_range, rating, reviews_summary), trends (array of current beauty trends in this market), offers (array of current promotions competitors are running), pricing_insights (text summary of pricing landscape), loyalty_programs (array of competitor loyalty approaches), recommendations (array of actionable recommendations for the salon owner).`
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
@@ -836,15 +847,28 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
       ])
       setReport(parsed); setLastScan(now)
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') { /* cancelled — no error shown */ return }
       console.error('[Admin] Competitor scan error:', err)
       setScanError(err instanceof Error ? err.message : 'Scan failed — check console.')
     } finally {
+      abortRef.current = null
       setScanning(false)
     }
   }
 
   const TH: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', padding: '6px 10px', borderBottom: '0.5px solid #e0e0e0' }
   const TD: React.CSSProperties = { fontSize: 12, color: '#111', padding: '6px 10px', borderBottom: '0.5px solid #f0f0f0', verticalAlign: 'top' }
+
+  function copySection(key: string, text: string) {
+    navigator.clipboard.writeText(text)
+    setCopiedSection(key)
+    setTimeout(() => setCopiedSection(k => k === key ? null : k), 2000)
+  }
+
+  const copyBtnStyle: React.CSSProperties = {
+    fontSize: 11, border: '0.5px solid #034325', color: '#034325',
+    backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer',
+  }
 
   return (
     <div>
@@ -873,6 +897,12 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
             disabled={scanning}
             style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#ffffff', border: '0.5px solid rgba(255,255,255,0.3)', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: scanning ? 'not-allowed' : 'pointer', opacity: scanning ? 0.7 : 1 }}
           >{scanning ? 'Scanning…' : 'Run now'}</button>
+          {scanning && (
+            <button
+              onClick={cancelScan}
+              style={{ fontSize: 11, backgroundColor: 'transparent', border: '0.5px solid #991b1b', color: '#991b1b', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}
+            >Cancel</button>
+          )}
           {lastScan && (
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Last scan: {new Date(lastScan).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
           )}
@@ -885,7 +915,18 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
 
           {/* Competitors table */}
           <div style={cardStyle}>
-            <p style={subHeading}>Competitors</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <p style={{ ...subHeading, margin: 0 }}>Competitors</p>
+              <button style={copyBtnStyle} onClick={() => copySection('competitors', report.competitors.map(comp => {
+                const n = comp.name ?? comp.salon_name ?? comp.business_name ?? ''
+                const l = comp.location ?? comp.address ?? comp.area ?? ''
+                const s = comp.services ?? comp.service_offerings ?? comp.specialties ?? ''
+                const pr = comp.price_range ?? comp.pricing ?? comp.price ?? ''
+                const ra = comp.rating ?? comp.score ?? comp.stars ?? ''
+                const rv = comp.reviews_summary ?? comp.reviews ?? comp.review_summary ?? ''
+                return `${n} | ${l} | ${Array.isArray(s) ? (s as unknown[]).map(String).join(', ') : String(s)} | ${pr} | ${ra} | ${rv}`
+              }).join('\n'))}>{copiedSection === 'competitors' ? 'Copied' : 'Copy'}</button>
+            </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead><tr>
@@ -918,7 +959,10 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
 
           {/* Trends */}
           <div style={cardStyle}>
-            <p style={subHeading}>Market trends</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <p style={{ ...subHeading, margin: 0 }}>Market trends</p>
+              <button style={copyBtnStyle} onClick={() => copySection('trends', report.trends.map(t => `- ${typeof t === 'string' ? t : Object.values(t as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'trends' ? 'Copied' : 'Copy'}</button>
+            </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {report.trends.map((t, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderTrendItem(t)}</li>)}
             </ul>
@@ -926,7 +970,10 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
 
           {/* Offers */}
           <div style={cardStyle}>
-            <p style={subHeading}>Competitor promotions</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <p style={{ ...subHeading, margin: 0 }}>Competitor promotions</p>
+              <button style={copyBtnStyle} onClick={() => copySection('offers', report.offers.map(o => `- ${typeof o === 'string' ? o : Object.values(o as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'offers' ? 'Copied' : 'Copy'}</button>
+            </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {report.offers.map((o, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(o)}</li>)}
             </ul>
@@ -934,13 +981,19 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
 
           {/* Pricing insights */}
           <div style={cardStyle}>
-            <p style={subHeading}>Pricing landscape</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <p style={{ ...subHeading, margin: 0 }}>Pricing landscape</p>
+              <button style={copyBtnStyle} onClick={() => copySection('pricing', report.pricing_insights)}>{copiedSection === 'pricing' ? 'Copied' : 'Copy'}</button>
+            </div>
             <p style={{ fontSize: 12, color: '#374151', margin: 0, lineHeight: 1.6 }}>{report.pricing_insights}</p>
           </div>
 
           {/* Loyalty programs */}
           <div style={cardStyle}>
-            <p style={subHeading}>Loyalty programs</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <p style={{ ...subHeading, margin: 0 }}>Loyalty programs</p>
+              <button style={copyBtnStyle} onClick={() => copySection('loyalty', report.loyalty_programs.map(l => `- ${typeof l === 'string' ? l : Object.values(l as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'loyalty' ? 'Copied' : 'Copy'}</button>
+            </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {report.loyalty_programs.map((l, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(l)}</li>)}
             </ul>
@@ -948,7 +1001,10 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
 
           {/* Recommendations */}
           <div style={cardStyle}>
-            <p style={subHeading}>Recommendations</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <p style={{ ...subHeading, margin: 0 }}>Recommendations</p>
+              <button style={copyBtnStyle} onClick={() => copySection('recommendations', report.recommendations.map(r => `- ${typeof r === 'string' ? r : Object.values(r as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'recommendations' ? 'Copied' : 'Copy'}</button>
+            </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {report.recommendations.map((r, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(r)}</li>)}
             </ul>
