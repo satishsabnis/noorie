@@ -743,12 +743,8 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
     setSaving(true)
     try {
       const { error } = await supabase.from('salon_config').update({
-        supervisor_see_revenue: c.supervisor_see_revenue,
-        supervisor_edit_appointments: c.supervisor_edit_appointments,
-        supervisor_add_clients: c.supervisor_add_clients,
-        supervisor_see_all_staff: c.supervisor_see_all_staff,
-        technician_see_own_revenue: c.technician_see_own_revenue,
-        technician_collect_payments: c.technician_collect_payments,
+        staff_can_see_revenue: c.supervisor_see_revenue,
+        staff_can_edit_appointments: c.supervisor_edit_appointments,
       }).eq('salon_id', salonId)
       if (error) console.error('[Admin] Staff settings save error:', error)
       setSaving(false); setDirty(false); onRefresh()
@@ -798,10 +794,6 @@ function SectionPayroll({ config, staff, salonId, onRefresh }: { config: ConfigD
         payroll_mode: c.payroll_mode,
       }).eq('salon_id', salonId)
       if (e1) console.error('[Admin] Payroll config save error:', e1)
-      const results = await Promise.all(rows.map(r =>
-        supabase.from('staff').update({ monthly_salary: r.monthly_salary, commission_pct: r.commission_pct }).eq('id', r.id)
-      ))
-      results.forEach(({ error }, i) => { if (error) console.error(`[Admin] Payroll staff[${i}] save error:`, error) })
       setSaving(false); setDirty(false); onRefresh()
     } catch (err) {
       console.error('[Admin] Payroll save exception:', err)
