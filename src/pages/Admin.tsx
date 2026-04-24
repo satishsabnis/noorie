@@ -741,25 +741,29 @@ interface CompetitorReport {
   recommendations: unknown[]
 }
 
+function stripCiteTags(s: string): string {
+  return s.replace(/<cite[^>]*>/g, '').replace(/<\/cite>/g, '')
+}
+
 function renderTrendItem(item: unknown): React.ReactNode {
-  if (typeof item === 'string') return item
+  if (typeof item === 'string') return stripCiteTags(item)
   if (item && typeof item === 'object') {
     const o = item as Record<string, unknown>
     const name = o.trend ?? o.name ?? o.title
     const desc = o.description ?? o.details ?? o.detail
-    if (name && desc) return <><strong>{String(name)}</strong> — {String(desc)}</>
-    return Object.values(o).map(String).join(' — ')
+    if (name && desc) return <><strong>{stripCiteTags(String(name))}</strong> — {stripCiteTags(String(desc))}</>
+    return stripCiteTags(Object.values(o).map(String).join(' — '))
   }
-  return String(item)
+  return stripCiteTags(String(item))
 }
 
 function renderGenericItem(item: unknown): React.ReactNode {
-  if (typeof item === 'string') return item
+  if (typeof item === 'string') return stripCiteTags(item)
   if (item && typeof item === 'object') {
     const o = item as Record<string, unknown>
-    return Object.values(o).map(String).join(' — ')
+    return stripCiteTags(Object.values(o).map(String).join(' — '))
   }
-  return String(item)
+  return stripCiteTags(String(item))
 }
 
 // ── Section: Noorie AI ────────────────────────────────────────────────────────
@@ -943,12 +947,12 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
                     const reviews = comp.reviews_summary ?? comp.reviews ?? comp.review_summary ?? ''
                     return (
                       <tr key={i}>
-                        <td style={{ ...TD, fontWeight: 500 }}>{String(name)}</td>
-                        <td style={TD}>{String(location)}</td>
-                        <td style={TD}>{Array.isArray(services) ? (services as unknown[]).map(String).join(', ') : String(services)}</td>
-                        <td style={TD}>{String(price)}</td>
-                        <td style={TD}>{String(rating)}</td>
-                        <td style={TD}>{String(reviews)}</td>
+                        <td style={{ ...TD, fontWeight: 500 }}>{stripCiteTags(String(name))}</td>
+                        <td style={TD}>{stripCiteTags(String(location))}</td>
+                        <td style={TD}>{stripCiteTags(Array.isArray(services) ? (services as unknown[]).map(String).join(', ') : String(services))}</td>
+                        <td style={TD}>{stripCiteTags(String(price))}</td>
+                        <td style={TD}>{stripCiteTags(String(rating))}</td>
+                        <td style={TD}>{stripCiteTags(String(reviews))}</td>
                       </tr>
                     )
                   })}
@@ -985,7 +989,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
               <p style={{ ...subHeading, margin: 0 }}>Pricing landscape</p>
               <button style={copyBtnStyle} onClick={() => copySection('pricing', report.pricing_insights)}>{copiedSection === 'pricing' ? 'Copied' : 'Copy'}</button>
             </div>
-            <p style={{ fontSize: 12, color: '#374151', margin: 0, lineHeight: 1.6 }}>{report.pricing_insights}</p>
+            <p style={{ fontSize: 12, color: '#374151', margin: 0, lineHeight: 1.6 }}>{stripCiteTags(report.pricing_insights)}</p>
           </div>
 
           {/* Loyalty programs */}
