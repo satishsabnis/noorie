@@ -730,13 +730,38 @@ function SectionLoyalty({ config, salonId, onRefresh }: { config: ConfigData; sa
   )
 }
 
+// ── Types: competitor report ──────────────────────────────────────────────────
+
+interface CompetitorReport {
+  competitors: { name: string; location: string; services: string; price_range: string; rating: string; reviews_summary: string }[]
+  trends: string[]
+  offers: string[]
+  pricing_insights: string
+  loyalty_programs: string[]
+  recommendations: string[]
+}
+
 // ── Section: Noorie AI ────────────────────────────────────────────────────────
 
-function SectionAI({ config, salonId, onRefresh }: { config: ConfigData; salonId: string; onRefresh: () => void }) {
+function SectionAI({ config, salonId, salon, onRefresh }: {
+  config: ConfigData; salonId: string; salon: { name: string; city: string; country: string }; onRefresh: () => void
+}) {
   const [c, setC] = useState(config)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  useEffect(() => { setC(config); setDirty(false) }, [config])
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState<string | null>(null)
+  const [report, setReport] = useState<CompetitorReport | null>(null)
+  const [lastScan, setLastScan] = useState<string | null>(config.competitor_last_scan)
+
+  useEffect(() => { setC(config); setDirty(false); setLastScan(config.competitor_last_scan) }, [config])
+
+  useEffect(() => {
+    if (!salonId) return
+    supabase.from('competitor_reports').select('report, created_at').eq('salon_id', salonId).order('created_at', { ascending: false }).limit(1).single()
+      .then(({ data }) => { if (data?.report) setReport(data.report as CompetitorReport) })
+  }, [salonId])
+
   function up<K extends keyof ConfigData>(k: K, v: ConfigData[K]) { setC(p => ({ ...p, [k]: v })); setDirty(true) }
 
   async function save() {
@@ -755,6 +780,50 @@ function SectionAI({ config, salonId, onRefresh }: { config: ConfigData; salonId
       setSaving(false)
     }
   }
+
+  async function runScan() {
+    setScanning(true); setScanError(null)
+    try {
+      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string
+      const userMsg = `Research beauty salons competing with ${salon.name} in ${salon.city}, ${salon.country}. Provide a JSON report with these keys: competitors (array of objects with name, location, services, price_range, rating, reviews_summary), trends (array of current beauty trends in this market), offers (array of current promotions competitors are running), pricing_insights (text summary of pricing landscape), loyalty_programs (array of competitor loyalty approaches), recommendations (array of actionable recommendations for the salon owner).`
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4000,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          system: 'You are a salon business intelligence analyst. Research competing beauty salons and provide a structured competitive analysis. Respond ONLY in valid JSON with no markdown backticks or preamble.',
+          messages: [{ role: 'user', content: userMsg }],
+        }),
+      })
+      if (!res.ok) { const t = await res.text(); throw new Error(`API error ${res.status}: ${t}`) }
+      const data = await res.json()
+      const rawText = (data.content as { type: string; text?: string }[]).find(b => b.type === 'text')?.text ?? ''
+      const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+      const parsed: CompetitorReport = JSON.parse(cleaned)
+
+      const now = new Date().toISOString()
+      await Promise.all([
+        supabase.from('competitor_reports').insert({ salon_id: salonId, report: parsed }),
+        supabase.from('salon_config').update({ competitor_last_scan: now }).eq('salon_id', salonId),
+      ])
+      setReport(parsed); setLastScan(now)
+    } catch (err) {
+      console.error('[Admin] Competitor scan error:', err)
+      setScanError(err instanceof Error ? err.message : 'Scan failed — check console.')
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  const TH: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', padding: '6px 10px', borderBottom: '0.5px solid #e0e0e0' }
+  const TD: React.CSSProperties = { fontSize: 12, color: '#111', padding: '6px 10px', borderBottom: '0.5px solid #f0f0f0', verticalAlign: 'top' }
 
   return (
     <div>
@@ -779,14 +848,85 @@ function SectionAI({ config, salonId, onRefresh }: { config: ConfigData; salonId
             <Toggle on={c.competitor_intelligence_weekly} onChange={v => up('competitor_intelligence_weekly', v)} />
           </div>
           <button
-            onClick={() => console.log('Competitor intelligence: run now triggered')}
-            style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#ffffff', border: '0.5px solid rgba(255,255,255,0.3)', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: 'pointer' }}
-          >Run now</button>
-          {c.competitor_last_scan && (
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Last scan: {new Date(c.competitor_last_scan).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+            onClick={runScan}
+            disabled={scanning}
+            style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#ffffff', border: '0.5px solid rgba(255,255,255,0.3)', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: scanning ? 'not-allowed' : 'pointer', opacity: scanning ? 0.7 : 1 }}
+          >{scanning ? 'Scanning…' : 'Run now'}</button>
+          {lastScan && (
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Last scan: {new Date(lastScan).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
           )}
         </div>
+        {scanError && <p style={{ fontSize: 11, color: '#fca5a5', margin: '10px 0 0' }}>{scanError}</p>}
       </div>
+
+      {report && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
+
+          {/* Competitors table */}
+          <div style={cardStyle}>
+            <p style={subHeading}>Competitors</p>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr>
+                  <th style={TH}>Name</th><th style={TH}>Location</th><th style={TH}>Services</th>
+                  <th style={TH}>Price range</th><th style={TH}>Rating</th><th style={TH}>Reviews</th>
+                </tr></thead>
+                <tbody>
+                  {report.competitors.map((comp, i) => (
+                    <tr key={i}>
+                      <td style={{ ...TD, fontWeight: 500 }}>{comp.name}</td>
+                      <td style={TD}>{comp.location}</td>
+                      <td style={TD}>{comp.services}</td>
+                      <td style={TD}>{comp.price_range}</td>
+                      <td style={TD}>{comp.rating}</td>
+                      <td style={TD}>{comp.reviews_summary}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Trends */}
+          <div style={cardStyle}>
+            <p style={subHeading}>Market trends</p>
+            <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {report.trends.map((t, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{t}</li>)}
+            </ul>
+          </div>
+
+          {/* Offers */}
+          <div style={cardStyle}>
+            <p style={subHeading}>Competitor promotions</p>
+            <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {report.offers.map((o, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{o}</li>)}
+            </ul>
+          </div>
+
+          {/* Pricing insights */}
+          <div style={cardStyle}>
+            <p style={subHeading}>Pricing landscape</p>
+            <p style={{ fontSize: 12, color: '#374151', margin: 0, lineHeight: 1.6 }}>{report.pricing_insights}</p>
+          </div>
+
+          {/* Loyalty programs */}
+          <div style={cardStyle}>
+            <p style={subHeading}>Loyalty programs</p>
+            <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {report.loyalty_programs.map((l, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{l}</li>)}
+            </ul>
+          </div>
+
+          {/* Recommendations */}
+          <div style={cardStyle}>
+            <p style={subHeading}>Recommendations</p>
+            <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {report.recommendations.map((r, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{r}</li>)}
+            </ul>
+          </div>
+
+        </div>
+      )}
 
       <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setDirty(false) }} />
     </div>
@@ -915,7 +1055,7 @@ export default function Admin() {
           {activeSection === 'Payments'        && <SectionPayments config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'WhatsApp'        && <SectionWhatsApp config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Loyalty points'  && <SectionLoyalty config={config} salonId={salonId} onRefresh={fetchAll} />}
-          {activeSection === 'Noorie AI'       && <SectionAI config={config} salonId={salonId} onRefresh={fetchAll} />}
+          {activeSection === 'Noorie AI'       && <SectionAI config={config} salonId={salonId} salon={{ name: salon.name, city: salon.city, country: salon.country }} onRefresh={fetchAll} />}
           {activeSection === 'Staff settings'  && <SectionStaffSettings config={config} salonId={salonId} onRefresh={fetchAll} />}
         </div>
       </div>
