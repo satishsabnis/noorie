@@ -243,16 +243,18 @@ function SectionSalon({ salon, config, salonId, onRefresh }: {
   async function save() {
     setSaving(true); setError(null)
     try {
-      const { error: e1 } = await supabase.from('salons').update({
+      const { data: d1, error: e1 } = await supabase.from('salons').update({
         name: s.name, address_line1: s.address_line1, address_line2: s.address_line2,
         city: s.city, country: s.country, phone: s.phone, email: s.email,
         service_pricing_mode: s.service_pricing_mode,
-      }).eq('id', salonId)
-      if (e1) { console.error('[Admin] Salon save error:', e1); setError(e1.message); setSaving(false); return }
-      const { error: e2 } = await supabase.from('salon_config').update({
+      }).eq('id', salonId).select()
+      console.log('[Admin] Salon salons update:', { data: d1, error: e1 })
+      if (e1) { setError(e1.message); setSaving(false); return }
+      const { data: d2, error: e2 } = await supabase.from('salon_config').update({
         payroll_mode: c.payroll_mode, payroll_mode_cycle: c.payroll_mode_cycle,
-      }).eq('salon_id', salonId)
-      if (e2) { console.error('[Admin] Salon config save error:', e2); setError(e2.message); setSaving(false); return }
+      }).eq('salon_id', salonId).select()
+      console.log('[Admin] Salon salon_config update:', { data: d2, error: e2 })
+      if (e2) { setError(e2.message); setSaving(false); return }
       setCommitted(s); setCommittedH(hours); setCommittedC(c)
       setSaving(false); setSaved(true)
       setTimeout(() => setSaved(false), 2000)
