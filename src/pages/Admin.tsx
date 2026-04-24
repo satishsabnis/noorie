@@ -215,36 +215,37 @@ function SectionSalon({ salon, config, salonId, onRefresh }: {
 }) {
   const [s, setS] = useState(salon)
   const [hours, setHours] = useState<OperatingHours>(config.operating_hours ?? defaultHours)
+  const [committed, setCommitted] = useState(salon)
+  const [committedH, setCommittedH] = useState<OperatingHours>(config.operating_hours ?? defaultHours)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [openInfo, setOpenInfo] = useState(true)
   const [openHours, setOpenHours] = useState(false)
 
-  useEffect(() => { setS(salon); setHours(config.operating_hours ?? defaultHours) }, [salon, config])
+  useEffect(() => { setS(salon); setCommitted(salon); setHours(config.operating_hours ?? defaultHours); setCommittedH(config.operating_hours ?? defaultHours) }, [salon, config])
 
   function upS(k: keyof SalonData, v: string) { setS(p => ({ ...p, [k]: v })) }
   function upH(day: Day, k: keyof DayConfig, v: string | boolean) {
     setHours(p => ({ ...p, [day]: { ...p[day], [k]: v } }))
   }
 
-  const originalS = JSON.stringify(salon)
-  const originalH = JSON.stringify(config.operating_hours ?? defaultHours)
-  const dirty = JSON.stringify(s) !== originalS || JSON.stringify(hours) !== originalH
+  const dirty = JSON.stringify(s) !== JSON.stringify(committed) || JSON.stringify(hours) !== JSON.stringify(committedH)
 
   const isUAE = s.country === 'United Arab Emirates'
 
   async function save() {
     setSaving(true); setError(null)
     try {
-      // TODO: restore operating_hours update once salon_config column is confirmed in schema cache
       const { error: e1 } = await supabase.from('salons').update({
         name: s.name, address_line1: s.address_line1, address_line2: s.address_line2,
         city: s.city, country: s.country, phone: s.phone, email: s.email,
         service_pricing_mode: s.service_pricing_mode,
       }).eq('id', salonId)
       if (e1) { console.error('[Admin] Salon save error:', e1); setError(e1.message); setSaving(false); return }
-      setSaving(false); setSaved(true); onRefresh()
+      setCommitted(s)
+      setCommittedH(hours)
+      setSaving(false); setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
       console.error('[Admin] Salon save exception:', err)
@@ -360,7 +361,7 @@ function SectionSalon({ salon, config, salonId, onRefresh }: {
         </div>
       )}
       {error && <p style={{ fontSize: 12, color: '#991b1b', margin: '0 0 10px' }}>{error}</p>}
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setS(salon); setHours(config.operating_hours ?? defaultHours) }} />
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setS(committed); setHours(committedH) }} />
     </div>
   )
 }
