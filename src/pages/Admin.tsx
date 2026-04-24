@@ -374,7 +374,7 @@ function SectionSalon({ salon, config, salonId, onRefresh }: {
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Payroll mode</label>
                 <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-                  {[['commission', 'Commission only'], ['salary', 'Salary only'], ['salary_commission', 'Salary + commission']].map(([val, label]) => (
+                  {[['commission', 'Commission only'], ['salary', 'Salary only'], ['both', 'Salary + commission']].map(([val, label]) => (
                     <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
                       <input type="radio" name="salon_payroll_mode" value={val} checked={c.payroll_mode === val}
                         onChange={() => upC('payroll_mode', val)}
