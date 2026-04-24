@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, NavLink } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
+import { supabase } from '../lib/supabase'
 
 const NAV_LINKS = [
   { label: 'Dashboard',    to: '/dashboard' },
@@ -7,14 +9,23 @@ const NAV_LINKS = [
   { label: 'Clients',      to: '/clients' },
   { label: 'Staff',        to: '/staff' },
   { label: 'Reports',      to: '/reports' },
-  { label: 'Admin',        to: '/admin' },
+  { label: 'Admin',        to: '/admin'  },
   { label: 'Ask Noorie',   to: '/ask' },
 ]
 
 export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { signOut } = useAuthStore()
+  const { signOut, staffRecord, salonName, setSalonName } = useAuthStore()
+
+  useEffect(() => {
+    const salonId = staffRecord?.salon_id
+    if (!salonId) return
+    if (salonName) return
+    supabase.from('salons').select('name').eq('id', salonId).single().then(({ data }) => {
+      if (data?.name) setSalonName(data.name as string)
+    })
+  }, [staffRecord?.salon_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSignOut = () => {
     signOut()
@@ -28,9 +39,11 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
       display: 'flex', alignItems: 'center',
       padding: '0 16px', gap: 16,
     }}>
-      <p style={{ color: '#ffffff', fontSize: 13, fontWeight: 500, margin: 0, flexShrink: 0, whiteSpace: 'nowrap' }}>
-        New Look Beauty Salon
-      </p>
+      {salonName && (
+        <p style={{ color: '#ffffff', fontSize: 13, fontWeight: 500, margin: 0, flexShrink: 0, whiteSpace: 'nowrap' }}>
+          {salonName}
+        </p>
+      )}
       <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, overflowX: 'auto' }}>
         {NAV_LINKS.map(link => {
           const isActive = location.pathname === link.to

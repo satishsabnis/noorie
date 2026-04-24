@@ -207,8 +207,8 @@ function Req() { return <span style={{ color: '#991b1b', marginLeft: 2 }}>*</spa
 
 // ── Section: Salon details ────────────────────────────────────────────────────
 
-function SectionSalon({ salon, config, salonId, onRefresh }: {
-  salon: SalonData; config: ConfigData; salonId: string; onRefresh: () => void
+function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
+  salon: SalonData; config: ConfigData; salonId: string; onRefresh: () => void; onNameSaved: (name: string) => void
 }) {
   const [s, setS] = useState(salon)
   const [hours, setHours] = useState<OperatingHours>(config.operating_hours ?? defaultHours)
@@ -258,6 +258,7 @@ function SectionSalon({ salon, config, salonId, onRefresh }: {
       console.log('[Admin] Salon salon_config update:', { data: d2, error: e2 })
       if (e2) { setError(e2.message); setSaving(false); return }
       setCommitted(s); setCommittedH(hours); setCommittedC(c)
+      onNameSaved(s.name)
       setSaving(false); setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
@@ -827,6 +828,7 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
 
 export default function Admin() {
   const staffRecord = useAuthStore(s => s.staffRecord)
+  const setSalonName = useAuthStore(s => s.setSalonName)
   const salonId = staffRecord?.salon_id ?? ''
 
   const [activeSection, setActiveSection] = useState<Section>('Salon details')
@@ -894,7 +896,7 @@ export default function Admin() {
 
         {/* Content */}
         <div style={{ flex: 1, padding: '24px 28px', overflowY: 'auto' }}>
-          {activeSection === 'Salon details'   && <SectionSalon salon={salon} config={config} salonId={salonId} onRefresh={fetchAll} />}
+          {activeSection === 'Salon details'   && <SectionSalon salon={salon} config={config} salonId={salonId} onRefresh={fetchAll} onNameSaved={setSalonName} />}
           {activeSection === 'Services'        && <SectionServices salonId={salonId} />}
           {activeSection === 'Payments'        && <SectionPayments config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'WhatsApp'        && <SectionWhatsApp config={config} salonId={salonId} onRefresh={fetchAll} />}

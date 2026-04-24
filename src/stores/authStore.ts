@@ -18,9 +18,11 @@ interface AuthState {
   role: string | null
   isLoading: boolean
   isAuthenticated: boolean
+  salonName: string | null
   signIn: (user: User, staff: StaffRecord) => void
   signOut: () => void
   setStaffRecord: (staff: StaffRecord) => void
+  setSalonName: (name: string) => void
   initialize: () => Promise<void>
 }
 
@@ -30,6 +32,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   role: null,
   isLoading: true,
   isAuthenticated: false,
+  salonName: null,
 
   signIn: (user, staff) => set({
     user,
@@ -47,6 +50,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     staffRecord: staff,
     role: staff.role,
   }),
+
+  setSalonName: (name) => set({ salonName: name }),
 
   initialize: async () => {
     set({ isLoading: true })
