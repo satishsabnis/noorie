@@ -439,7 +439,8 @@ function SectionServices({ salonId }: { salonId: string }) {
 
   async function saveEdit(id: string) {
     try {
-      const { error } = await supabase.from('services').update({ name: editName.trim(), duration_minutes: parseInt(editDur) }).eq('id', id)
+      const { data, error } = await supabase.from('services').update({ name: editName.trim(), duration_minutes: parseInt(editDur) }).eq('id', id).select()
+      console.log('[Admin] Services saveEdit result:', { data, error })
       if (error) { console.error('[Admin] Services saveEdit error:', error); setError(error.message); return }
       setEditId(null); load()
     } catch (err) {
@@ -464,7 +465,8 @@ function SectionServices({ salonId }: { salonId: string }) {
 
   async function toggleActive(id: string, currentActive: boolean) {
     try {
-      const { error } = await supabase.from('services').update({ is_active: !currentActive }).eq('id', id)
+      const { data, error } = await supabase.from('services').update({ is_active: !currentActive }).eq('id', id).select()
+      console.log('[Admin] Services toggleActive result:', { data, error })
       if (error) { console.error('[Admin] Services toggleActive error:', error); setError(error.message); return }
       load()
     } catch (err) {
