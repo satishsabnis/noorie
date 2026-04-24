@@ -52,6 +52,7 @@ interface ConfigData {
   whatsapp_booking_enabled: boolean; competitor_intelligence_weekly: boolean
   competitor_last_scan: string | null
   staff_can_see_revenue: boolean; staff_can_edit_appointments: boolean
+  technician_see_own_revenue: boolean; technician_collect_payments: boolean
   payroll_mode: string; payroll_cycle: string
 }
 
@@ -90,6 +91,7 @@ const defaultConfig: ConfigData = {
   whatsapp_booking_enabled: false, competitor_intelligence_weekly: false,
   competitor_last_scan: null,
   staff_can_see_revenue: true, staff_can_edit_appointments: true,
+  technician_see_own_revenue: true, technician_collect_payments: true,
   payroll_mode: 'commission', payroll_cycle: 'monthly',
 }
 
@@ -732,8 +734,6 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
   const [c, setC] = useState(config)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [techSeeRevenue, setTechSeeRevenue] = useState(true)
-  const [techCollectPayments, setTechCollectPayments] = useState(true)
   useEffect(() => { setC(config); setDirty(false) }, [config])
   function up<K extends keyof ConfigData>(k: K, v: ConfigData[K]) { setC(p => ({ ...p, [k]: v })); setDirty(true) }
 
@@ -743,6 +743,8 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
       const { data, error } = await supabase.from('salon_config').update({
         staff_can_see_revenue: c.staff_can_see_revenue,
         staff_can_edit_appointments: c.staff_can_edit_appointments,
+        technician_see_own_revenue: c.technician_see_own_revenue,
+        technician_collect_payments: c.technician_collect_payments,
       }).eq('salon_id', salonId).select()
       console.log('[Admin] Staff settings save result:', { data, error })
       if (error) { console.error('[Admin] Staff settings save error:', error); setSaving(false); return }
@@ -763,8 +765,8 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
       </div>
       <div style={cardStyle}>
         <p style={subHeading}>Technician permissions</p>
-        <ToggleRow label="Can see own revenue only" on={techSeeRevenue} onChange={setTechSeeRevenue} />
-        <ToggleRow label="Can collect payments" on={techCollectPayments} onChange={setTechCollectPayments} />
+        <ToggleRow label="Can see own revenue only" on={c.technician_see_own_revenue} onChange={v => up('technician_see_own_revenue', v)} />
+        <ToggleRow label="Can collect payments" on={c.technician_collect_payments} onChange={v => up('technician_collect_payments', v)} />
       </div>
       <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setDirty(false) }} />
     </div>
