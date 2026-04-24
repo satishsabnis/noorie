@@ -834,7 +834,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 4000,
           tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          system: 'You are a salon business intelligence analyst. Research competing beauty salons and provide a structured competitive analysis. Respond ONLY in valid JSON with no markdown backticks or preamble.',
+          system: 'You are a salon business intelligence analyst. You MUST respond with ONLY a valid JSON object. No text before or after the JSON. No markdown. No backticks. No explanation. No preamble. Start your response with { and end with }.',
           messages: [{ role: 'user', content: userMsg }],
         }),
       })
