@@ -733,12 +733,33 @@ function SectionLoyalty({ config, salonId, onRefresh }: { config: ConfigData; sa
 // ── Types: competitor report ──────────────────────────────────────────────────
 
 interface CompetitorReport {
-  competitors: { name: string; location: string; services: string; price_range: string; rating: string; reviews_summary: string }[]
-  trends: string[]
-  offers: string[]
+  competitors: Record<string, unknown>[]
+  trends: unknown[]
+  offers: unknown[]
   pricing_insights: string
-  loyalty_programs: string[]
-  recommendations: string[]
+  loyalty_programs: unknown[]
+  recommendations: unknown[]
+}
+
+function renderTrendItem(item: unknown): React.ReactNode {
+  if (typeof item === 'string') return item
+  if (item && typeof item === 'object') {
+    const o = item as Record<string, unknown>
+    const name = o.trend ?? o.name ?? o.title
+    const desc = o.description ?? o.details ?? o.detail
+    if (name && desc) return <><strong>{String(name)}</strong> — {String(desc)}</>
+    return Object.values(o).map(String).join(' — ')
+  }
+  return String(item)
+}
+
+function renderGenericItem(item: unknown): React.ReactNode {
+  if (typeof item === 'string') return item
+  if (item && typeof item === 'object') {
+    const o = item as Record<string, unknown>
+    return Object.values(o).map(String).join(' — ')
+  }
+  return String(item)
 }
 
 // ── Section: Noorie AI ────────────────────────────────────────────────────────
@@ -872,16 +893,24 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
                   <th style={TH}>Price range</th><th style={TH}>Rating</th><th style={TH}>Reviews</th>
                 </tr></thead>
                 <tbody>
-                  {report.competitors.map((comp, i) => (
-                    <tr key={i}>
-                      <td style={{ ...TD, fontWeight: 500 }}>{comp.name}</td>
-                      <td style={TD}>{comp.location}</td>
-                      <td style={TD}>{comp.services}</td>
-                      <td style={TD}>{comp.price_range}</td>
-                      <td style={TD}>{comp.rating}</td>
-                      <td style={TD}>{comp.reviews_summary}</td>
-                    </tr>
-                  ))}
+                  {report.competitors.map((comp, i) => {
+                    const name = comp.name ?? comp.salon_name ?? comp.business_name ?? ''
+                    const location = comp.location ?? comp.address ?? comp.area ?? ''
+                    const services = comp.services ?? comp.service_offerings ?? comp.specialties ?? ''
+                    const price = comp.price_range ?? comp.pricing ?? comp.price ?? ''
+                    const rating = comp.rating ?? comp.score ?? comp.stars ?? ''
+                    const reviews = comp.reviews_summary ?? comp.reviews ?? comp.review_summary ?? ''
+                    return (
+                      <tr key={i}>
+                        <td style={{ ...TD, fontWeight: 500 }}>{String(name)}</td>
+                        <td style={TD}>{String(location)}</td>
+                        <td style={TD}>{Array.isArray(services) ? (services as unknown[]).map(String).join(', ') : String(services)}</td>
+                        <td style={TD}>{String(price)}</td>
+                        <td style={TD}>{String(rating)}</td>
+                        <td style={TD}>{String(reviews)}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -891,7 +920,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           <div style={cardStyle}>
             <p style={subHeading}>Market trends</p>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {report.trends.map((t, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{t}</li>)}
+              {report.trends.map((t, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderTrendItem(t)}</li>)}
             </ul>
           </div>
 
@@ -899,7 +928,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           <div style={cardStyle}>
             <p style={subHeading}>Competitor promotions</p>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {report.offers.map((o, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{o}</li>)}
+              {report.offers.map((o, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(o)}</li>)}
             </ul>
           </div>
 
@@ -913,7 +942,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           <div style={cardStyle}>
             <p style={subHeading}>Loyalty programs</p>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {report.loyalty_programs.map((l, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{l}</li>)}
+              {report.loyalty_programs.map((l, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(l)}</li>)}
             </ul>
           </div>
 
@@ -921,7 +950,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           <div style={cardStyle}>
             <p style={subHeading}>Recommendations</p>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {report.recommendations.map((r, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{r}</li>)}
+              {report.recommendations.map((r, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(r)}</li>)}
             </ul>
           </div>
 
