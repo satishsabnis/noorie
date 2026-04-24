@@ -884,7 +884,7 @@ export default function Admin() {
     const [{ data: salonData }, { data: configData }, { data: staffData }] = await Promise.all([
       supabase.from('salons').select('id,name,address_line1,address_line2,city,country,phone,email,service_pricing_mode').eq('id', salonId).single(),
       supabase.from('salon_config').select('*').eq('salon_id', salonId).single(),
-      supabase.from('staff').select('id,name,role,monthly_salary,commission_pct').eq('salon_id', salonId).neq('status', 'deleted').order('name'),
+      supabase.from('staff').select('id,name,role').eq('salon_id', salonId).neq('status', 'deleted').order('name'),
     ])
     if (salonData) setSalon({
       id:                   salonData.id               as string,
@@ -902,8 +902,8 @@ export default function Admin() {
       id:             s.id              as string,
       name:           s.name            as string,
       role:           (s.role           as string) ?? '',
-      monthly_salary: (s.monthly_salary as number) ?? 0,
-      commission_pct: (s.commission_pct as number) ?? 0,
+      monthly_salary: 0,
+      commission_pct: 0,
     })))
     setLoading(false)
   }, [salonId])
