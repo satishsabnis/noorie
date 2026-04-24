@@ -51,9 +51,7 @@ interface ConfigData {
   morning_brief_enabled: boolean; booking_assistant_enabled: boolean
   whatsapp_booking_enabled: boolean; competitor_intelligence_weekly: boolean
   competitor_last_scan: string | null
-  supervisor_see_revenue: boolean; supervisor_edit_appointments: boolean
-  supervisor_add_clients: boolean; supervisor_see_all_staff: boolean
-  technician_see_own_revenue: boolean; technician_collect_payments: boolean
+  staff_can_see_revenue: boolean; staff_can_edit_appointments: boolean
   payroll_mode: string; payroll_cycle: string
 }
 
@@ -91,9 +89,7 @@ const defaultConfig: ConfigData = {
   morning_brief_enabled: true, booking_assistant_enabled: false,
   whatsapp_booking_enabled: false, competitor_intelligence_weekly: false,
   competitor_last_scan: null,
-  supervisor_see_revenue: true, supervisor_edit_appointments: true,
-  supervisor_add_clients: true, supervisor_see_all_staff: true,
-  technician_see_own_revenue: true, technician_collect_payments: true,
+  staff_can_see_revenue: true, staff_can_edit_appointments: true,
   payroll_mode: 'commission', payroll_cycle: 'monthly',
 }
 
@@ -743,8 +739,8 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
     setSaving(true)
     try {
       const { error } = await supabase.from('salon_config').update({
-        staff_can_see_revenue: c.supervisor_see_revenue,
-        staff_can_edit_appointments: c.supervisor_edit_appointments,
+        staff_can_see_revenue: c.staff_can_see_revenue,
+        staff_can_edit_appointments: c.staff_can_edit_appointments,
       }).eq('salon_id', salonId)
       if (error) console.error('[Admin] Staff settings save error:', error)
       setSaving(false); setDirty(false); onRefresh()
@@ -759,15 +755,8 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
       <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Staff settings</p>
       <div style={cardStyle}>
         <p style={subHeading}>Supervisor permissions</p>
-        <ToggleRow label="Can see today's revenue" on={c.supervisor_see_revenue} onChange={v => up('supervisor_see_revenue', v)} />
-        <ToggleRow label="Can edit appointments" on={c.supervisor_edit_appointments} onChange={v => up('supervisor_edit_appointments', v)} />
-        <ToggleRow label="Can add new clients" on={c.supervisor_add_clients} onChange={v => up('supervisor_add_clients', v)} />
-        <ToggleRow label="Can view all staff schedules" on={c.supervisor_see_all_staff} onChange={v => up('supervisor_see_all_staff', v)} />
-      </div>
-      <div style={cardStyle}>
-        <p style={subHeading}>Technician permissions</p>
-        <ToggleRow label="Can see own revenue only" on={c.technician_see_own_revenue} onChange={v => up('technician_see_own_revenue', v)} />
-        <ToggleRow label="Can collect payments" on={c.technician_collect_payments} onChange={v => up('technician_collect_payments', v)} />
+        <ToggleRow label="Can see today's revenue" on={c.staff_can_see_revenue} onChange={v => up('staff_can_see_revenue', v)} />
+        <ToggleRow label="Can edit appointments" on={c.staff_can_edit_appointments} onChange={v => up('staff_can_edit_appointments', v)} />
       </div>
       <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setDirty(false) }} />
     </div>
