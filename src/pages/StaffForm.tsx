@@ -171,25 +171,30 @@ export default function StaffForm() {
 
     try {
       if (!isEdit) {
-        // Add: create auth user then insert staff record
+        // Add: delegate auth user + staff + staff_services creation to the Edge Function
         if (!password.trim()) { setError('Temporary password is required'); setSaving(false); return }
         const email = `${phone.replace(/\D/g, '')}@noorie.internal`
-        const { data: authData, error: authErr } = await supabase.auth.admin.createUser({ email, password: password.trim(), email_confirm: true })
-        if (authErr) throw authErr
-        const authUserId = authData.user?.id ?? null
-
-        const { data: newStaff, error: staffErr } = await supabase
-          .from('staff')
-          .insert({ salon_id: salonId, name: name.trim(), phone, role, auth_user_id: authUserId, status: 'active', temp_password_set: true, monthly_salary: monthlySalaryNum, commission_pct: commissionPctNum })
-          .select('id')
-          .single()
-        if (staffErr) throw staffErr
-
-        if (checkedServices.size > 0) {
-          await supabase.from('staff_services').insert(
-            [...checkedServices].map(svcId => ({ staff_id: newStaff.id, service_id: svcId }))
-          )
-        }
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+        const res = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-staff-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${anonKey}`,
+          },
+          body: JSON.stringify({
+            email,
+            password: password.trim(),
+            salon_id: salonId,
+            name: name.trim(),
+            phone,
+            role,
+            monthly_salary: parseInt(monthlySalary, 10),
+            commission_pct: parseInt(commissionPct, 10),
+            service_ids: [...checkedServices],
+          }),
+        })
+        const result = await res.json()
+        if (!result.success) throw new Error(result.error ?? 'Failed to create staff member')
       } else {
         // Edit: update staff, re-sync services
         const { error: updErr } = await supabase
