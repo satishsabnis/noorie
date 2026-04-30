@@ -174,7 +174,7 @@ export default function StaffForm() {
         // Add: create auth user then insert staff record
         if (!password.trim()) { setError('Temporary password is required'); setSaving(false); return }
         const email = `${phone.replace(/\D/g, '')}@noorie.internal`
-        const { data: authData, error: authErr } = await supabase.auth.signUp({ email, password: password.trim() })
+        const { data: authData, error: authErr } = await supabase.auth.admin.createUser({ email, password: password.trim(), email_confirm: true })
         if (authErr) throw authErr
         const authUserId = authData.user?.id ?? null
 
