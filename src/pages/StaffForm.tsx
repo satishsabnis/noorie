@@ -62,6 +62,10 @@ export default function StaffForm() {
   const [password,    setPassword]    = useState('')
   const [status,      setStatus]      = useState<'active' | 'suspended'>('active')
 
+  // Pay details
+  const [monthlySalary, setMonthlySalary] = useState('0')
+  const [commissionPct, setCommissionPct] = useState('0')
+
   // Services
   const [allServices,     setAllServices]     = useState<ServiceRow[]>([])
   const [checkedServices, setCheckedServices] = useState<Set<string>>(new Set())
@@ -97,7 +101,7 @@ export default function StaffForm() {
 
       if (isEdit && id) {
         const [{ data: staffData }, { data: ssData }] = await Promise.all([
-          supabase.from('staff').select('id, name, phone, role, status').eq('id', id).single(),
+          supabase.from('staff').select('id, name, phone, role, status, monthly_salary, commission_pct').eq('id', id).single(),
           supabase.from('staff_services').select('service_id').eq('staff_id', id),
         ])
 
@@ -108,6 +112,8 @@ export default function StaffForm() {
           setMobile(mob)
           setRole((staffData.role as 'supervisor' | 'technician') ?? 'technician')
           setStatus((staffData.status as 'active' | 'suspended') ?? 'active')
+          setMonthlySalary(String((staffData.monthly_salary as number | null) ?? 0))
+          setCommissionPct(String((staffData.commission_pct as number | null) ?? 0))
         }
 
         setCheckedServices(new Set((ssData ?? []).map(ss => ss.service_id as string)))
@@ -159,6 +165,10 @@ export default function StaffForm() {
 
     const phone = `${countryCode}${mobile.trim()}`
 
+    const parseNum = (v: string) => { const n = parseInt(v, 10); return isNaN(n) ? 0 : n }
+    const monthlySalaryNum = parseNum(monthlySalary)
+    const commissionPctNum = parseNum(commissionPct)
+
     try {
       if (!isEdit) {
         // Add: create auth user then insert staff record
@@ -170,7 +180,7 @@ export default function StaffForm() {
 
         const { data: newStaff, error: staffErr } = await supabase
           .from('staff')
-          .insert({ salon_id: salonId, name: name.trim(), phone, role, auth_user_id: authUserId, status: 'active', temp_password_set: true })
+          .insert({ salon_id: salonId, name: name.trim(), phone, role, auth_user_id: authUserId, status: 'active', temp_password_set: true, monthly_salary: monthlySalaryNum, commission_pct: commissionPctNum })
           .select('id')
           .single()
         if (staffErr) throw staffErr
@@ -184,7 +194,7 @@ export default function StaffForm() {
         // Edit: update staff, re-sync services
         const { error: updErr } = await supabase
           .from('staff')
-          .update({ name: name.trim(), phone, role, status })
+          .update({ name: name.trim(), phone, role, status, monthly_salary: monthlySalaryNum, commission_pct: commissionPctNum })
           .eq('id', id!)
         if (updErr) throw updErr
 
@@ -310,6 +320,35 @@ export default function StaffForm() {
                   )}
                 </div>
 
+              </div>
+            </div>
+
+            {/* Pay details */}
+            <div style={cardStyle}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: '#034325', margin: '0 0 14px' }}>Pay details</p>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Monthly salary (AED)</label>
+                  <input
+                    value={monthlySalary}
+                    onChange={e => { setMonthlySalary(e.target.value); mark() }}
+                    onFocus={e => e.target.select()}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    style={inputStyle}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Commission %</label>
+                  <input
+                    value={commissionPct}
+                    onChange={e => { setCommissionPct(e.target.value); mark() }}
+                    onFocus={e => e.target.select()}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    style={inputStyle}
+                  />
+                </div>
               </div>
             </div>
 
