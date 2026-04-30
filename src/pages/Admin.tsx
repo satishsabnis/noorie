@@ -914,14 +914,16 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
         {scanError && <p style={{ fontSize: 11, color: '#fca5a5', margin: '10px 0 0' }}>{scanError}</p>}
       </div>
 
-      {report && (
+      {report && (() => {
+        try {
+          return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
 
           {/* Competitors table */}
           <div style={cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <p style={{ ...subHeading, margin: 0 }}>Competitors</p>
-              <button style={copyBtnStyle} onClick={() => copySection('competitors', report.competitors.map(comp => {
+              <button style={copyBtnStyle} onClick={() => copySection('competitors', (report.competitors ?? []).map(comp => {
                 const n = comp.name ?? comp.salon_name ?? comp.business_name ?? ''
                 const l = comp.location ?? comp.address ?? comp.area ?? ''
                 const s = comp.services ?? comp.service_offerings ?? comp.specialties ?? ''
@@ -938,7 +940,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
                   <th style={TH}>Price range</th><th style={TH}>Rating</th><th style={TH}>Reviews</th>
                 </tr></thead>
                 <tbody>
-                  {report.competitors.map((comp, i) => {
+                  {(report.competitors ?? []).map((comp, i) => {
                     const name = comp.name ?? comp.salon_name ?? comp.business_name ?? ''
                     const location = comp.location ?? comp.address ?? comp.area ?? ''
                     const services = comp.services ?? comp.service_offerings ?? comp.specialties ?? ''
@@ -965,10 +967,10 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           <div style={cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <p style={{ ...subHeading, margin: 0 }}>Market trends</p>
-              <button style={copyBtnStyle} onClick={() => copySection('trends', report.trends.map(t => `- ${typeof t === 'string' ? t : Object.values(t as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'trends' ? 'Copied' : 'Copy'}</button>
+              <button style={copyBtnStyle} onClick={() => copySection('trends', (report.trends ?? []).map(t => `- ${typeof t === 'string' ? t : Object.values(t as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'trends' ? 'Copied' : 'Copy'}</button>
             </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {report.trends.map((t, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderTrendItem(t)}</li>)}
+              {(report.trends ?? []).map((t, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderTrendItem(t)}</li>)}
             </ul>
           </div>
 
@@ -976,10 +978,10 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           <div style={cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <p style={{ ...subHeading, margin: 0 }}>Competitor promotions</p>
-              <button style={copyBtnStyle} onClick={() => copySection('offers', report.offers.map(o => `- ${typeof o === 'string' ? o : Object.values(o as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'offers' ? 'Copied' : 'Copy'}</button>
+              <button style={copyBtnStyle} onClick={() => copySection('offers', (report.offers ?? []).map(o => `- ${typeof o === 'string' ? o : Object.values(o as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'offers' ? 'Copied' : 'Copy'}</button>
             </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {report.offers.map((o, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(o)}</li>)}
+              {(report.offers ?? []).map((o, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(o)}</li>)}
             </ul>
           </div>
 
@@ -996,10 +998,10 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           <div style={cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <p style={{ ...subHeading, margin: 0 }}>Loyalty programs</p>
-              <button style={copyBtnStyle} onClick={() => copySection('loyalty', report.loyalty_programs.map(l => `- ${typeof l === 'string' ? l : Object.values(l as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'loyalty' ? 'Copied' : 'Copy'}</button>
+              <button style={copyBtnStyle} onClick={() => copySection('loyalty', (report.loyalty_programs ?? []).map(l => `- ${typeof l === 'string' ? l : Object.values(l as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'loyalty' ? 'Copied' : 'Copy'}</button>
             </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {report.loyalty_programs.map((l, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(l)}</li>)}
+              {(report.loyalty_programs ?? []).map((l, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(l)}</li>)}
             </ul>
           </div>
 
@@ -1007,15 +1009,19 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           <div style={cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <p style={{ ...subHeading, margin: 0 }}>Recommendations</p>
-              <button style={copyBtnStyle} onClick={() => copySection('recommendations', report.recommendations.map(r => `- ${typeof r === 'string' ? r : Object.values(r as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'recommendations' ? 'Copied' : 'Copy'}</button>
+              <button style={copyBtnStyle} onClick={() => copySection('recommendations', (report.recommendations ?? []).map(r => `- ${typeof r === 'string' ? r : Object.values(r as Record<string, unknown>).map(String).join(' — ')}`).join('\n'))}>{copiedSection === 'recommendations' ? 'Copied' : 'Copy'}</button>
             </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {report.recommendations.map((r, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(r)}</li>)}
+              {(report.recommendations ?? []).map((r, i) => <li key={i} style={{ fontSize: 12, color: '#374151' }}>{renderGenericItem(r)}</li>)}
             </ul>
           </div>
 
         </div>
-      )}
+          )
+        } catch {
+          return <p style={{ fontSize: 12, color: '#991b1b', margin: 0 }}>Report could not be displayed</p>
+        }
+      })()}
 
       <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setDirty(false) }} />
     </div>
