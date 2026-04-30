@@ -16,6 +16,19 @@ interface ServiceRow {
   duration_minutes: number
 }
 
+interface Advance {
+  id: string
+  amount: number | null
+  date_given: string | null
+  note: string | null
+  repayment_mode: string | null
+  emi_months: number | null
+  emi_amount: number | null
+  amount_remaining: number | null
+  status: string | null
+  created_at: string
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parsePhone(phone: string | null): { countryCode: string; mobile: string } {
@@ -66,6 +79,16 @@ export default function StaffForm() {
   const [monthlySalary, setMonthlySalary] = useState('0')
   const [commissionPct, setCommissionPct] = useState('0')
 
+  // Advances
+  const [advances,            setAdvances]            = useState<Advance[]>([])
+  const [showAddAdvance,      setShowAddAdvance]      = useState(false)
+  const [newAdvanceAmount,    setNewAdvanceAmount]    = useState('')
+  const [newAdvanceDate,      setNewAdvanceDate]      = useState(new Date().toISOString().slice(0, 10))
+  const [newAdvanceNote,      setNewAdvanceNote]      = useState('')
+  const [newAdvanceMode,      setNewAdvanceMode]      = useState('lump_sum')
+  const [newAdvanceEmiMonths, setNewAdvanceEmiMonths] = useState('1')
+  const [addingAdvance,       setAddingAdvance]       = useState(false)
+
   // Services
   const [allServices,     setAllServices]     = useState<ServiceRow[]>([])
   const [checkedServices, setCheckedServices] = useState<Set<string>>(new Set())
@@ -100,9 +123,10 @@ export default function StaffForm() {
       })))
 
       if (isEdit && id) {
-        const [{ data: staffData }, { data: ssData }] = await Promise.all([
+        const [{ data: staffData }, { data: ssData }, { data: advData }] = await Promise.all([
           supabase.from('staff').select('id, name, phone, role, status, monthly_salary, commission_pct').eq('id', id).single(),
           supabase.from('staff_services').select('service_id').eq('staff_id', id),
+          supabase.from('staff_advances').select('*').eq('staff_id', id).order('created_at', { ascending: false }),
         ])
 
         if (staffData) {
@@ -117,6 +141,7 @@ export default function StaffForm() {
         }
 
         setCheckedServices(new Set((ssData ?? []).map(ss => ss.service_id as string)))
+        setAdvances((advData ?? []) as Advance[])
         setLoading(false)
       }
     }
@@ -134,6 +159,47 @@ export default function StaffForm() {
       return next
     })
     mark()
+  }
+
+  async function reloadAdvances() {
+    if (!id) return
+    const { data } = await supabase
+      .from('staff_advances')
+      .select('*')
+      .eq('staff_id', id)
+      .order('created_at', { ascending: false })
+    setAdvances((data ?? []) as Advance[])
+  }
+
+  async function handleAddAdvance() {
+    if (!newAdvanceAmount.trim() || !salonId || !id) return
+    const amt = parseInt(newAdvanceAmount, 10)
+    if (isNaN(amt) || amt <= 0) return
+    const months = newAdvanceMode === 'emi' ? Math.max(1, parseInt(newAdvanceEmiMonths, 10) || 1) : null
+    const emiAmt = months ? Math.floor(amt / months) : null
+    setAddingAdvance(true)
+    const { error: advErr } = await supabase.from('staff_advances').insert({
+      salon_id: salonId,
+      staff_id: id,
+      amount: amt,
+      date_given: newAdvanceDate,
+      note: newAdvanceNote.trim() || null,
+      repayment_mode: newAdvanceMode,
+      emi_months: months,
+      emi_amount: emiAmt,
+      amount_remaining: amt,
+      status: 'active',
+    })
+    setAddingAdvance(false)
+    if (!advErr) {
+      setNewAdvanceAmount('')
+      setNewAdvanceDate(new Date().toISOString().slice(0, 10))
+      setNewAdvanceNote('')
+      setNewAdvanceMode('lump_sum')
+      setNewAdvanceEmiMonths('1')
+      setShowAddAdvance(false)
+      await reloadAdvances()
+    }
   }
 
   async function handleAddService() {
@@ -354,6 +420,119 @@ export default function StaffForm() {
                     style={inputStyle}
                   />
                 </div>
+              </div>
+
+              <div style={{ borderTop: '0.5px solid #e0e0e0', marginTop: 16, paddingTop: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Advances{advances.length > 0 ? ` (${advances.length})` : ''}</span>
+                  <button
+                    onClick={() => setShowAddAdvance(v => !v)}
+                    style={{
+                      border: '0.5px solid #034325', color: '#034325',
+                      backgroundColor: 'transparent', fontSize: 11,
+                      borderRadius: 4, padding: '3px 10px', cursor: 'pointer',
+                    }}
+                  >{showAddAdvance ? 'Cancel' : '+ Add advance'}</button>
+                </div>
+
+                {advances.length > 0 && (
+                  <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {advances.map(a => {
+                      const settled = a.status === 'settled'
+                      const badgeStyle: React.CSSProperties = settled
+                        ? { backgroundColor: '#f0fdf4', color: '#034325' }
+                        : { backgroundColor: '#fef3c7', color: '#92400e' }
+                      return (
+                        <div key={a.id} style={{
+                          backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0',
+                          borderRadius: 6, padding: '10px 12px',
+                          opacity: settled ? 0.5 : 1,
+                          display: 'flex', flexDirection: 'column', gap: 4,
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>AED {a.amount ?? 0}</span>
+                            <span style={{
+                              ...badgeStyle, fontSize: 10, fontWeight: 600,
+                              borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '0.04em',
+                            }}>{a.status ?? 'active'}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: '#6b7280' }}>
+                            {a.date_given ?? '—'} · {a.repayment_mode === 'emi'
+                              ? `EMI ${a.emi_months ?? 0} mo @ AED ${a.emi_amount ?? 0}/mo`
+                              : 'Lump sum'}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#6b7280' }}>Remaining: AED {a.amount_remaining ?? 0}</div>
+                          {a.note && <div style={{ fontSize: 11, color: '#374151', fontStyle: 'italic' }}>{a.note}</div>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {showAddAdvance && (
+                  <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <input
+                      value={newAdvanceAmount}
+                      onChange={e => setNewAdvanceAmount(e.target.value)}
+                      placeholder="Amount (AED)"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      style={{ ...inputStyle, fontSize: 12 }}
+                    />
+                    <input
+                      type="date"
+                      value={newAdvanceDate}
+                      onChange={e => setNewAdvanceDate(e.target.value)}
+                      style={{ ...inputStyle, fontSize: 12 }}
+                    />
+                    <input
+                      value={newAdvanceNote}
+                      onChange={e => setNewAdvanceNote(e.target.value)}
+                      placeholder="Note (optional)"
+                      style={{ ...inputStyle, fontSize: 12 }}
+                    />
+                    <select
+                      value={newAdvanceMode}
+                      onChange={e => setNewAdvanceMode(e.target.value)}
+                      style={{ ...inputStyle, fontSize: 12, appearance: 'none', cursor: 'pointer' }}
+                    >
+                      <option value="lump_sum">Lump sum</option>
+                      <option value="emi">EMI</option>
+                    </select>
+                    {newAdvanceMode === 'emi' && (
+                      <>
+                        <input
+                          value={newAdvanceEmiMonths}
+                          onChange={e => setNewAdvanceEmiMonths(e.target.value)}
+                          placeholder="EMI months"
+                          type="number"
+                          style={{ ...inputStyle, fontSize: 12 }}
+                        />
+                        {(() => {
+                          const amt = parseInt(newAdvanceAmount, 10)
+                          const months = parseInt(newAdvanceEmiMonths, 10)
+                          const emi = !isNaN(amt) && !isNaN(months) && months > 0 ? Math.floor(amt / months) : 0
+                          return (
+                            <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
+                              EMI amount: AED {emi}/month
+                            </p>
+                          )
+                        })()}
+                      </>
+                    )}
+                    <button
+                      disabled={addingAdvance || !newAdvanceAmount.trim()}
+                      onClick={handleAddAdvance}
+                      style={{
+                        border: 'none', borderRadius: 6, padding: '8px 14px',
+                        fontSize: 12, fontWeight: 500, alignSelf: 'flex-start',
+                        backgroundColor: (addingAdvance || !newAdvanceAmount.trim()) ? '#e0e0e0' : '#034325',
+                        color: (addingAdvance || !newAdvanceAmount.trim()) ? '#9ca3af' : '#ffffff',
+                        cursor: (addingAdvance || !newAdvanceAmount.trim()) ? 'not-allowed' : 'pointer',
+                      }}
+                    >{addingAdvance ? 'Saving…' : 'Save advance'}</button>
+                  </div>
+                )}
               </div>
             </div>
 
