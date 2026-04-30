@@ -7,7 +7,7 @@ import { useAuthStore } from '../stores/authStore'
 
 const SECTIONS = [
   'Salon details', 'Services', 'Payments', 'WhatsApp',
-  'Loyalty points', 'Noorie AI', 'Staff settings',
+  'Loyalty points', 'Noorie AI', 'Staff settings', 'Run payroll',
 ] as const
 type Section = typeof SECTIONS[number]
 
@@ -1076,6 +1076,220 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
   )
 }
 
+// ── Section: Run payroll ──────────────────────────────────────────────────────
+
+interface PayrollStaffRow {
+  id: string
+  name: string
+  role: string
+  monthly_salary: number
+  commission_pct: number
+  services_revenue: number
+  commission_earned: number
+  gross: number
+  advance_deductions: number
+  net_payable: number
+}
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+
+function SectionPayroll({ salonId }: { salonId: string }) {
+  const now = new Date()
+  const [selectedMonth,    setSelectedMonth]    = useState<number>(now.getMonth() + 1)
+  const [selectedYear,     setSelectedYear]     = useState<number>(now.getFullYear())
+  const [staffList,        setStaffList]        = useState<PayrollStaffRow[]>([])
+  const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set())
+  const [loading,          setLoading]          = useState(true)
+  const [running,          setRunning]          = useState(false)
+  const [error,            setError]            = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      if (!salonId) { setLoading(false); return }
+      setLoading(true); setError(null)
+      try {
+        const { data: staffData, error: staffErr } = await supabase
+          .from('staff')
+          .select('id, name, role, monthly_salary, commission_pct')
+          .eq('salon_id', salonId)
+          .eq('status', 'active')
+        if (staffErr) throw staffErr
+
+        const periodStart = new Date(selectedYear, selectedMonth - 1, 1).toISOString()
+        const periodEnd   = new Date(selectedYear, selectedMonth, 1).toISOString()
+
+        const rows: PayrollStaffRow[] = await Promise.all((staffData ?? []).map(async s => {
+          const sid     = s.id as string
+          const monthly = (s.monthly_salary as number | null) ?? 0
+          const pct     = (s.commission_pct as number | null) ?? 0
+
+          const [{ data: svcData }, { data: advData }] = await Promise.all([
+            supabase.from('appointment_services').select('price').eq('staff_id', sid).gte('started_at', periodStart).lt('started_at', periodEnd),
+            supabase.from('staff_advances').select('emi_amount').eq('staff_id', sid).eq('status', 'active'),
+          ])
+
+          const services_revenue   = (svcData ?? []).reduce((sum, r) => sum + (((r as { price: number | null }).price) ?? 0), 0)
+          const advance_deductions = (advData ?? []).reduce((sum, r) => sum + (((r as { emi_amount: number | null }).emi_amount) ?? 0), 0)
+          const commission_earned  = services_revenue * pct / 100
+          const gross              = monthly + commission_earned
+          const net_payable        = gross - advance_deductions
+
+          return {
+            id:                 sid,
+            name:               (s.name as string) ?? '',
+            role:               (s.role as string) ?? '',
+            monthly_salary:     monthly,
+            commission_pct:     pct,
+            services_revenue,
+            commission_earned,
+            gross,
+            advance_deductions,
+            net_payable,
+          }
+        }))
+
+        if (cancelled) return
+        setStaffList(rows)
+        setSelectedStaffIds(new Set(rows.map(r => r.id)))
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load payroll data')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [salonId, selectedMonth, selectedYear])
+
+  function toggleStaff(id: string) {
+    setSelectedStaffIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const allSelected  = staffList.length > 0 && selectedStaffIds.size === staffList.length
+  const selectedRows = staffList.filter(r => selectedStaffIds.has(r.id))
+  const totalNet     = selectedRows.reduce((s, r) => s + r.net_payable, 0)
+
+  function toggleAll() {
+    if (allSelected) setSelectedStaffIds(new Set())
+    else             setSelectedStaffIds(new Set(staffList.map(r => r.id)))
+  }
+
+  async function runPayroll() {
+    setRunning(true); setError(null)
+    // Persistence handled in a later commit.
+    setRunning(false)
+  }
+
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]
+
+  return (
+    <div>
+      <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Run payroll cycle</p>
+
+      <div style={cardStyle}>
+        <p style={subHeading}>Pay period</p>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Month</label>
+            <select
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(parseInt(e.target.value, 10))}
+              style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }}
+            >
+              {MONTH_NAMES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Year</label>
+            <select
+              value={selectedYear}
+              onChange={e => setSelectedYear(parseInt(e.target.value, 10))}
+              style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }}
+            >
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <p style={{ ...subHeading, margin: 0 }}>Staff</p>
+          <button
+            onClick={toggleAll}
+            style={{
+              fontSize: 11, color: '#034325', backgroundColor: 'transparent',
+              border: '0.5px solid #034325', borderRadius: 4, padding: '3px 10px', cursor: 'pointer',
+            }}
+          >{allSelected ? 'Deselect all' : 'Select all'}</button>
+        </div>
+
+        {loading ? (
+          <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p>
+        ) : staffList.length === 0 ? (
+          <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>No active staff.</p>
+        ) : (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {staffList.map(r => {
+                const selected = selectedStaffIds.has(r.id)
+                return (
+                  <label key={r.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px',
+                    cursor: 'pointer', opacity: selected ? 1 : 0.4,
+                    borderBottom: '0.5px solid #f0f0f0',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => toggleStaff(r.id)}
+                      style={{ accentColor: '#034325', width: 14, height: 14, flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 13, color: '#111' }}>{r.name}</span>
+                      <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'capitalize' }}>{r.role}</span>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: '#111', textAlign: 'right' }}>AED {r.net_payable.toFixed(0)}</span>
+                  </label>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, marginTop: 6, borderTop: '0.5px solid #e0e0e0' }}>
+              <span style={{ fontSize: 12, color: '#6b7280' }}>{selectedStaffIds.size} of {staffList.length} selected</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#034325' }}>Total: AED {totalNet.toFixed(0)}</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div style={{ backgroundColor: '#fff3cd', border: '0.5px solid #C9A227', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
+        <p style={{ fontSize: 12, color: '#92400e', margin: 0 }}>
+          Running payroll will record salary, commission and advance deductions for the selected staff for {MONTH_NAMES[selectedMonth - 1]} {selectedYear}. This action cannot be undone.
+        </p>
+      </div>
+
+      {error && <p style={{ fontSize: 12, color: '#991b1b', margin: '0 0 10px' }}>{error}</p>}
+
+      <button
+        onClick={runPayroll}
+        disabled={selectedStaffIds.size === 0 || running}
+        style={{
+          backgroundColor: (selectedStaffIds.size === 0 || running) ? '#e0e0e0' : '#034325',
+          color:           (selectedStaffIds.size === 0 || running) ? '#9ca3af' : '#ffffff',
+          border: 'none', borderRadius: 6, padding: '10px 18px',
+          fontSize: 13, fontWeight: 600,
+          cursor: (selectedStaffIds.size === 0 || running) ? 'not-allowed' : 'pointer',
+        }}
+      >{running ? 'Running…' : `Run payroll for ${selectedStaffIds.size} staff`}</button>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Admin() {
@@ -1155,6 +1369,7 @@ export default function Admin() {
           {activeSection === 'Loyalty points'  && <SectionLoyalty config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Noorie AI'       && <SectionAI config={config} salonId={salonId} salon={{ name: salon.name, city: salon.city, country: salon.country }} onRefresh={fetchAll} />}
           {activeSection === 'Staff settings'  && <SectionStaffSettings config={config} salonId={salonId} onRefresh={fetchAll} />}
+          {activeSection === 'Run payroll'     && <SectionPayroll salonId={salonId} />}
         </div>
       </div>
 
