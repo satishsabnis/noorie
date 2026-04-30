@@ -11,6 +11,7 @@ import Clients from './pages/Clients'
 import ClientProfile from './pages/ClientProfile'
 import Staff from './pages/Staff'
 import StaffForm from './pages/StaffForm'
+import Reports from './pages/Reports'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -88,6 +89,11 @@ function AppRoutes() {
       <Route path="/staff/:id" element={
         <OwnerRoute>
           <StaffForm />
+        </OwnerRoute>
+      } />
+      <Route path="/reports" element={
+        <OwnerRoute>
+          <Reports />
         </OwnerRoute>
       } />
       <Route path="*" element={<Navigate to="/login" replace />} />
