@@ -832,10 +832,13 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
         },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
-          max_tokens: 4000,
+          max_tokens: 3000,
           tools: [{ type: 'web_search_20250305', name: 'web_search' }],
           system: 'You are a salon business intelligence analyst. You MUST respond with ONLY a valid JSON object. No text before or after the JSON. No markdown. No backticks. No explanation. No preamble. Start your response with { and end with }.',
-          messages: [{ role: 'user', content: userMsg }],
+          messages: [
+            { role: 'user', content: userMsg },
+            { role: 'user', content: 'Keep your response concise. Limit to 3 competitors maximum. Each field value must be under 100 characters. The entire response must fit within 2000 tokens.' },
+          ],
         }),
       })
       if (!res.ok) { const t = await res.text(); throw new Error(`API error ${res.status}: ${t}`) }
