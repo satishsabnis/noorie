@@ -186,14 +186,40 @@ ${opts.advances /* dummy ref kept to satisfy potential lints */ ? '' : ''}
 </html>`
 }
 
-function buildConsolidatedHTML(salonName: string, month: number, year: number, slips: string[]): string {
-  // Merge multiple slip bodies into one document by extracting each <div class="slip"> block.
-  const bodies = slips.map(html => {
-    const match = html.match(/<div class="slip">[\s\S]*?<\/div>\s*<\/body>/)
-    return match ? match[0].replace(/\s*<\/body>$/, '') : ''
-  }).join('\n')
-
+function buildConsolidatedHTML(opts: {
+  salonName: string
+  month: number
+  year: number
+  rows: {
+    staff_name: string
+    staff_role: string
+    basic_salary: number
+    commission_earned: number
+    advance_deductions: number
+    net_payable: number
+  }[]
+  runDate: string
+}): string {
+  const { salonName, month, year, rows, runDate } = opts
+  const { start, end } = periodBounds(month, year)
   const periodLabel = `${MONTHS[month - 1]} ${year}`
+  const periodDates = `${formatDate(start.toISOString())} – ${formatDate(end.toISOString())}`
+
+  const totals = rows.reduce((acc, r) => ({
+    basic:      acc.basic      + r.basic_salary,
+    commission: acc.commission + r.commission_earned,
+    deductions: acc.deductions + r.advance_deductions,
+    net:        acc.net        + r.net_payable,
+  }), { basic: 0, commission: 0, deductions: 0, net: 0 })
+
+  const tableRows = rows.map(r => `<tr>
+    <td>${escapeHtml(r.staff_name)}</td>
+    <td class="role">${escapeHtml(r.staff_role)}</td>
+    <td class="r">AED ${formatMoney(r.basic_salary)}</td>
+    <td class="r">AED ${formatMoney(r.commission_earned)}</td>
+    <td class="r ded">AED ${formatMoney(r.advance_deductions)}</td>
+    <td class="r net-cell">AED ${formatMoney(r.net_payable)}</td>
+  </tr>`).join('')
 
   return `<!doctype html>
 <html>
@@ -203,31 +229,68 @@ function buildConsolidatedHTML(salonName: string, month: number, year: number, s
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111; background: #fff; }
-  .slip { max-width: 720px; margin: 0 auto; padding: 0; page-break-after: always; }
-  .slip:last-child { page-break-after: auto; }
+  .doc { max-width: 820px; margin: 0 auto; }
   .hdr { background: #034325; color: #fff; padding: 22px 28px; }
   .hdr .salon { font-size: 18px; font-weight: 600; margin: 0; }
-  .hdr .period { font-size: 12px; opacity: 0.85; margin: 4px 0 0; }
+  .hdr .title { font-size: 13px; opacity: 0.95; margin: 6px 0 0; }
+  .hdr .dates { font-size: 11px; opacity: 0.8; margin: 4px 0 0; }
   .body { padding: 24px 28px; }
-  .who { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
-  .avatar { width: 48px; height: 48px; border-radius: 50%; background: #f0fdf4; color: #034325; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; }
-  .who .name { font-size: 16px; font-weight: 600; margin: 0; }
-  .who .role { font-size: 12px; color: #6b7280; margin: 2px 0 0; text-transform: capitalize; }
-  .who .dates { font-size: 11px; color: #6b7280; margin: 2px 0 0; }
-  .section { margin-top: 18px; }
-  .section-title { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 8px; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 6px 0; font-size: 12px; color: #111; border-bottom: 0.5px solid #f0f0f0; }
-  td.r { text-align: right; }
-  .subtotal td { font-weight: 600; border-bottom: none; padding-top: 10px; }
-  .net { background: #f0fdf4; border: 0.5px solid #034325; border-radius: 6px; padding: 14px 18px; margin-top: 18px; display: flex; justify-content: space-between; align-items: center; }
-  .net .lbl { font-size: 12px; color: #034325; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-  .net .amt { font-size: 20px; color: #034325; font-weight: 700; }
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 22px; }
+  .metric { border: 0.5px solid #e0e0e0; border-radius: 6px; padding: 12px 14px; }
+  .metric .lbl { font-size: 10px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; display: block; }
+  .metric .val { font-size: 15px; font-weight: 600; color: #111; margin-top: 4px; display: block; }
+  .metric.ded .val { color: #991b1b; }
+  .metric.net { background: #f0fdf4; border-color: #034325; }
+  .metric.net .val { color: #034325; }
+  table.staff { width: 100%; border-collapse: collapse; }
+  table.staff th { text-align: left; font-size: 11px; font-weight: 600; color: #6b7280; padding: 8px 10px; border-bottom: 0.5px solid #e0e0e0; text-transform: uppercase; letter-spacing: 0.04em; }
+  table.staff th.r { text-align: right; }
+  table.staff td { font-size: 12px; color: #111; padding: 8px 10px; border-bottom: 0.5px solid #f0f0f0; vertical-align: middle; }
+  table.staff td.r { text-align: right; }
+  table.staff td.role { color: #6b7280; text-transform: capitalize; }
+  table.staff td.ded { color: #991b1b; }
+  table.staff td.net-cell { color: #034325; font-weight: 600; }
+  .footer { margin-top: 28px; padding-top: 14px; border-top: 0.5px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #6b7280; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
 </head>
 <body>
-${bodies}
+<div class="doc">
+  <div class="hdr">
+    <p class="salon">${escapeHtml(salonName)}</p>
+    <p class="title">Payroll report — ${periodLabel}</p>
+    <p class="dates">${periodDates}</p>
+  </div>
+  <div class="body">
+    <div class="summary">
+      <div class="metric"><span class="lbl">Total salary</span><span class="val">AED ${formatMoney(totals.basic)}</span></div>
+      <div class="metric"><span class="lbl">Total commission</span><span class="val">AED ${formatMoney(totals.commission)}</span></div>
+      <div class="metric ded"><span class="lbl">Total deductions</span><span class="val">AED ${formatMoney(totals.deductions)}</span></div>
+      <div class="metric net"><span class="lbl">Total net payable</span><span class="val">AED ${formatMoney(totals.net)}</span></div>
+    </div>
+
+    <table class="staff">
+      <thead>
+        <tr>
+          <th>Staff</th>
+          <th>Role</th>
+          <th class="r">Basic salary</th>
+          <th class="r">Commission</th>
+          <th class="r">Deductions</th>
+          <th class="r">Net payable</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows}
+      </tbody>
+    </table>
+
+    <div class="footer">
+      <span>Powered by Noorie</span>
+      <span>Run date: ${escapeHtml(runDate)}</span>
+    </div>
+  </div>
+</div>
 </body>
 </html>`
 }
@@ -408,32 +471,22 @@ export default function Reports() {
   async function downloadConsolidated() {
     if (!selectedCycle) return
     setGenerating(true)
-    const slipHtmls: string[] = []
-    for (const row of selectedCycle.rows) {
-      const { data: advData } = await supabase
-        .from('staff_advances')
-        .select('*')
-        .eq('staff_id', row.staff_id)
-        .eq('status', 'active')
-      slipHtmls.push(buildSlipHTML({
-        salonName:          resolvedSalonName || 'Salon',
-        staffName:          row.staff_name,
-        staffRole:          row.staff_role,
-        month:              selectedCycle.period_month,
-        year:               selectedCycle.period_year,
-        basicSalary:        row.basic_salary,
-        commissionEarned:   row.commission_earned,
-        advanceDeductions:  row.advance_deductions,
-        netPayable:         row.net_payable,
-        advances:           (advData ?? []) as AdvanceRow[],
-      }))
-    }
-    const html = buildConsolidatedHTML(
-      resolvedSalonName || 'Salon',
-      selectedCycle.period_month,
-      selectedCycle.period_year,
-      slipHtmls,
-    )
+    const mostRecent = selectedCycle.rows.reduce((acc, r) => r.created_at > acc ? r.created_at : acc, '')
+    const runDate = mostRecent ? formatDate(mostRecent) : formatDate(new Date().toISOString())
+    const html = buildConsolidatedHTML({
+      salonName:  resolvedSalonName || 'Salon',
+      month:      selectedCycle.period_month,
+      year:       selectedCycle.period_year,
+      rows:       selectedCycle.rows.map(r => ({
+        staff_name:         r.staff_name,
+        staff_role:         r.staff_role,
+        basic_salary:       r.basic_salary,
+        commission_earned:  r.commission_earned,
+        advance_deductions: r.advance_deductions,
+        net_payable:        r.net_payable,
+      })),
+      runDate,
+    })
     openPrintWindow(html, `payroll-${MONTHS[selectedCycle.period_month - 1]}-${selectedCycle.period_year}`)
     setGenerating(false)
   }
