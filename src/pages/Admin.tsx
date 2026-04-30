@@ -1102,6 +1102,7 @@ function SectionPayroll({ salonId }: { salonId: string }) {
   const [loading,          setLoading]          = useState(true)
   const [running,          setRunning]          = useState(false)
   const [error,            setError]            = useState<string | null>(null)
+  const [successMsg,       setSuccessMsg]       = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -1114,6 +1115,7 @@ function SectionPayroll({ salonId }: { salonId: string }) {
           .select('id, name, role, monthly_salary, commission_pct')
           .eq('salon_id', salonId)
           .eq('status', 'active')
+          .neq('role', 'owner')
         if (staffErr) throw staffErr
 
         const periodStart = new Date(selectedYear, selectedMonth - 1, 1).toISOString()
@@ -1180,9 +1182,28 @@ function SectionPayroll({ salonId }: { salonId: string }) {
   }
 
   async function runPayroll() {
-    setRunning(true); setError(null)
-    // Persistence handled in a later commit.
-    setRunning(false)
+    if (selectedStaffIds.size === 0 || !salonId) return
+    setRunning(true); setError(null); setSuccessMsg(null)
+    try {
+      const rowsToInsert = selectedRows.map(r => ({
+        salon_id:           salonId,
+        staff_id:           r.id,
+        period_month:       selectedMonth,
+        period_year:        selectedYear,
+        basic_salary:       r.monthly_salary,
+        commission_earned:  r.commission_earned,
+        advance_deductions: r.advance_deductions,
+        net_payable:        r.net_payable,
+        status:             'completed',
+      }))
+      const { error: insErr } = await supabase.from('payroll_runs').insert(rowsToInsert)
+      if (insErr) throw insErr
+      setSuccessMsg(`Payroll run complete for ${rowsToInsert.length} staff members.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to run payroll')
+    } finally {
+      setRunning(false)
+    }
   }
 
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]
@@ -1235,30 +1256,54 @@ function SectionPayroll({ salonId }: { salonId: string }) {
           <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>No active staff.</p>
         ) : (
           <>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {staffList.map(r => {
-                const selected = selectedStaffIds.has(r.id)
-                return (
-                  <label key={r.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px',
-                    cursor: 'pointer', opacity: selected ? 1 : 0.4,
-                    borderBottom: '0.5px solid #f0f0f0',
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      onChange={() => toggleStaff(r.id)}
-                      style={{ accentColor: '#034325', width: 14, height: 14, flexShrink: 0 }}
-                    />
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: 13, color: '#111' }}>{r.name}</span>
-                      <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'capitalize' }}>{r.role}</span>
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 500, color: '#111', textAlign: 'right' }}>AED {r.net_payable.toFixed(0)}</span>
-                  </label>
-                )
-              })}
-            </div>
+            {(() => {
+              const TH_PAYROLL: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', padding: '8px 10px', borderBottom: '0.5px solid #e0e0e0' }
+              const TD_PAYROLL: React.CSSProperties = { fontSize: 12, color: '#111', padding: '8px 10px', borderBottom: '0.5px solid #f0f0f0', verticalAlign: 'middle' }
+              return (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...TH_PAYROLL, width: 28 }}></th>
+                        <th style={TH_PAYROLL}>Staff</th>
+                        <th style={{ ...TH_PAYROLL, textAlign: 'right' }}>Basic salary (AED)</th>
+                        <th style={{ ...TH_PAYROLL, textAlign: 'right' }}>Commission earned (AED)</th>
+                        <th style={{ ...TH_PAYROLL, textAlign: 'right' }}>Deductions (AED)</th>
+                        <th style={{ ...TH_PAYROLL, textAlign: 'right' }}>Net payable (AED)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {staffList.map(r => {
+                        const selected = selectedStaffIds.has(r.id)
+                        const rowOpacity = selected ? 1 : 0.4
+                        return (
+                          <tr key={r.id} style={{ opacity: rowOpacity }}>
+                            <td style={TD_PAYROLL}>
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => toggleStaff(r.id)}
+                                style={{ accentColor: '#034325', width: 14, height: 14 }}
+                              />
+                            </td>
+                            <td style={TD_PAYROLL}>
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: 13, color: '#111' }}>{r.name}</span>
+                                <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'capitalize' }}>{r.role}</span>
+                              </div>
+                            </td>
+                            <td style={{ ...TD_PAYROLL, textAlign: 'right' }}>{r.monthly_salary.toFixed(0)}</td>
+                            <td style={{ ...TD_PAYROLL, textAlign: 'right' }}>{r.commission_earned.toFixed(0)}</td>
+                            <td style={{ ...TD_PAYROLL, textAlign: 'right' }}>{r.advance_deductions.toFixed(0)}</td>
+                            <td style={{ ...TD_PAYROLL, textAlign: 'right', fontWeight: 500 }}>{r.net_payable.toFixed(0)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })()}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, marginTop: 6, borderTop: '0.5px solid #e0e0e0' }}>
               <span style={{ fontSize: 12, color: '#6b7280' }}>{selectedStaffIds.size} of {staffList.length} selected</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#034325' }}>Total: AED {totalNet.toFixed(0)}</span>
@@ -1274,6 +1319,7 @@ function SectionPayroll({ salonId }: { salonId: string }) {
       </div>
 
       {error && <p style={{ fontSize: 12, color: '#991b1b', margin: '0 0 10px' }}>{error}</p>}
+      {successMsg && <p style={{ fontSize: 12, color: '#034325', margin: '0 0 10px' }}>{successMsg}</p>}
 
       <button
         onClick={runPayroll}
