@@ -115,7 +115,7 @@ function StaffSchedule() {
       const aid = r.appointment_id as string
       if (!svcMap[aid]) svcMap[aid] = []
       svcMap[aid].push({
-        name: (r.services as { name: string } | null)?.name ?? '—',
+        name: (r.services as unknown as { name: string } | null)?.name ?? '—',
         price: (r.price as number) ?? 0,
       })
     }
@@ -135,7 +135,7 @@ function StaffSchedule() {
         starts_at: a.starts_at as string,
         ends_at: a.ends_at as string,
         status: a.status as string,
-        clientName: (a.clients as { name: string } | null)?.name ?? 'Client',
+        clientName: (a.clients as unknown as { name: string } | null)?.name ?? 'Client',
         services,
         totalPrice,
         totalPaid,
@@ -252,7 +252,7 @@ function StaffAppointmentDetail() {
     ])
 
     const services = (svcRows ?? []).map(r => ({
-      name: (r.services as { name: string } | null)?.name ?? '—',
+      name: (r.services as unknown as { name: string } | null)?.name ?? '—',
       price: (r.price as number) ?? 0,
     }))
     const totalPrice = services.reduce((s, sv) => s + sv.price, 0)
@@ -263,7 +263,7 @@ function StaffAppointmentDetail() {
       starts_at: a.starts_at as string,
       ends_at: a.ends_at as string,
       status: a.status as string,
-      clientName: (a.clients as { name: string } | null)?.name ?? 'Client',
+      clientName: (a.clients as unknown as { name: string } | null)?.name ?? 'Client',
       services,
       totalPrice,
       totalPaid,
@@ -404,7 +404,7 @@ function StaffAppointmentDetail() {
 function StaffCollectPayment() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { staffRecord } = useAuthStore()
+  const salonId = useAuthStore(s => s.staffRecord?.salon_id ?? null)
   const [balance, setBalance] = useState(0)
   const [clientName, setClientName] = useState('')
   const [amount, setAmount] = useState('')
@@ -433,7 +433,7 @@ function StaffCollectPayment() {
 
     setBalance(bal)
     setAmount(bal.toFixed(2))
-    setClientName((a?.clients as { name: string } | null)?.name ?? 'Client')
+    setClientName((a?.clients as unknown as { name: string } | null)?.name ?? 'Client')
     setLoading(false)
   }
 
@@ -446,7 +446,7 @@ function StaffCollectPayment() {
     setError(null)
 
     const { error: err } = await supabase.from('payments').insert({
-      salon_id: staffRecord!.salon_id,
+      salon_id: salonId,
       appointment_id: id,
       amount: amt,
       method,

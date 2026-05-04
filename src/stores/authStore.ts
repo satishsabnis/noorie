@@ -70,7 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     let currentUserId: string | null = null
 
-    supabase.auth.onAuthStateChange(async (event, session) => {
+    supabase.auth.onAuthStateChange(async (_event, session) => {
       const newUserId = session?.user?.id ?? null
       if (newUserId === currentUserId) return
       currentUserId = newUserId
