@@ -113,7 +113,7 @@ export default function Staff() {
         phone:    s.phone  as string | null,
         role:     s.role   as string | null,
         status:   s.status as string | null,
-        services: ((s.staff_services as { services: { name: string } | null }[]) ?? [])
+        services: ((s.staff_services as unknown as { services: { name: string } | null }[]) ?? [])
           .map(ss => ss.services)
           .filter((sv): sv is { name: string } => !!sv),
       }))

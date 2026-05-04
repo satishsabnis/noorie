@@ -759,7 +759,7 @@ async function fetchBriefUnpaid(salonId: string): Promise<BriefUnpaid[]> {
     const aid = a.id as string
     const balance = Math.round(((svcMap[aid] ?? 0) - (payMap[aid] ?? 0)) * 100) / 100
     if (balance <= 0) continue
-    const client = a.clients as { name: string; phone: string | null } | null
+    const client = a.clients as unknown as { name: string; phone: string | null } | null
     results.push({
       clientName: client?.name ?? 'Client',
       phone: client?.phone ?? '',
@@ -951,7 +951,7 @@ export default function Dashboard() {
       }
 
       // Query 2 + 3 in parallel: services and payments
-      const [{ data: svcRows, error: svcErr }, { data: payRows }] = await Promise.all([
+      const [{ data: svcRows }, { data: payRows }] = await Promise.all([
         supabase
           .from('appointment_services')
           .select('appointment_id, price, services ( name ), staff ( name )')
@@ -983,7 +983,7 @@ export default function Dashboard() {
           starts_at:   a.starts_at as string,
           status:      a.status as string,
           is_walk_in:  a.is_walk_in as boolean,
-          clientName:  (a.clients as { name: string } | null)?.name ?? 'Client',
+          clientName:  (a.clients as unknown as { name: string } | null)?.name ?? 'Client',
           staffName:   (a.staff   as { name: string } | null)?.name ?? '',
           services,
           totalPrice:  services.reduce((s, svc) => s + svc.price, 0),
@@ -1016,7 +1016,7 @@ export default function Dashboard() {
       for (const row of svcRows ?? []) {
         const apptId = row.appointment_id as string
         if (!completedIds.has(apptId)) continue
-        const staffName = (row.staff as { name: string } | null)?.name ?? ''
+        const staffName = (row.staff as unknown as { name: string } | null)?.name ?? ''
         if (!staffName) continue
         if (!staffRevMap[staffName]) staffRevMap[staffName] = { revenue: 0, apptIds: new Set() }
         staffRevMap[staffName].revenue += (row.price as number) ?? 0
