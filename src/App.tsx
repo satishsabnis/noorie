@@ -14,6 +14,7 @@ import Staff from './pages/Staff'
 import StaffForm from './pages/StaffForm'
 import Reports from './pages/Reports'
 import Admin from './pages/Admin'
+import StaffApp from './pages/StaffApp'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -48,6 +49,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/staff-app/*" element={<StaffApp />} />
       <Route path="/set-password" element={<SetPassword />} />
       <Route path="/dashboard" element={
         <ProtectedRoute>

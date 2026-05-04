@@ -35,7 +35,7 @@ export default function Login() {
       }
 
       signIn(user, staff)
-      navigate('/dashboard')
+      navigate(staff.role === 'technician' ? '/staff-app' : '/dashboard')
     } catch (err: any) {
       const msg = err?.message ?? ''
       if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials')) {
@@ -153,6 +153,20 @@ export default function Login() {
           >
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
+
+          <div style={{ textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={() => navigate('/signup')}
+              style={{
+                background: 'none', border: '1px solid #034325', borderRadius: 8,
+                padding: '10px 24px', fontSize: 13, fontWeight: 600,
+                color: '#034325', cursor: 'pointer',
+              }}
+            >
+              Register your salon
+            </button>
+          </div>
         </form>
       </div>
 
