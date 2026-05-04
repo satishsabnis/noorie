@@ -299,8 +299,8 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown }: { drilldown: NonNull
       {drilldown === 'toprunner' && (
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 280 }}>
-            <p style={{ color: '#034325', fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>Today's schedule — {mockTopRunner.name}</p>
-            <ApptTable rows={mockAllAppts.filter(a => a.staff === mockTopRunner.name)} showPayment />
+            <p style={{ color: '#034325', fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>Today's top runner</p>
+            <ApptTable rows={mockAllAppts} showPayment />
           </div>
           <div style={{ flex: 1, minWidth: 240 }}>
             <p style={{ color: '#034325', fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>This week's stats</p>
@@ -697,7 +697,7 @@ async function fetchBriefLapsedClient(salonId: string): Promise<BriefLapsedClien
   for (const a of apptRows ?? []) {
     const cid = a.client_id as string
     if (lastVisitMap[cid]) continue
-    const svcs = (a.appointment_services as { services: { name: string } | null }[]) ?? []
+    const svcs = (a.appointment_services as unknown as { services: { name: string } | null }[]) ?? []
     lastVisitMap[cid] = { date: a.starts_at as string, service: svcs[0]?.services?.name ?? '—' }
   }
   const spendMap: Record<string, number> = {}
@@ -969,8 +969,8 @@ export default function Dashboard() {
         const apptId = row.appointment_id as string
         if (!svcMap[apptId]) svcMap[apptId] = []
         svcMap[apptId].push({
-          name:      (row.services as { name: string } | null)?.name ?? '—',
-          staffName: (row.staff    as { name: string } | null)?.name ?? '',
+          name:      (row.services as unknown as { name: string } | null)?.name ?? '—',
+          staffName: (row.staff as unknown as { name: string } | null)?.name ?? '',
           price:     (row.price    as number | null) ?? 0,
         })
       }
@@ -984,7 +984,7 @@ export default function Dashboard() {
           status:      a.status as string,
           is_walk_in:  a.is_walk_in as boolean,
           clientName:  (a.clients as unknown as { name: string } | null)?.name ?? 'Client',
-          staffName:   (a.staff   as { name: string } | null)?.name ?? '',
+          staffName:   (a.staff as unknown as { name: string } | null)?.name ?? '',
           services,
           totalPrice:  services.reduce((s, svc) => s + svc.price, 0),
         }

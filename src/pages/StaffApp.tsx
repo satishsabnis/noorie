@@ -229,7 +229,6 @@ function StaffSchedule() {
 function StaffAppointmentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { staffRecord } = useAuthStore()
   const [appt, setAppt] = useState<Appointment | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
