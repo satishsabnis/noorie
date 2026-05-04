@@ -62,11 +62,8 @@ export default function Login() {
         <p style={{ color: '#ffffff', fontSize: 20, fontWeight: 700, margin: 0, lineHeight: 1.2 }}>
           Noorie
         </p>
-        <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 500, margin: '10px 0 4px', lineHeight: 1.3 }}>
-          New Look Beauty Salon
-        </p>
-        <p style={{ color: '#00BF00', fontSize: 11, margin: 0, lineHeight: 1.3 }}>
-          Noorie knows your salon.
+        <p style={{ color: '#00BF00', fontSize: 13, margin: '12px 0 0', lineHeight: 1.3 }}>
+          AI Powered Salon Manager
         </p>
       </div>
 
