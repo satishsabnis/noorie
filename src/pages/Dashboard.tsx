@@ -67,12 +67,6 @@ const mockAllAppts = [
 ]
 
 
-const mockBirthdays = [
-  { id: 'b1', name: 'Priya Sharma', date: 'Apr 11', phone: '+971501234567' },
-  { id: 'b2', name: 'Layla Hassan', date: 'Apr 13', phone: '+971507654321' },
-  { id: 'b3', name: 'Meera Patel',  date: 'Apr 16', phone: '+971509876543' },
-]
-
 const mockRevenueByService = [
   { service: 'Hair Colour',         amount: 360 },
   { service: 'Keratin Treatment',   amount: 220 },
@@ -606,14 +600,44 @@ function ClientCard({ appt, onClick }: { appt: ApptFetched; onClick: () => void 
 
 // ── Birthday strip ────────────────────────────────────────────────────────────
 
-function BirthdayStrip() {
+function BirthdayStrip({ salonId }: { salonId: string | null }) {
+  const [birthdays, setBirthdays] = useState<{ id: string; name: string; date: string; phone: string }[]>([])
+
+  useEffect(() => {
+    if (!salonId) return
+    supabase
+      .from('clients')
+      .select('id, name, dob, phone')
+      .eq('salon_id', salonId)
+      .not('dob', 'is', null)
+      .then(({ data }) => {
+        if (!data) return
+        const today = new Date(Date.now() + 4 * 60 * 60 * 1000)
+        const results = data
+          .map(c => {
+            const dob = c.dob as string
+            const [, mm, dd] = dob.split('-').map(Number)
+            const y = today.getUTCFullYear()
+            let next = new Date(Date.UTC(y, mm - 1, dd))
+            if (next < today) next = new Date(Date.UTC(y + 1, mm - 1, dd))
+            const diffDays = Math.round((next.getTime() - today.getTime()) / 86_400_000)
+            return { id: c.id as string, name: c.name as string, phone: (c.phone as string) ?? '', date: next.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), diffDays }
+          })
+          .filter(c => c.diffDays <= 7)
+          .sort((a, b) => a.diffDays - b.diffDays)
+        setBirthdays(results)
+      })
+  }, [salonId])
+
+  if (birthdays.length === 0) return null
+
   return (
     <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: '12px 16px', margin: '0 16px 16px' }}>
       <p style={{ fontSize: 11, fontWeight: 500, color: '#034325', margin: '0 0 10px' }}>
         Birthdays — next 7 days
       </p>
       <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
-        {mockBirthdays.map(b => (
+        {birthdays.map(b => (
           <div key={b.id} style={{ minWidth: 140, flexShrink: 0, backgroundColor: '#f9fafb', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: '10px 12px' }}>
             <p style={{ fontSize: 12, fontWeight: 500, color: '#111111', margin: '0 0 2px' }}>{b.name}</p>
             <p style={{ fontSize: 10, color: '#6b7280', margin: 0 }}>{b.date}</p>
@@ -901,8 +925,6 @@ export default function Dashboard() {
         .gte('starts_at', `${today}T00:00:00+04:00`)
         .lt('starts_at', `${today}T23:59:59+04:00`)
 
-      console.log('Dashboard fetchCards Q1:', { salonId, today, appts, apptErr })
-
       if (apptErr || !appts) {
         if (!cancelled && firstLoad) { setCardsLoading(false); firstLoad = false }
         return
@@ -940,8 +962,6 @@ export default function Dashboard() {
           .in('appointment_id', apptIds)
           .order('created_at', { ascending: false }),
       ])
-
-      console.log('Dashboard fetchCards Q2+Q3:', { svcRows, svcErr, payRows })
 
       // Build lookup: appointment_id → service list
       const svcMap: Record<string, ApptService[]> = {}
@@ -1009,8 +1029,6 @@ export default function Dashboard() {
           topRunner = { name, revenue: rev, appointments: data.apptIds.size }
         }
       }
-
-      console.log('Dashboard setCards:', withPayments)
 
       if (!cancelled) {
         setCards(withPayments)
@@ -1138,7 +1156,7 @@ export default function Dashboard() {
             </div>
 
             {/* Birthday strip */}
-            <BirthdayStrip />
+            <BirthdayStrip salonId={staffRecord?.salon_id ?? null} />
           </>
         )}
 

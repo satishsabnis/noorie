@@ -90,7 +90,7 @@ Deno.serve(async (req: Request) => {
   if (Array.isArray(service_ids) && service_ids.length > 0) {
     const { error: ssErr } = await supabaseAdmin
       .from('staff_services')
-      .insert(service_ids.map(service_id => ({ staff_id: staffRow.id, service_id })))
+      .insert(service_ids.map(service_id => ({ staff_id: staffRow.id, service_id, salon_id })))
     if (ssErr) {
       return jsonResponse({ success: false, error: ssErr.message }, 400)
     }

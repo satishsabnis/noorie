@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import Login from './pages/Login'
+import Signup from './pages/Signup'
 import SetPassword from './pages/SetPassword'
 import Dashboard from './pages/Dashboard'
 import Appointments from './pages/Appointments'
@@ -12,6 +13,7 @@ import ClientProfile from './pages/ClientProfile'
 import Staff from './pages/Staff'
 import StaffForm from './pages/StaffForm'
 import Reports from './pages/Reports'
+import Admin from './pages/Admin'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -45,6 +47,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
       <Route path="/set-password" element={<SetPassword />} />
       <Route path="/dashboard" element={
         <ProtectedRoute>
@@ -80,6 +83,11 @@ function AppRoutes() {
         <ProtectedRoute>
           <Staff />
         </ProtectedRoute>
+      } />
+      <Route path="/admin" element={
+        <OwnerRoute>
+          <Admin />
+        </OwnerRoute>
       } />
       <Route path="/staff/new" element={
         <OwnerRoute>
