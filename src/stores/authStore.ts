@@ -43,7 +43,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: () => {
     supabase.auth.signOut()
-    set({ user: null, staffRecord: null, role: null, isAuthenticated: false })
+    set({ user: null, staffRecord: null, role: null, isAuthenticated: false, salonName: null })
   },
 
   setStaffRecord: (staff) => set({
@@ -53,16 +53,21 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   setSalonName: (name) => set({ salonName: name }),
 
-  initialize: async () => {
+  initialize: async (): Promise<void> => {
     set({ isLoading: true })
 
     const { data: { session } } = await supabase.auth.getSession()
 
     if (session?.user) {
       const phone = session.user.email?.replace('@noorie.internal', '') ?? ''
-      const staff = await getStaffByPhone(phone).catch(() => null)
+      const staff = await getStaffByPhone(phone).catch((): null => null)
       if (staff) {
-        set({ user: session.user, staffRecord: staff, role: staff.role, isAuthenticated: true })
+        set({ 
+          user: session.user, 
+          staffRecord: staff, 
+          role: staff.role, 
+          isAuthenticated: true 
+        })
       }
     }
 
@@ -77,7 +82,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       if (session?.user) {
         const phone = session.user.email?.replace('@noorie.internal', '') ?? ''
-        const staff = await getStaffByPhone(phone).catch(() => null)
+        const staff = await getStaffByPhone(phone).catch((): null => null)
         set({
           user: session.user,
           staffRecord: staff,
@@ -85,7 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: !!staff,
         })
       } else {
-        set({ user: null, staffRecord: null, role: null, isAuthenticated: false })
+        set({ user: null, staffRecord: null, role: null, isAuthenticated: false, salonName: null })
       }
     })
   },

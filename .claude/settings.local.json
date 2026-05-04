@@ -12,7 +12,12 @@
       "Bash(cmd /c \"tasklist | findstr node.exe\")",
       "Bash(npx tsc:*)",
       "mcp__claude_ai_Supabase__get_publishable_keys",
-      "Bash(cmd /c \"taskkill /F /IM node.exe 2>&1 & echo killed\")"
+      "Bash(cmd /c \"taskkill /F /IM node.exe 2>&1 & echo killed\")",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(git stash *)",
+      "Bash(git restore *)",
+      "Bash(npx supabase *)"
     ]
   }
 }

@@ -1,0 +1,39 @@
+Make these exact changes:
+
+1. In src/pages/Dashboard.tsx, line 302, replace:
+<p style={{ color: '#034325', fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>Today's schedule — {mockTopRunner.name}</p>
+with:
+<p style={{ color: '#034325', fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>Today's top runner</p>
+
+2. In src/pages/Dashboard.tsx, line 303, replace:
+<ApptTable rows={mockAllAppts.filter(a => a.staff === mockTopRunner.name)} showPayment />
+with:
+<ApptTable rows={mockAllAppts} showPayment />
+
+3. In src/pages/Dashboard.tsx, line 700, replace:
+const svcs = (a.appointment_services as { services: { name: string } | null }[]) ?? []
+with:
+const svcs = (a.appointment_services as unknown as { services: { name: string } | null }[]) ?? []
+
+4. In src/pages/Dashboard.tsx, line 972, replace:
+name:      (row.services as { name: string } | null)?.name ?? '—',
+with:
+name:      (row.services as unknown as { name: string } | null)?.name ?? '—',
+
+5. In src/pages/Dashboard.tsx, line 973, replace:
+staffName: (row.staff    as { name: string } | null)?.name ?? '',
+with:
+staffName: (row.staff as unknown as { name: string } | null)?.name ?? '',
+
+6. In src/pages/Dashboard.tsx, line 987, replace:
+staffName:   (a.staff   as { name: string } | null)?.name ?? '',
+with:
+staffName:   (a.staff as unknown as { name: string } | null)?.name ?? '',
+
+7. In src/pages/StaffApp.tsx, find the StaffCollectPayment function. Remove staffRecord from the useAuthStore destructuring if it still exists. Make sure only salonId is extracted like:
+const salonId = useAuthStore(s => s.staffRecord?.salon_id ?? null)
+
+Then commit and push:
+git add src/pages/Dashboard.tsx src/pages/StaffApp.tsx
+git commit -m "fix: final Vercel TypeScript build errors"
+git push origin main

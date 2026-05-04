@@ -3,8 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 interface ApptDetail {
   id: string
   starts_at: string
@@ -44,8 +42,6 @@ interface ServiceRow {
   staffName: string
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function fmtDateTime(iso: string) {
   const d = new Date(iso)
   const datePart = d.toLocaleDateString('en-GB', {
@@ -56,8 +52,6 @@ function fmtDateTime(iso: string) {
   })
   return `${datePart} · ${timePart}`
 }
-
-// ── Shared styles ─────────────────────────────────────────────────────────────
 
 const btnPrimary: React.CSSProperties = {
   backgroundColor: '#034325', color: '#ffffff',
@@ -85,8 +79,6 @@ const btnSmallOutline: React.CSSProperties = {
   fontSize: 11, cursor: 'pointer',
 }
 
-// ── Appointment status badge (shown on dark #034325 header) ───────────────────
-
 function ApptStatusBadge({ status }: { status: string }) {
   const styleMap: Record<string, React.CSSProperties> = {
     completed:   { backgroundColor: '#ffffff', color: '#034325' },
@@ -109,25 +101,22 @@ function ApptStatusBadge({ status }: { status: string }) {
   )
 }
 
-// ── Service card ──────────────────────────────────────────────────────────────
-
 interface ServiceCardProps {
   svc: ServiceRow
   apptStatus: string
   saving: boolean
-  onStart:    () => void
+  onStart: () => void
   onComplete: () => void
-  onNoShow:   () => void
-  onCancel:   () => void
-  onPhoto:    (field: 'before_photos' | 'after_photos') => void
+  onNoShow: () => void
+  onCancel: () => void
+  onPhoto: (field: 'before_photos' | 'after_photos') => void
 }
 
 function ServiceCard({ svc, apptStatus, saving, onStart, onComplete, onNoShow, onCancel, onPhoto }: ServiceCardProps) {
   const actionsLocked = apptStatus === 'cancelled' || apptStatus === 'no_show' || apptStatus === 'completed'
-  const beforeCount   = svc.before_photos?.length ?? 0
-  const afterCount    = svc.after_photos?.length  ?? 0
+  const beforeCount = svc.before_photos?.length ?? 0
+  const afterCount = svc.after_photos?.length ?? 0
 
-  // ── COMPLETED ──────────────────────────────────────────────────────────────
   if (svc.status === 'completed') {
     return (
       <div style={{ border: '0.5px solid #034325', borderRadius: 8, overflow: 'hidden' }}>
@@ -151,7 +140,6 @@ function ServiceCard({ svc, apptStatus, saving, onStart, onComplete, onNoShow, o
     )
   }
 
-  // ── IN PROGRESS ────────────────────────────────────────────────────────────
   if (svc.status === 'in_progress') {
     return (
       <div style={{ border: '1.5px solid #034325', borderRadius: 8, overflow: 'hidden' }}>
@@ -168,7 +156,6 @@ function ServiceCard({ svc, apptStatus, saving, onStart, onComplete, onNoShow, o
           </div>
         </div>
         <div style={{ backgroundColor: '#ffffff', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* Before photos */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 11, color: '#6b7280' }}>
               Before photos{beforeCount > 0 ? ` · ${beforeCount} taken` : ''}
@@ -178,7 +165,6 @@ function ServiceCard({ svc, apptStatus, saving, onStart, onComplete, onNoShow, o
               <span style={{ fontSize: 11, color: '#9ca3af', cursor: 'default' }}>Skip</span>
             </div>
           </div>
-          {/* After photos */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 11, color: '#6b7280' }}>
               After photos{afterCount > 0 ? ` · ${afterCount} taken` : ''}
@@ -202,7 +188,6 @@ function ServiceCard({ svc, apptStatus, saving, onStart, onComplete, onNoShow, o
     )
   }
 
-  // ── PENDING ────────────────────────────────────────────────────────────────
   return (
     <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
       <div style={{ backgroundColor: '#f9fafb', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -218,7 +203,6 @@ function ServiceCard({ svc, apptStatus, saving, onStart, onComplete, onNoShow, o
         </div>
       </div>
       <div style={{ backgroundColor: '#ffffff', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {/* Before photos row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 11, color: '#6b7280' }}>
             Before photos{beforeCount > 0 ? ` · ${beforeCount} taken` : ''}
@@ -242,30 +226,26 @@ function ServiceCard({ svc, apptStatus, saving, onStart, onComplete, onNoShow, o
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
-
 export default function AppointmentDetail() {
-  const { id }   = useParams<{ id: string }>()
+  const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
-  const [appt, setAppt]         = useState<ApptDetail | null>(null)
+  const [appt, setAppt] = useState<ApptDetail | null>(null)
   const [services, setServices] = useState<ServiceRow[]>([])
-  const [loading, setLoading]   = useState(true)
+  const [loading, setLoading] = useState(true)
   const [fetchErr, setFetchErr] = useState<string | null>(null)
-  const [saving, setSaving]     = useState(false)
+  const [saving, setSaving] = useState(false)
   const [refreshTick, setRefreshTick] = useState(0)
 
-  const [payments, setPayments]         = useState<PaymentRow[]>([])
+  const [payments, setPayments] = useState<PaymentRow[]>([])
   const [servicePrices, setServicePrices] = useState<Record<string, string>>({})
-  const [payAmount, setPayAmount]         = useState('')
-  const [payMethod, setPayMethod]         = useState<'cash' | 'card'>('cash')
+  const [payAmount, setPayAmount] = useState('')
+  const [payMethod, setPayMethod] = useState<'cash' | 'card'>('cash')
 
-  const fileInputRef  = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [pendingPhoto, setPendingPhoto] = useState<{ serviceId: string; field: 'before_photos' | 'after_photos' } | null>(null)
 
   function refresh() { setRefreshTick(t => t + 1) }
-
-  // ── Fetch ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!id) return
@@ -274,9 +254,6 @@ export default function AppointmentDetail() {
     setFetchErr(null)
 
     async function fetchData() {
-      console.log('fetchData triggered', refreshTick)
-
-      // Query 1: appointment + client
       const { data: apptData, error: apptErr } = await supabase
         .from('appointments')
         .select('id, starts_at, ends_at, status, is_walk_in, notes, client_id, salon_id, clients (name, phone, visit_count, last_visit_at)')
@@ -288,7 +265,6 @@ export default function AppointmentDetail() {
         return
       }
 
-      // Query 2: appointment_services + services + staff
       const { data: svcData, error: svcErr } = await supabase
         .from('appointment_services')
         .select('id, service_id, staff_id, price, status, before_photos, after_photos, started_at, completed_at, services (name, duration_minutes), staff (name)')
@@ -299,22 +275,42 @@ export default function AppointmentDetail() {
         return
       }
 
-      const mapped: ServiceRow[] = (svcData ?? []).map(row => ({
-        id:              row.id as string,
-        service_id:      row.service_id as string,
-        staff_id:        row.staff_id as string | null,
-        price:           (row.price as number) ?? 0,
-        status:          (row.status as string) ?? 'pending',
-        before_photos:   row.before_photos as string[] | null,
-        after_photos:    row.after_photos as string[] | null,
-        started_at:      row.started_at as string | null,
-        completed_at:    row.completed_at as string | null,
-        serviceName:     (row.services as { name: string; duration_minutes: number } | null)?.name ?? '—',
-        durationMinutes: (row.services as { name: string; duration_minutes: number } | null)?.duration_minutes ?? 0,
-        staffName:       (row.staff as { name: string } | null)?.name ?? '—',
-      }))
+      const mapped: ServiceRow[] = (svcData ?? []).map((row: any) => {
+        let serviceName = '—'
+        let durationMinutes = 0
+        const servicesData = row.services
+        if (Array.isArray(servicesData) && servicesData.length > 0) {
+          serviceName = servicesData[0]?.name ?? '—'
+          durationMinutes = servicesData[0]?.duration_minutes ?? 0
+        } else if (servicesData && !Array.isArray(servicesData)) {
+          serviceName = servicesData.name ?? '—'
+          durationMinutes = servicesData.duration_minutes ?? 0
+        }
+        
+        let staffName = '—'
+        const staffData = row.staff
+        if (Array.isArray(staffData) && staffData.length > 0) {
+          staffName = staffData[0]?.name ?? '—'
+        } else if (staffData && !Array.isArray(staffData)) {
+          staffName = staffData.name ?? '—'
+        }
+        
+        return {
+          id: row.id as string,
+          service_id: row.service_id as string,
+          staff_id: row.staff_id as string | null,
+          price: (row.price as number) ?? 0,
+          status: (row.status as string) ?? 'pending',
+          before_photos: row.before_photos as string[] | null,
+          after_photos: row.after_photos as string[] | null,
+          started_at: row.started_at as string | null,
+          completed_at: row.completed_at as string | null,
+          serviceName: serviceName,
+          durationMinutes: durationMinutes,
+          staffName: staffName,
+        }
+      })
 
-      // Query 3: payments
       const { data: payData } = await supabase
         .from('payments')
         .select('id, created_at, amount, method')
@@ -331,10 +327,10 @@ export default function AppointmentDetail() {
         setServices(mapped)
         setServicePrices(priceMap)
         setPayments((payData ?? []).map(p => ({
-          id:         p.id as string,
+          id: p.id as string,
           created_at: p.created_at as string,
-          amount:     (p.amount as number) ?? 0,
-          method:     (p.method as string) ?? '',
+          amount: (p.amount as number) ?? 0,
+          method: (p.method as string) ?? '',
         })))
         setLoading(false)
       }
@@ -344,15 +340,11 @@ export default function AppointmentDetail() {
     return () => { cancelled = true }
   }, [id, refreshTick])
 
-  // ── Actions ───────────────────────────────────────────────────────────────
-
   async function handleStartService(serviceId: string) {
     setSaving(true)
     const now = new Date().toISOString()
-
     await supabase.from('appointment_services').update({ status: 'in_progress', started_at: now }).eq('id', serviceId)
     await supabase.from('appointments').update({ status: 'in_progress' }).eq('id', id)
-
     setSaving(false)
     refresh()
   }
@@ -386,7 +378,6 @@ export default function AppointmentDetail() {
     if (!appt) return
     setSaving(true)
 
-    // Save entered prices to appointment_services before collecting
     await Promise.all(services.map(s =>
       supabase.from('appointment_services')
         .update({ price: parseFloat(servicePrices[s.id] || '0') || 0 })
@@ -398,12 +389,12 @@ export default function AppointmentDetail() {
     const amount = Math.min(entered, balance)
 
     const { error: payErr } = await supabase.from('payments').insert({
-      salon_id:       appt.salon_id,
+      salon_id: appt.salon_id,
       appointment_id: appt.id,
-      client_id:      appt.client_id,
+      client_id: appt.client_id,
       amount,
-      method:         payMethod,
-      status:         'completed',
+      method: payMethod,
+      status: 'completed',
     })
     if (!payErr) {
       const newBalance = Math.round((balance - amount) * 100) / 100
@@ -429,7 +420,7 @@ export default function AppointmentDetail() {
     if (!file || !pendingPhoto || !appt) return
     setSaving(true)
 
-    const ext  = file.name.split('.').pop() ?? 'jpg'
+    const ext = file.name.split('.').pop() ?? 'jpg'
     const path = `${appt.salon_id}/${appt.id}/${pendingPhoto.serviceId}/${pendingPhoto.field}/${Date.now()}.${ext}`
 
     const { error: uploadErr } = await supabase.storage.from('appointment-photos').upload(path, file)
@@ -437,7 +428,7 @@ export default function AppointmentDetail() {
 
     const { data: { publicUrl } } = supabase.storage.from('appointment-photos').getPublicUrl(path)
 
-    const svc     = services.find(s => s.id === pendingPhoto.serviceId)
+    const svc = services.find(s => s.id === pendingPhoto.serviceId)
     const current = (pendingPhoto.field === 'before_photos' ? svc?.before_photos : svc?.after_photos) ?? []
 
     await supabase.from('appointment_services')
@@ -450,18 +441,12 @@ export default function AppointmentDetail() {
     refresh()
   }
 
-  // ── Derived ───────────────────────────────────────────────────────────────
-
   const allSvcCompleted = services.length > 0 && services.every(s => s.status === 'completed')
-  const totalDue        = services.reduce((sum, s) => sum + s.price, 0)
-  const enteredTotal    = services.reduce((sum, s) => sum + (parseFloat(servicePrices[s.id] || '0') || 0), 0)
-  const totalPaid       = payments.reduce((sum, p) => sum + p.amount, 0)
-  const balance         = Math.max(0, Math.round((enteredTotal - totalPaid) * 100) / 100)
-  const allPricesSet    = services.length > 0 && services.every(s => parseFloat(servicePrices[s.id] || '0') > 0)
-  const isTerminal      = appt?.status === 'cancelled' || appt?.status === 'no_show'
-  const isCompleted     = appt?.status === 'completed'
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  const enteredTotal = services.reduce((sum, s) => sum + (parseFloat(servicePrices[s.id] || '0') || 0), 0)
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0)
+  const balance = Math.max(0, Math.round((enteredTotal - totalPaid) * 100) / 100)
+  const isTerminal = appt?.status === 'cancelled' || appt?.status === 'no_show'
+  const isCompleted = appt?.status === 'completed'
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
@@ -470,13 +455,12 @@ export default function AppointmentDetail() {
 
       <div style={{ margin: '52px auto 0', flex: 1, padding: '20px 16px 32px', maxWidth: 680, width: '100%', boxSizing: 'border-box' }}>
 
-        {/* Back + breadcrumb */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <button
             onClick={() => navigate('/dashboard')}
             style={{ background: 'transparent', border: '0.5px solid #034325', color: '#034325', borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}
           >
-            ← Back
+            Back
           </button>
           <span style={{ color: '#6b7280', fontSize: 12 }}>Dashboard › Appointment detail</span>
         </div>
@@ -490,7 +474,6 @@ export default function AppointmentDetail() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-            {/* ── Client header card ── */}
             <div style={{ backgroundColor: '#034325', borderRadius: 10, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <p style={{ color: '#00BF00', fontSize: 11, margin: '0 0 4px' }}>
@@ -510,14 +493,13 @@ export default function AppointmentDetail() {
               </div>
             </div>
 
-            {/* ── Service cards ── */}
             {services.map(svc => (
               <ServiceCard
                 key={svc.id}
                 svc={svc}
                 apptStatus={appt.status}
                 saving={saving}
-                onStart={()    => handleStartService(svc.id)}
+                onStart={() => handleStartService(svc.id)}
                 onComplete={() => handleCompleteService(svc.id)}
                 onNoShow={handleNoShow}
                 onCancel={handleCancel}
@@ -525,18 +507,16 @@ export default function AppointmentDetail() {
               />
             ))}
 
-            {/* ── Payment section ── */}
             {(!allSvcCompleted || isTerminal) ? (
               <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '14px 16px', opacity: 0.5 }}>
                 <p style={{ fontSize: 12, color: '#9ca3af', margin: 0, textAlign: 'center' }}>
                   Payment — available after all services complete
                 </p>
               </div>
-            ) : (  /* allSvcCompleted && !isTerminal — includes completed status (read-only when balance = 0) */
+            ) : (
               <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 16 }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: '#034325', margin: '0 0 12px' }}>Payment</p>
 
-                {/* Per-service rows with editable price inputs (read-only when completed) */}
                 {services.map(svc => (
                   <div key={svc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid #f0f0f0', gap: 8 }}>
                     <span style={{ fontSize: 12, color: '#6b7280', flex: 1 }}>{svc.serviceName}</span>
@@ -556,13 +536,11 @@ export default function AppointmentDetail() {
                   </div>
                 ))}
 
-                {/* Total row */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 12px', borderTop: '0.5px solid #e0e0e0', marginTop: 4 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#000000' }}>Total</span>
                   <span style={{ fontSize: 13, fontWeight: 500, color: '#034325' }}>AED {enteredTotal.toFixed(2)}</span>
                 </div>
 
-                {/* Payment history */}
                 <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 6px' }}>Payments collected</p>
                 {payments.length === 0 ? (
                   <p style={{ fontSize: 11, color: '#9ca3af', margin: '0 0 10px' }}>No payments yet</p>
@@ -580,7 +558,6 @@ export default function AppointmentDetail() {
                   </div>
                 )}
 
-                {/* Balance row */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 0', borderTop: '0.5px solid #e0e0e0', marginBottom: balance > 0 ? 12 : 0 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#000000' }}>Balance</span>
                   <span style={{ fontSize: 13, fontWeight: 600, color: balance > 0 ? '#991b1b' : '#034325' }}>
@@ -588,7 +565,6 @@ export default function AppointmentDetail() {
                   </span>
                 </div>
 
-                {/* Collect payment form — only when balance remains */}
                 {balance > 0 && (
                   <>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
@@ -629,7 +605,6 @@ export default function AppointmentDetail() {
         )}
       </div>
 
-      {/* Hidden file input for camera/photo upload */}
       <input
         ref={fileInputRef}
         type="file"

@@ -4,8 +4,6 @@ import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 interface ApptRow {
   id: string
   starts_at: string
@@ -14,19 +12,15 @@ interface ApptRow {
   is_walk_in: boolean
   clients: { id: string; name: string; phone: string } | null
   staff: { id: string; name: string } | null
-  serviceNames: string   // comma-separated, pre-computed at fetch time
-  totalPrice: number     // sum of appointment_services.price
+  serviceNames: string
+  totalPrice: number
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function todayStr() {
-  // Dubai local date (UTC+4) — avoids Intl API inconsistencies
   return new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
 }
 
 function fmtTime(iso: string) {
-  // Parse UTC timestamp and display in Dubai local time (UTC+4)
   return new Date(iso).toLocaleTimeString('en-GB', {
     timeZone: 'Asia/Dubai',
     hour: '2-digit',
@@ -34,8 +28,6 @@ function fmtTime(iso: string) {
     hour12: false,
   })
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
 
 const TH: React.CSSProperties = {
   textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280',
@@ -50,8 +42,6 @@ const inputStyle: React.CSSProperties = {
   borderRadius: 6, padding: '6px 10px', outline: 'none',
   backgroundColor: '#ffffff',
 }
-
-// ── Status badge ──────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, React.CSSProperties> = {
@@ -74,22 +64,18 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
-
 export default function Appointments() {
   const navigate = useNavigate()
   const staffRecord = useAuthStore(s => s.staffRecord)
 
-  const [dateFilter, setDateFilter]     = useState(todayStr())
+  const [dateFilter, setDateFilter] = useState(todayStr())
   const [statusFilter, setStatusFilter] = useState('')
-  const [staffFilter, setStaffFilter]   = useState('')
-  const [search, setSearch]             = useState('')
+  const [staffFilter, setStaffFilter] = useState('')
+  const [search, setSearch] = useState('')
 
-  const [rows, setRows]           = useState<ApptRow[]>([])
-  const [loading, setLoading]     = useState(false)
+  const [rows, setRows] = useState<ApptRow[]>([])
+  const [loading, setLoading] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
-
-  // ── Fetch ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const salonId = staffRecord?.salon_id
@@ -100,7 +86,6 @@ export default function Appointments() {
     setFetchError(null)
 
     async function fetchData() {
-      // ── Query 1: appointments with clients + staff ──────────────────────────
       const { data: appts, error: apptErr } = await supabase
         .from('appointments')
         .select(`
@@ -127,7 +112,6 @@ export default function Appointments() {
         return
       }
 
-      // ── Query 2: appointment_services joined with services ──────────────────
       const appointmentIds = appts.map(a => a.id)
 
       const { data: svcRows, error: svcErr } = await supabase
@@ -140,30 +124,59 @@ export default function Appointments() {
         return
       }
 
-      // ── Merge: build lookup appointment_id → names + total price ───────────
       const svcMap: Record<string, { names: string[]; total: number }> = {}
       for (const row of svcRows ?? []) {
         const apptId = row.appointment_id as string
         if (!svcMap[apptId]) svcMap[apptId] = { names: [], total: 0 }
-        const svcName = (row.services as { name: string } | null)?.name
-        if (svcName) svcMap[apptId].names.push(svcName)
+        
+        let serviceName: string | null = null
+        const servicesData = row.services
+        if (Array.isArray(servicesData) && servicesData.length > 0) {
+          serviceName = servicesData[0]?.name ?? null
+        } else if (servicesData && !Array.isArray(servicesData)) {
+          serviceName = servicesData.name ?? null
+        }
+        
+        if (serviceName) svcMap[apptId].names.push(serviceName)
         svcMap[apptId].total += (row.price as number | null) ?? 0
       }
 
-      const merged: ApptRow[] = appts.map(a => ({
-        ...(a as Omit<ApptRow, 'serviceNames' | 'totalPrice'>),
-        serviceNames: svcMap[a.id]?.names.join(', ') || '—',
-        totalPrice:   svcMap[a.id]?.total ?? 0,
-      }))
+      const merged: ApptRow[] = appts.map((a: any) => {
+        let clientsObj = null
+        const clientsData = a.clients
+        if (Array.isArray(clientsData) && clientsData.length > 0) {
+          clientsObj = clientsData[0]
+        } else if (clientsData && !Array.isArray(clientsData)) {
+          clientsObj = clientsData
+        }
+        
+        let staffObj = null
+        const staffData = a.staff
+        if (Array.isArray(staffData) && staffData.length > 0) {
+          staffObj = staffData[0]
+        } else if (staffData && !Array.isArray(staffData)) {
+          staffObj = staffData
+        }
+        
+        return {
+          id: a.id as string,
+          starts_at: a.starts_at as string,
+          ends_at: a.ends_at as string,
+          status: a.status as string,
+          is_walk_in: a.is_walk_in as boolean,
+          clients: clientsObj,
+          staff: staffObj,
+          serviceNames: svcMap[a.id]?.names.join(', ') || '—',
+          totalPrice: svcMap[a.id]?.total ?? 0,
+        }
+      })
 
       if (!cancelled) { setRows(merged); setLoading(false) }
     }
 
     fetchData()
     return () => { cancelled = true }
-  }, [dateFilter, staffRecord?.salon_id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Client-side filters ─────────────────────────────────────────────────────
+  }, [dateFilter, staffRecord?.salon_id])
 
   const filtered = useMemo(() => {
     return rows.filter(a => {
@@ -179,7 +192,6 @@ export default function Appointments() {
     })
   }, [rows, statusFilter, staffFilter, search])
 
-  // Staff names for dropdown — derived from fetched data
   const staffNames = useMemo(() => {
     const names = new Set(
       rows.map(a => a.staff?.name).filter((n): n is string => !!n)
@@ -193,8 +205,6 @@ export default function Appointments() {
     return sum + a.totalPrice
   }, 0)
 
-  // ── Render ──────────────────────────────────────────────────────────────────
-
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
 
@@ -202,7 +212,6 @@ export default function Appointments() {
 
       <div style={{ marginTop: 52, flex: 1, padding: '20px 16px 32px' }}>
 
-        {/* Page header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#000000' }}>Appointments</h1>
           <button
@@ -218,7 +227,6 @@ export default function Appointments() {
           </button>
         </div>
 
-        {/* Filter row */}
         <div style={{
           backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8,
           padding: '12px 14px', marginBottom: 12,
@@ -271,7 +279,6 @@ export default function Appointments() {
           )}
         </div>
 
-        {/* Summary chips */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <span style={{
             fontSize: 11, padding: '3px 10px', borderRadius: 4,
@@ -295,7 +302,6 @@ export default function Appointments() {
           )}
         </div>
 
-        {/* Table */}
         <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, overflowX: 'auto' }}>
           {loading ? (
             <p style={{ textAlign: 'center', padding: 32, color: '#6b7280', fontSize: 12, margin: 0 }}>
@@ -326,7 +332,7 @@ export default function Appointments() {
                 {filtered.map(a => {
                   const payment = a.status === 'completed' ? a.totalPrice : 0
                   return (
-                    <tr key={a.id}>
+                    <tr key={a.id} onClick={() => navigate(`/appointment/${a.id}`)} style={{ cursor: 'pointer' }}>
                       <td style={{ ...TD, fontVariantNumeric: 'tabular-nums', color: '#6b7280' }}>
                         {fmtTime(a.starts_at)}
                       </td>

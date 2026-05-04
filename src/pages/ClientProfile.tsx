@@ -3,8 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 interface ClientDetail {
   id: string
   name: string
@@ -46,8 +44,6 @@ interface Visit {
   totalPaid: number
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -74,8 +70,6 @@ function initials(name: string) {
   return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
 const inputStyle: React.CSSProperties = {
   width: '100%', fontSize: 13, color: '#000000',
   border: '0.5px solid #e0e0e0', borderRadius: 6,
@@ -88,8 +82,6 @@ const labelStyle: React.CSSProperties = {
   textTransform: 'uppercase', letterSpacing: '0.04em',
   display: 'block', marginBottom: 5,
 }
-
-// ── Status badge ──────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
   const styleMap: Record<string, React.CSSProperties> = {
@@ -114,8 +106,6 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
-
 export default function ClientProfile() {
   const { id }   = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -132,14 +122,11 @@ export default function ClientProfile() {
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(original)
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
-
   useEffect(() => {
     if (!id) return
     let cancelled = false
 
     async function fetchData() {
-      // Q1: client
       const { data: cd, error: ce } = await supabase
         .from('clients')
         .select('id, name, phone, email, dob, allergies, notes, loyalty_points')
@@ -163,7 +150,6 @@ export default function ClientProfile() {
       }
       const fv: FormState = { name: c.name, phone: c.phone, email: c.email, dob: c.dob, allergies: c.allergies, notes: c.notes }
 
-      // Q2: appointments for client (desc)
       const { data: apptData } = await supabase
         .from('appointments')
         .select('id, starts_at, ends_at, status')
@@ -172,35 +158,33 @@ export default function ClientProfile() {
 
       const apptIds = (apptData ?? []).map(a => a.id as string)
 
-      // Q3: appointment_services + services + staff
       const { data: svcData } = apptIds.length > 0
         ? await supabase
             .from('appointment_services')
             .select('appointment_id, price, services ( name ), staff ( name )')
             .in('appointment_id', apptIds)
-        : { data: [] as null }
+        : { data: [] }
 
-      // Q4: payments
       const { data: payData } = apptIds.length > 0
         ? await supabase
             .from('payments')
             .select('appointment_id, amount, method')
             .in('appointment_id', apptIds)
-        : { data: [] as null }
+        : { data: [] }
 
-      // Build service map
       const svcMap: Record<string, VisitService[]> = {}
       for (const s of svcData ?? []) {
         const aid = s.appointment_id as string
         if (!svcMap[aid]) svcMap[aid] = []
+        const serviceObj = s.services as { name: string } | null
+        const staffObj = s.staff as { name: string } | null
         svcMap[aid].push({
-          serviceName: (s.services as { name: string } | null)?.name ?? '—',
-          staffName:   (s.staff    as { name: string } | null)?.name ?? '—',
-          price:       (s.price    as number) ?? 0,
+          serviceName: serviceObj?.name ?? '—',
+          staffName:   staffObj?.name ?? '—',
+          price:       (s.price as number) ?? 0,
         })
       }
 
-      // Build payment map
       const payMap: Record<string, VisitPayment[]> = {}
       for (const p of payData ?? []) {
         const aid = p.appointment_id as string
@@ -234,8 +218,6 @@ export default function ClientProfile() {
     return () => { cancelled = true }
   }, [id])
 
-  // ── Save ──────────────────────────────────────────────────────────────────
-
   async function handleSave() {
     if (!client) return
     setSaving(true)
@@ -257,16 +239,11 @@ export default function ClientProfile() {
     setSaving(false)
   }
 
-  // ── Derived stats ─────────────────────────────────────────────────────────
-
   const completedVisits = visits.filter(v => v.status === 'completed')
   const totalSpend      = visits.reduce((s, v) => s + v.totalPaid, 0)
   const lastVisit       = completedVisits.length > 0 ? completedVisits[0].starts_at : null
   const avgSpend        = completedVisits.length > 0 ? totalSpend / completedVisits.length : 0
-  // visits are desc — earliest is last element
   const clientSince     = visits.length > 0 ? visits[visits.length - 1].starts_at : null
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
@@ -274,7 +251,6 @@ export default function ClientProfile() {
 
       <div style={{ marginTop: 52, flex: 1, padding: '20px 16px 32px' }}>
 
-        {/* Back + breadcrumb */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <button
             onClick={() => navigate('/clients')}
@@ -284,7 +260,7 @@ export default function ClientProfile() {
               fontSize: 12, cursor: 'pointer', fontWeight: 500,
             }}
           >
-            ← Back
+            Back
           </button>
           <span style={{ color: '#6b7280', fontSize: 12 }}>
             Clients › {client?.name ?? '…'}
@@ -299,10 +275,8 @@ export default function ClientProfile() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, alignItems: 'start' }}>
 
-            {/* ── LEFT COLUMN ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-              {/* Header card */}
               <div style={{ backgroundColor: '#034325', borderRadius: 10, padding: '16px 18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div style={{
@@ -328,7 +302,6 @@ export default function ClientProfile() {
                 </p>
               </div>
 
-              {/* Editable details card */}
               <div style={{
                 backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0',
                 borderRadius: 8, padding: 16,
@@ -422,7 +395,6 @@ export default function ClientProfile() {
                 </div>
               </div>
 
-              {/* Stats grid 2×2 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[
                   { label: 'Total visits', value: completedVisits.length.toString() },
@@ -444,7 +416,6 @@ export default function ClientProfile() {
 
             </div>
 
-            {/* ── RIGHT COLUMN: Visit history ── */}
             <div>
               <p style={{ fontSize: 13, fontWeight: 600, color: '#034325', margin: '0 0 12px' }}>Visit history</p>
 
@@ -463,7 +434,6 @@ export default function ClientProfile() {
                       onMouseEnter={e => (e.currentTarget.style.border = '0.5px solid #034325')}
                       onMouseLeave={e => (e.currentTarget.style.border = '0.5px solid #e0e0e0')}
                     >
-                      {/* Visit header: date + time range + status */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <span style={{ fontSize: 12, fontWeight: 500, color: '#000000' }}>
                           {fmtDate(v.starts_at)}
@@ -476,7 +446,6 @@ export default function ClientProfile() {
                         </div>
                       </div>
 
-                      {/* Service rows */}
                       {v.services.map((s, i) => (
                         <div
                           key={i}
@@ -493,7 +462,6 @@ export default function ClientProfile() {
                         </div>
                       ))}
 
-                      {/* Payment summary */}
                       {v.payments.length > 0 && (
                         <div style={{
                           marginTop: 8, paddingTop: 8, borderTop: '0.5px solid #f0f0f0',
