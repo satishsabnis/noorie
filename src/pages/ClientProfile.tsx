@@ -107,18 +107,18 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function ClientProfile() {
-  const { id }   = useParams<{ id: string }>()
+  const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
-  const [client,   setClient]   = useState<ClientDetail | null>(null)
-  const [visits,   setVisits]   = useState<Visit[]>([])
-  const [loading,  setLoading]  = useState(true)
+  const [client, setClient] = useState<ClientDetail | null>(null)
+  const [visits, setVisits] = useState<Visit[]>([])
+  const [loading, setLoading] = useState(true)
   const [fetchErr, setFetchErr] = useState<string | null>(null)
 
-  const [form,     setForm]     = useState<FormState>({ name: '', phone: '', email: '', dob: '', allergies: '', notes: '' })
+  const [form, setForm] = useState<FormState>({ name: '', phone: '', email: '', dob: '', allergies: '', notes: '' })
   const [original, setOriginal] = useState<FormState>({ name: '', phone: '', email: '', dob: '', allergies: '', notes: '' })
-  const [saving,   setSaving]   = useState(false)
-  const [saveErr,  setSaveErr]  = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveErr, setSaveErr] = useState<string | null>(null)
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(original)
 
@@ -139,13 +139,13 @@ export default function ClientProfile() {
       }
 
       const c: ClientDetail = {
-        id:             cd.id as string,
-        name:           (cd.name as string) ?? '',
-        phone:          (cd.phone as string) ?? '',
-        email:          (cd.email as string) ?? '',
-        dob:            (cd.dob as string) ?? '',
-        allergies:      (cd.allergies as string) ?? '',
-        notes:          (cd.notes as string) ?? '',
+        id: cd.id as string,
+        name: (cd.name as string) ?? '',
+        phone: (cd.phone as string) ?? '',
+        email: (cd.email as string) ?? '',
+        dob: (cd.dob as string) ?? '',
+        allergies: (cd.allergies as string) ?? '',
+        notes: (cd.notes as string) ?? '',
         loyalty_points: (cd.loyalty_points as number) ?? 0,
       }
       const fv: FormState = { name: c.name, phone: c.phone, email: c.email, dob: c.dob, allergies: c.allergies, notes: c.notes }
@@ -158,35 +158,54 @@ export default function ClientProfile() {
 
       const apptIds = (apptData ?? []).map(a => a.id as string)
 
-      const { data: svcData } = apptIds.length > 0
-        ? await supabase
-            .from('appointment_services')
-            .select('appointment_id, price, services ( name ), staff ( name )')
-            .in('appointment_id', apptIds)
-        : { data: [] }
+      let svcData: any[] = []
+      if (apptIds.length > 0) {
+        const result = await supabase
+          .from('appointment_services')
+          .select('appointment_id, price, services ( name ), staff ( name )')
+          .in('appointment_id', apptIds)
+        svcData = result.data ?? []
+      }
 
-      const { data: payData } = apptIds.length > 0
-        ? await supabase
-            .from('payments')
-            .select('appointment_id, amount, method')
-            .in('appointment_id', apptIds)
-        : { data: [] }
+      let payData: any[] = []
+      if (apptIds.length > 0) {
+        const result = await supabase
+          .from('payments')
+          .select('appointment_id, amount, method')
+          .in('appointment_id', apptIds)
+        payData = result.data ?? []
+      }
 
       const svcMap: Record<string, VisitService[]> = {}
-      for (const s of svcData ?? []) {
+      for (const s of svcData) {
         const aid = s.appointment_id as string
         if (!svcMap[aid]) svcMap[aid] = []
-        const serviceObj = s.services as { name: string } | null
-        const staffObj = s.staff as { name: string } | null
+        
+        let serviceName = '—'
+        const servicesData = s.services
+        if (Array.isArray(servicesData) && servicesData.length > 0) {
+          serviceName = servicesData[0]?.name ?? '—'
+        } else if (servicesData && !Array.isArray(servicesData)) {
+          serviceName = servicesData.name ?? '—'
+        }
+        
+        let staffName = '—'
+        const staffData = s.staff
+        if (Array.isArray(staffData) && staffData.length > 0) {
+          staffName = staffData[0]?.name ?? '—'
+        } else if (staffData && !Array.isArray(staffData)) {
+          staffName = staffData.name ?? '—'
+        }
+        
         svcMap[aid].push({
-          serviceName: serviceObj?.name ?? '—',
-          staffName:   staffObj?.name ?? '—',
-          price:       (s.price as number) ?? 0,
+          serviceName: serviceName,
+          staffName: staffName,
+          price: (s.price as number) ?? 0,
         })
       }
 
       const payMap: Record<string, VisitPayment[]> = {}
-      for (const p of payData ?? []) {
+      for (const p of payData) {
         const aid = p.appointment_id as string
         if (!payMap[aid]) payMap[aid] = []
         payMap[aid].push({ amount: (p.amount as number) ?? 0, method: (p.method as string) ?? '' })
@@ -195,12 +214,12 @@ export default function ClientProfile() {
       const mappedVisits: Visit[] = (apptData ?? []).map(a => {
         const pmts = payMap[a.id as string] ?? []
         return {
-          id:        a.id as string,
+          id: a.id as string,
           starts_at: a.starts_at as string,
-          ends_at:   (a.ends_at as string) ?? '',
-          status:    (a.status as string) ?? 'scheduled',
-          services:  svcMap[a.id as string] ?? [],
-          payments:  pmts,
+          ends_at: (a.ends_at as string) ?? '',
+          status: (a.status as string) ?? 'scheduled',
+          services: svcMap[a.id as string] ?? [],
+          payments: pmts,
           totalPaid: pmts.reduce((s, p) => s + p.amount, 0),
         }
       })
@@ -225,12 +244,12 @@ export default function ClientProfile() {
     const { error } = await supabase
       .from('clients')
       .update({
-        name:      form.name.trim(),
-        phone:     form.phone.trim() || null,
-        email:     form.email.trim() || null,
-        dob:       form.dob || null,
+        name: form.name.trim(),
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        dob: form.dob || null,
         allergies: form.allergies.trim() || null,
-        notes:     form.notes.trim() || null,
+        notes: form.notes.trim() || null,
       })
       .eq('id', client.id)
     if (error) { setSaveErr(error.message); setSaving(false); return }
@@ -240,10 +259,10 @@ export default function ClientProfile() {
   }
 
   const completedVisits = visits.filter(v => v.status === 'completed')
-  const totalSpend      = visits.reduce((s, v) => s + v.totalPaid, 0)
-  const lastVisit       = completedVisits.length > 0 ? completedVisits[0].starts_at : null
-  const avgSpend        = completedVisits.length > 0 ? totalSpend / completedVisits.length : 0
-  const clientSince     = visits.length > 0 ? visits[visits.length - 1].starts_at : null
+  const totalSpend = visits.reduce((s, v) => s + v.totalPaid, 0)
+  const lastVisit = completedVisits.length > 0 ? completedVisits[0].starts_at : null
+  const avgSpend = completedVisits.length > 0 ? totalSpend / completedVisits.length : 0
+  const clientSince = visits.length > 0 ? visits[visits.length - 1].starts_at : null
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
@@ -398,9 +417,9 @@ export default function ClientProfile() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[
                   { label: 'Total visits', value: completedVisits.length.toString() },
-                  { label: 'Total spend',  value: `AED ${totalSpend.toFixed(2)}` },
-                  { label: 'Last visit',   value: fmtDate(lastVisit) },
-                  { label: 'Avg spend',    value: `AED ${avgSpend.toFixed(2)}` },
+                  { label: 'Total spend', value: `AED ${totalSpend.toFixed(2)}` },
+                  { label: 'Last visit', value: fmtDate(lastVisit) },
+                  { label: 'Avg spend', value: `AED ${avgSpend.toFixed(2)}` },
                 ].map(s => (
                   <div key={s.label} style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '10px 12px' }}>
                     <p style={{

@@ -129,12 +129,15 @@ export default function Appointments() {
         const apptId = row.appointment_id as string
         if (!svcMap[apptId]) svcMap[apptId] = { names: [], total: 0 }
         
+        const servicesData = row.services as any
         let serviceName: string | null = null
-        const servicesData = row.services
-        if (Array.isArray(servicesData) && servicesData.length > 0) {
-          serviceName = servicesData[0]?.name ?? null
-        } else if (servicesData && !Array.isArray(servicesData)) {
-          serviceName = servicesData.name ?? null
+        
+        if (servicesData) {
+          if (Array.isArray(servicesData) && servicesData.length > 0) {
+            serviceName = servicesData[0]?.name ?? null
+          } else if (!Array.isArray(servicesData)) {
+            serviceName = servicesData.name ?? null
+          }
         }
         
         if (serviceName) svcMap[apptId].names.push(serviceName)
@@ -142,20 +145,24 @@ export default function Appointments() {
       }
 
       const merged: ApptRow[] = appts.map((a: any) => {
+        const clientsData = a.clients as any
         let clientsObj = null
-        const clientsData = a.clients
-        if (Array.isArray(clientsData) && clientsData.length > 0) {
-          clientsObj = clientsData[0]
-        } else if (clientsData && !Array.isArray(clientsData)) {
-          clientsObj = clientsData
+        if (clientsData) {
+          if (Array.isArray(clientsData) && clientsData.length > 0) {
+            clientsObj = clientsData[0]
+          } else if (!Array.isArray(clientsData)) {
+            clientsObj = clientsData
+          }
         }
         
+        const staffData = a.staff as any
         let staffObj = null
-        const staffData = a.staff
-        if (Array.isArray(staffData) && staffData.length > 0) {
-          staffObj = staffData[0]
-        } else if (staffData && !Array.isArray(staffData)) {
-          staffObj = staffData
+        if (staffData) {
+          if (Array.isArray(staffData) && staffData.length > 0) {
+            staffObj = staffData[0]
+          } else if (!Array.isArray(staffData)) {
+            staffObj = staffData
+          }
         }
         
         return {
