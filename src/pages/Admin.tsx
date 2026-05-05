@@ -3,6 +3,7 @@ import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const SECTIONS = [
@@ -814,13 +815,14 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
     setScanning(false)
   }
 
-  async function runScan() {
+    async function runScan() {
     const controller = new AbortController()
     abortRef.current = controller
     setScanning(true); setScanError(null)
     try {
       const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string
-      const userMsg = `Research beauty salons competing with ${salon.name} in ${salon.city}, ${salon.country}. Provide a JSON report with these keys: competitors (array of objects with name, location, services, price_range, rating, reviews_summary), trends (array of current beauty trends in this market), offers (array of current promotions competitors are running), pricing_insights (text summary of pricing landscape), loyalty_programs (array of competitor loyalty approaches), recommendations (array of actionable recommendations for the salon owner).`
+      const userMsg = `Research beauty salons competing with ${salon.name} in ${salon.city}, ${salon.country}. FOR EACH COMPETITOR, find SPECIFIC prices for women's haircut, men's haircut, hair color, and manicure. Provide a JSON report with: competitors (array with name, location, specific_prices: {women_haircut, men_haircut, hair_color, manicure}, rating, review_count). Search Google Maps. Return REAL prices in AED. If price not found, put null.`
+      
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         signal: controller.signal,
@@ -832,20 +834,21 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
         },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
-          max_tokens: 3000,
+          max_tokens: 4000,
           tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          system: 'You are a salon business intelligence analyst. You MUST respond with ONLY a valid JSON object. No text before or after the JSON. No markdown. No backticks. No explanation. No preamble. Start your response with { and end with }.',
-          messages: [
-            { role: 'user', content: userMsg },
-            { role: 'user', content: 'Keep your response concise. Limit to 3 competitors maximum. Each field value must be under 100 characters. The entire response must fit within 2000 tokens.' },
-          ],
+          system: 'You are a salon business intelligence analyst. Return ONLY valid JSON. Start with { and end with }. No markdown, no backticks, no explanation.',
+          messages: [{ role: 'user', content: userMsg }],
         }),
       })
+      
       if (!res.ok) { const t = await res.text(); throw new Error(`API error ${res.status}: ${t}`) }
       const data = await res.json()
-      const rawText = (data.content as { type: string; text?: string }[]).find(b => b.type === 'text')?.text ?? ''
-      const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
-      const parsed: CompetitorReport = JSON.parse(cleaned)
+      const textBlocks = (data.content as { type: string; text?: string }[]).filter(b => b.type === 'text')
+      const rawText = textBlocks[textBlocks.length - 1]?.text ?? ''
+
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/)
+      const jsonStr = jsonMatch ? jsonMatch[0] : rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+      const parsed: CompetitorReport = JSON.parse(jsonStr)
 
       const now = new Date().toISOString()
       await Promise.all([
@@ -854,7 +857,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
       ])
       setReport(parsed); setLastScan(now)
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') { /* cancelled — no error shown */ return }
+      if (err instanceof Error && err.name === 'AbortError') { return }
       console.error('[Admin] Competitor scan error:', err)
       setScanError(err instanceof Error ? err.message : 'Scan failed — check console.')
     } finally {
@@ -906,7 +909,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           >{scanning ? 'Scanning…' : 'Run now'}</button>
           {scanning && (
             <button
-              onClick={cancelScan}
+                          onClick={cancelScan}
               style={{ fontSize: 11, backgroundColor: 'transparent', border: '0.5px solid #991b1b', color: '#991b1b', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}
             >Cancel</button>
           )}
@@ -917,7 +920,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
         {scanError && <p style={{ fontSize: 11, color: '#fca5a5', margin: '10px 0 0' }}>{scanError}</p>}
       </div>
 
-      {report && (() => {
+            {report && (() => {
         try {
           return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
