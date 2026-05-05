@@ -821,7 +821,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
     setScanning(true); setScanError(null)
     try {
       const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string
-      const userMsg = `Research beauty salons competing with ${salon.name} in ${salon.city}, ${salon.country}. Return a JSON object with exactly these keys: competitors (array of objects with: name, location, services, price_range, rating, reviews_summary), trends (array of strings describing current market trends), offers (array of strings describing competitor promotions), pricing_insights (single string summarising the pricing landscape), loyalty_programs (array of strings describing loyalty schemes), recommendations (array of strings with actionable recommendations for ${salon.name}). Return ONLY the JSON object. No other text.`
+      const userMsg = `Research beauty salons competing with ${salon.name} in the ${salon.name} area and neighbourhood of ${salon.city}, ${salon.country}. Focus on salons within 2-3km. Return a JSON object with exactly these keys: competitors (array of objects with: name, location, services, price_range, rating, reviews_summary), trends (array of strings describing current market trends), offers (array of strings describing competitor promotions), pricing_insights (single string summarising the pricing landscape), loyalty_programs (array of strings describing loyalty schemes), recommendations (array of strings with actionable recommendations for ${salon.name}). Return ONLY the JSON object. No other text.`
       
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
