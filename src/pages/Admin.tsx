@@ -1027,8 +1027,6 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
 
 // ── Section: Expenses ─────────────────────────────────────────────────────────
 
-const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
-
 function SectionExpenses({ salonId }: { salonId: string }) {
   const [selectedMonth,          setSelectedMonth]          = useState<number>(new Date().getMonth() + 1)
   const [selectedYear,           setSelectedYear]           = useState<number>(new Date().getFullYear())
