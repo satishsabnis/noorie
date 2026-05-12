@@ -55,6 +55,8 @@ interface ConfigData {
   staff_can_see_revenue: boolean; staff_can_edit_appointments: boolean
   technician_see_own_revenue: boolean; technician_collect_payments: boolean
   payroll_mode: string; payroll_mode_cycle: string
+  fy_start_month: number | null
+  supervisor_view_financials: boolean
 }
 
 interface ServiceRow { id: string; name: string; duration_minutes: number; active: boolean }
@@ -93,6 +95,8 @@ const defaultConfig: ConfigData = {
   staff_can_see_revenue: true, staff_can_edit_appointments: true,
   technician_see_own_revenue: true, technician_collect_payments: true,
   payroll_mode: 'commission', payroll_mode_cycle: 'monthly',
+  fy_start_month: null,
+  supervisor_view_financials: false,
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -223,12 +227,16 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
   const [openInfo, setOpenInfo] = useState(true)
   const [openHours, setOpenHours] = useState(false)
   const [openPayroll, setOpenPayroll] = useState(false)
+  const [fyStartMonth, setFyStartMonth] = useState<number | null>(config.fy_start_month ?? null)
+  const [committedFyStartMonth, setCommittedFyStartMonth] = useState<number | null>(config.fy_start_month ?? null)
 
   useEffect(() => {
     setS(salon); setCommitted(salon)
     setHours(config.operating_hours ?? defaultHours); setCommittedH(config.operating_hours ?? defaultHours)
     const p = { payroll_mode: config.payroll_mode, payroll_mode_cycle: config.payroll_mode_cycle }
     setC(p); setCommittedC(p)
+    setFyStartMonth(config.fy_start_month ?? null)
+    setCommittedFyStartMonth(config.fy_start_month ?? null)
   }, [salon, config])
 
   function upS(k: keyof SalonData, v: string) { setS(p => ({ ...p, [k]: v })) }
@@ -237,7 +245,7 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
   }
   function upC(k: keyof typeof c, v: string) { setC(p => ({ ...p, [k]: v })) }
 
-  const dirty = JSON.stringify(s) !== JSON.stringify(committed) || JSON.stringify(hours) !== JSON.stringify(committedH) || JSON.stringify(c) !== JSON.stringify(committedC)
+  const dirty = JSON.stringify(s) !== JSON.stringify(committed) || JSON.stringify(hours) !== JSON.stringify(committedH) || JSON.stringify(c) !== JSON.stringify(committedC) || fyStartMonth !== committedFyStartMonth
 
   const isUAE = s.country === 'United Arab Emirates'
 
@@ -255,10 +263,11 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
       if (e1) { setError(e1.message); setSaving(false); return }
       const { data: d2, error: e2 } = await supabase.from('salon_config').update({
         payroll_mode: c.payroll_mode, payroll_mode_cycle: c.payroll_mode_cycle, operating_hours: hours,
+        fy_start_month: fyStartMonth,
       }).eq('salon_id', salonId).select()
       console.log('[Admin] Salon salon_config update:', { data: d2, error: e2 })
       if (e2) { setError(e2.message); setSaving(false); return }
-      setCommitted(s); setCommittedH(hours); setCommittedC(c)
+      setCommitted(s); setCommittedH(hours); setCommittedC(c); setCommittedFyStartMonth(fyStartMonth)
       onNameSaved(s.name)
       setSaving(false); setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -328,6 +337,18 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
               <select value={s.service_pricing_mode} onChange={e => upS('service_pricing_mode', e.target.value)} style={{ ...fieldStyle, appearance: 'none', cursor: 'pointer' }}>
                 <option value="manual">Manual</option>
                 <option value="catalogue">Catalogue</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Financial year start month</label>
+              <select
+                value={fyStartMonth ?? ''}
+                onChange={e => setFyStartMonth(e.target.value === '' ? null : Number(e.target.value))}
+                style={{ ...fieldStyle, appearance: 'none', cursor: 'pointer' }}
+              >
+                <option value="">Not set</option>
+                {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
               </select>
             </div>
 
@@ -411,7 +432,7 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
         </div>
       )}
       {error && <p style={{ fontSize: 12, color: '#991b1b', margin: '0 0 10px' }}>{error}</p>}
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setS(committed); setHours(committedH); setC(committedC) }} />
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setS(committed); setHours(committedH); setC(committedC); setFyStartMonth(committedFyStartMonth) }} />
     </div>
   )
 }
@@ -1190,6 +1211,7 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
         staff_can_edit_appointments: c.staff_can_edit_appointments,
         technician_see_own_revenue: c.technician_see_own_revenue,
         technician_collect_payments: c.technician_collect_payments,
+        supervisor_view_financials: c.supervisor_view_financials,
       }).eq('salon_id', salonId).select()
       console.log('[Admin] Staff settings save result:', { data, error })
       if (error) { console.error('[Admin] Staff settings save error:', error); setSaving(false); return }
@@ -1207,6 +1229,7 @@ function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigDa
         <p style={subHeading}>Supervisor permissions</p>
         <ToggleRow label="Can see today's revenue" on={c.staff_can_see_revenue} onChange={v => up('staff_can_see_revenue', v)} />
         <ToggleRow label="Can edit appointments" on={c.staff_can_edit_appointments} onChange={v => up('staff_can_edit_appointments', v)} />
+        <ToggleRow label="Can view Finance Report and YTD Balance Sheet" sub="Enable when owner is unavailable" on={c.supervisor_view_financials} onChange={v => up('supervisor_view_financials', v)} />
       </div>
       <div style={cardStyle}>
         <p style={subHeading}>Technician permissions</p>
