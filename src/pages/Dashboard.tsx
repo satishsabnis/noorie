@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
+import MarketPulse from '../components/MarketPulse'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ interface BriefLapsedClient {
   lastService: string
   totalSpend: number
   birthdayInDays: number | null
+  clientId: string
 }
 
 interface BriefUnpaid {
@@ -598,6 +600,9 @@ function ClientCard({ appt, onClick }: { appt: ApptFetched; onClick: () => void 
   )
 }
 
+
+
+
 // ── Birthday strip ────────────────────────────────────────────────────────────
 
 function BirthdayStrip({ salonId }: { salonId: string | null }) {
@@ -721,6 +726,7 @@ async function fetchBriefLapsedClient(salonId: string): Promise<BriefLapsedClien
       lastService: last.service,
       totalSpend: Math.round((spendMap[cid] ?? 0) * 100) / 100,
       birthdayInDays,
+      clientId: cid,
     })
   }
   lapsed.sort((a, b) => {
@@ -784,98 +790,150 @@ function MorningBrief({
   errors: { slots: boolean; lapsed: boolean; unpaid: boolean }
 }) {
   const [dtLabel, setDtLabel] = useState(dubaiDateTimeLabel())
+  const [activeModal, setActiveModal] = useState<'slots' | 'lapsed' | 'unpaid' | null>(null)
+
   useEffect(() => {
     const t = setInterval(() => setDtLabel(dubaiDateTimeLabel()), 60_000)
     return () => clearInterval(t)
   }, [])
 
-  const cardBase: React.CSSProperties = {
-    backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 8, padding: '12px 14px',
+  const tileStyle: React.CSSProperties = {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    border: '0.5px solid rgba(255,255,255,0.15)',
+    borderRadius: 8, padding: '14px 12px',
+    textAlign: 'center', cursor: 'pointer',
   }
-  const skeletonCard: React.CSSProperties = {
-    ...cardBase, backgroundColor: 'rgba(255,255,255,0.05)',
+  const closeStyle: React.CSSProperties = {
+    border: '0.5px solid #034325', color: '#034325',
+    backgroundColor: 'transparent', borderRadius: 6,
+    padding: '4px 12px', fontSize: 13, cursor: 'pointer',
   }
-  const bodyText = (s: string) => (
-    <p style={{ fontSize: 12, color: '#ffffff', margin: 0, lineHeight: 1.6 }}>{s}</p>
-  )
-  const errText = () => (
-    <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>Unable to load — check connection.</p>
-  )
-  const loadText = () => (
-    <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: 0 }}>Loading...</p>
-  )
+  const modalTitle = activeModal === 'slots'
+    ? "Today's appointment gaps"
+    : activeModal === 'lapsed'
+    ? 'Clients to call'
+    : 'Balance to collect'
+
+  const unpaidTotal = unpaid.reduce((s, u) => s + u.amountOwed, 0)
 
   return (
-    <div style={{
-      backgroundColor: '#034325', borderRadius: 10, padding: '16px 20px',
-      margin: '14px 16px', marginBottom: 14,
-    }}>
-      {/* Header row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-        <div>
-          <p style={{ fontSize: 11, color: '#00BF00', margin: '0 0 3px' }}>{dtLabel}</p>
-          <p style={{ fontSize: 16, fontWeight: 500, color: '#ffffff', margin: 0 }}>Morning Brief</p>
+    <>
+      {/* ── Detail modal ── */}
+      {activeModal !== null && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 200,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, maxWidth: 420, width: '90%', padding: 24 }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#111' }}>{modalTitle}</p>
+              <button onClick={() => setActiveModal(null)} style={closeStyle}>Close</button>
+            </div>
+
+            {/* Slots */}
+            {activeModal === 'slots' && (
+              loading
+                ? <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading...</p>
+                : errors.slots
+                ? <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Unable to load — check connection.</p>
+                : slots.length === 0
+                ? <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>All staff fully booked today.</p>
+                : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {slots.map((s, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '0.5px solid #f0f0f0', paddingBottom: 8 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: '#111' }}>{s.staffName}</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                          {s.freeSlots.map((fs, j) => (
+                            <p key={j} style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{fs.from}–{fs.to}</p>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+            )}
+
+            {/* Lapsed */}
+            {activeModal === 'lapsed' && (
+              loading
+                ? <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading...</p>
+                : errors.lapsed
+                ? <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Unable to load — check connection.</p>
+                : !lapsedClient
+                ? <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>All active clients visited recently.</p>
+                : <div>
+                    <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600, color: '#111' }}>{lapsedClient.name}</p>
+                    <p style={{ margin: '0 0 4px', fontSize: 13, color: '#6b7280' }}>{lapsedClient.daysSinceVisit} days since last visit</p>
+                    <p style={{ margin: '0 0 4px', fontSize: 13, color: '#6b7280' }}>Last service: {lapsedClient.lastService}</p>
+                    <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6b7280' }}>{lapsedClient.phone}</p>
+                    <button
+                      onClick={() => { window.location.href = '/clients/' + lapsedClient.clientId }}
+                      style={closeStyle}
+                    >Open client profile</button>
+                  </div>
+            )}
+
+            {/* Unpaid */}
+            {activeModal === 'unpaid' && (
+              loading
+                ? <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading...</p>
+                : errors.unpaid
+                ? <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Unable to load — check connection.</p>
+                : unpaid.length === 0
+                ? <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>No outstanding balances.</p>
+                : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {unpaid.map((u, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '0.5px solid #f0f0f0', paddingBottom: 8 }}>
+                        <div>
+                          <p style={{ margin: '0 0 2px', fontSize: 13, color: '#111' }}>{u.clientName}</p>
+                          <p style={{ margin: 0, fontSize: 11, color: '#6b7280' }}>{u.phone}</p>
+                        </div>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#991b1b' }}>AED {u.amountOwed.toFixed(2)}</p>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#111' }}>Total</p>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#991b1b' }}>AED {unpaidTotal.toFixed(2)}</p>
+                    </div>
+                  </div>
+            )}
+
+          </div>
         </div>
-        <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', margin: 0, textAlign: 'right', lineHeight: 1.5 }}>
-          Powered by<br />Noorie AI
-        </p>
+      )}
+
+      {/* ── Morning Brief card ── */}
+      <div style={{
+        backgroundColor: '#034325', borderRadius: 10, padding: '16px 20px',
+        margin: '14px 16px', marginBottom: 14,
+      }}>
+        {/* Header row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+          <div>
+            <p style={{ fontSize: 11, color: '#00BF00', margin: '0 0 3px' }}>{dtLabel}</p>
+            <p style={{ fontSize: 16, fontWeight: 500, color: '#ffffff', margin: 0 }}>Morning Brief</p>
+          </div>
+          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', margin: 0, textAlign: 'right', lineHeight: 1.5 }}>
+            Powered by<br />Noorie AI
+          </p>
+        </div>
+
+        {/* Three tappable tiles */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          <div onClick={() => setActiveModal('slots')} style={tileStyle}>
+            <p style={{ fontSize: 13, fontWeight: 500, color: '#ffffff', margin: 0 }}>Today's appointment gaps</p>
+          </div>
+          <div onClick={() => setActiveModal('lapsed')} style={tileStyle}>
+            <p style={{ fontSize: 13, fontWeight: 500, color: '#ffffff', margin: 0 }}>Clients to call</p>
+          </div>
+          <div onClick={() => setActiveModal('unpaid')} style={tileStyle}>
+            <p style={{ fontSize: 13, fontWeight: 500, color: '#ffffff', margin: 0 }}>Balance to collect</p>
+          </div>
+        </div>
       </div>
-
-      {/* Three insight cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-        {/* Card 1 — Empty slots */}
-        <div style={{ ...(loading ? skeletonCard : cardBase), borderLeft: '3px solid #00BF00' }}>
-          <p style={{ fontSize: 11, fontWeight: 500, color: '#00BF00', margin: '0 0 6px' }}>Fill today's gaps</p>
-          {loading ? loadText()
-            : errors.slots ? errText()
-            : slots.length === 0
-              ? bodyText('All staff fully booked today.')
-              : bodyText(slots.map(s => {
-                  const first = s.staffName.split(' ')[0]
-                  const last = s.freeSlots[s.freeSlots.length - 1]
-                  return last.to === '21:00'
-                    ? `${first} has nothing after ${last.from}`
-                    : `${first} is free ${s.freeSlots[0].from}–${s.freeSlots[0].to}`
-                }).join(' · '))
-          }
-        </div>
-
-        {/* Card 2 — Lapsed client */}
-        <div style={{ ...(loading ? skeletonCard : cardBase), borderLeft: '3px solid #C9A227' }}>
-          <p style={{ fontSize: 11, fontWeight: 500, color: '#C9A227', margin: '0 0 6px' }}>Client to call today</p>
-          {loading ? loadText()
-            : errors.lapsed ? errText()
-            : !lapsedClient
-              ? bodyText('All active clients visited recently.')
-              : bodyText(
-                  `${lapsedClient.name} — ${lapsedClient.daysSinceVisit} days since last visit · Last booked ${lapsedClient.lastService} · ${lapsedClient.phone}`
-                  + (lapsedClient.birthdayInDays !== null && lapsedClient.birthdayInDays <= 14
-                      ? ` · Birthday in ${lapsedClient.birthdayInDays} days`
-                      : '')
-                )
-          }
-        </div>
-
-        {/* Card 3 — Unpaid balances */}
-        <div style={{ ...(loading ? skeletonCard : cardBase), borderLeft: '3px solid rgba(255,255,255,0.3)' }}>
-          <p style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.6)', margin: '0 0 6px' }}>Outstanding payments</p>
-          {loading ? loadText()
-            : errors.unpaid ? errText()
-            : unpaid.length === 0
-              ? bodyText('No outstanding balances.')
-              : <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {unpaid.map((u, i) => (
-                    <p key={i} style={{ fontSize: 12, color: '#ffffff', margin: 0, lineHeight: 1.5 }}>
-                      {u.clientName} owes AED {u.amountOwed.toFixed(2)} — last visit {fmtDateTime(u.appointmentDate)} · {u.phone}
-                    </p>
-                  ))}
-                </div>
-          }
-        </div>
-
-      </div>
-    </div>
+    </>
   )
 }
 
@@ -1157,6 +1215,9 @@ export default function Dashboard() {
 
             {/* Birthday strip */}
             <BirthdayStrip salonId={staffRecord?.salon_id ?? null} />
+
+            {/* Market Pulse */}
+            <MarketPulse />
           </>
         )}
 
