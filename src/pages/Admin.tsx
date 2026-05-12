@@ -8,7 +8,7 @@ import { useAuthStore } from '../stores/authStore'
 
 const SECTIONS = [
   'Salon details', 'Services', 'Payments', 'WhatsApp',
-  'Loyalty points', 'Noorie AI', 'Staff settings', 'Run payroll',
+  'Loyalty points', 'Noorie AI', 'Expenses', 'Staff settings', 'Run payroll',
 ] as const
 type Section = typeof SECTIONS[number]
 
@@ -1025,6 +1025,156 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
   )
 }
 
+// ── Section: Expenses ─────────────────────────────────────────────────────────
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+
+function SectionExpenses({ salonId }: { salonId: string }) {
+  const [selectedMonth,          setSelectedMonth]          = useState<number>(new Date().getMonth() + 1)
+  const [selectedYear,           setSelectedYear]           = useState<number>(new Date().getFullYear())
+  const [expenses,               setExpenses]               = useState<{ id: string; category: string; name: string; amount: number }[]>([])
+  const [expenseName_fixed,      setExpenseName_fixed]      = useState('')
+  const [expenseName_variable,   setExpenseName_variable]   = useState('')
+  const [expenseName_oneTime,    setExpenseName_oneTime]    = useState('')
+  const [expenseAmount_fixed,    setExpenseAmount_fixed]    = useState(0)
+  const [expenseAmount_variable, setExpenseAmount_variable] = useState(0)
+  const [expenseAmount_oneTime,  setExpenseAmount_oneTime]  = useState(0)
+  const [expensesLoading,        setExpensesLoading]        = useState(false)
+
+  async function fetchExpenses() {
+    if (!salonId) return
+    setExpensesLoading(true)
+    const { data } = await supabase
+      .from('salon_expenses')
+      .select('id, category, name, amount')
+      .eq('salon_id', salonId)
+      .eq('month', selectedMonth)
+      .eq('year', selectedYear)
+      .order('category')
+      .order('name')
+    setExpenses((data ?? []) as { id: string; category: string; name: string; amount: number }[])
+    setExpensesLoading(false)
+  }
+
+  async function addExpense(category: 'fixed' | 'variable' | 'one_time') {
+    const name   = category === 'fixed' ? expenseName_fixed   : category === 'variable' ? expenseName_variable   : expenseName_oneTime
+    const amount = category === 'fixed' ? expenseAmount_fixed : category === 'variable' ? expenseAmount_variable : expenseAmount_oneTime
+    if (!name.trim() || !amount) return
+    await supabase.from('salon_expenses').insert({ salon_id: salonId, category, name: name.trim(), amount, month: selectedMonth, year: selectedYear })
+    if (category === 'fixed')    { setExpenseName_fixed('');    setExpenseAmount_fixed(0) }
+    if (category === 'variable') { setExpenseName_variable(''); setExpenseAmount_variable(0) }
+    if (category === 'one_time') { setExpenseName_oneTime('');  setExpenseAmount_oneTime(0) }
+    fetchExpenses()
+  }
+
+  async function deleteExpense(id: string) {
+    await supabase.from('salon_expenses').delete().eq('id', id)
+    fetchExpenses()
+  }
+
+  useEffect(() => { fetchExpenses() }, [salonId, selectedMonth, selectedYear]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fixedRows    = expenses.filter(e => e.category === 'fixed')
+  const variableRows = expenses.filter(e => e.category === 'variable')
+  const oneTimeRows  = expenses.filter(e => e.category === 'one_time')
+  const fixedTotal    = fixedRows.reduce((s, e) => s + e.amount, 0)
+  const variableTotal = variableRows.reduce((s, e) => s + e.amount, 0)
+  const oneTimeTotal  = oneTimeRows.reduce((s, e) => s + e.amount, 0)
+  const grandTotal    = fixedTotal + variableTotal + oneTimeTotal
+
+  const addBtn: React.CSSProperties = {
+    fontSize: 12, padding: '7px 14px', borderRadius: 6, cursor: 'pointer',
+    backgroundColor: 'transparent', border: '0.5px solid #034325', color: '#034325', flexShrink: 0,
+  }
+  const delBtn: React.CSSProperties = {
+    fontSize: 11, padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+    backgroundColor: 'transparent', border: '0.5px solid #991b1b', color: '#991b1b', flexShrink: 0,
+  }
+  const selectSt: React.CSSProperties = {
+    fontSize: 13, color: '#000', border: '0.5px solid #d1d5db',
+    borderRadius: 6, padding: '8px 12px', backgroundColor: '#ffffff',
+  }
+  const numInput: React.CSSProperties = { ...inputStyle, width: 110, flexShrink: 0 }
+  const cardWhite: React.CSSProperties = { backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 16, marginBottom: 14 }
+
+  function renderSubsection(
+    label: string,
+    category: 'fixed' | 'variable' | 'one_time',
+    rows: { id: string; name: string; amount: number }[],
+    name: string, amount: number,
+    onName: (v: string) => void, onAmount: (v: number) => void,
+    subtotal: number,
+  ) {
+    return (
+      <div style={cardWhite}>
+        <p style={labelStyle}>{label}</p>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <input
+            style={{ ...inputStyle, flex: 1 }}
+            placeholder="Expense name"
+            value={name}
+            onChange={e => onName(e.target.value)}
+          />
+          <input
+            style={numInput}
+            type="number"
+            placeholder="AED"
+            value={amount || ''}
+            onChange={e => onAmount(Number(e.target.value))}
+          />
+          <button style={addBtn} onClick={() => addExpense(category)}>Add</button>
+        </div>
+        {rows.length > 0 && (
+          <>
+            {rows.map(r => (
+              <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid #f0f0f0' }}>
+                <span style={{ fontSize: 13, color: '#111' }}>{r.name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 13, color: '#034325', fontWeight: 500 }}>AED {r.amount.toLocaleString()}</span>
+                  <button style={delBtn} onClick={() => deleteExpense(r.id)}>Delete</button>
+                </div>
+              </div>
+            ))}
+            <div style={{ textAlign: 'right', marginTop: 8 }}>
+              <span style={{ fontSize: 12, color: '#6b7280' }}>Subtotal: </span>
+              <span style={{ fontSize: 12, color: '#034325', fontWeight: 500 }}>AED {subtotal.toLocaleString()}</span>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Expenses</p>
+
+      <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+        <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))} style={selectSt}>
+          {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+        </select>
+        <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} style={selectSt}>
+          {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+
+      {expensesLoading ? (
+        <p style={{ fontSize: 12, color: '#6b7280' }}>Loading...</p>
+      ) : (
+        <>
+          {renderSubsection('Fixed Monthly',    'fixed',    fixedRows,    expenseName_fixed,    expenseAmount_fixed,    setExpenseName_fixed,    setExpenseAmount_fixed,    fixedTotal)}
+          {renderSubsection('Variable Monthly', 'variable', variableRows, expenseName_variable, expenseAmount_variable, setExpenseName_variable, setExpenseAmount_variable, variableTotal)}
+          {renderSubsection('One-Time',         'one_time', oneTimeRows,  expenseName_oneTime,  expenseAmount_oneTime,  setExpenseName_oneTime,  setExpenseAmount_oneTime,  oneTimeTotal)}
+          <div style={{ textAlign: 'right', padding: '8px 0' }}>
+            <span style={{ fontSize: 12, color: '#6b7280' }}>Grand Total: </span>
+            <span style={{ fontSize: 15, fontWeight: 500, color: '#034325' }}>AED {grandTotal.toLocaleString()}</span>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Section: Staff settings ───────────────────────────────────────────────────
 
 function SectionStaffSettings({ config, salonId, onRefresh }: { config: ConfigData; salonId: string; onRefresh: () => void }) {
@@ -1408,6 +1558,7 @@ export default function Admin() {
           {activeSection === 'WhatsApp'        && <SectionWhatsApp config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Loyalty points'  && <SectionLoyalty config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Noorie AI'       && <SectionAI config={config} salonId={salonId} salon={{ name: salon.name, city: salon.city, country: salon.country }} onRefresh={fetchAll} />}
+          {activeSection === 'Expenses'        && <SectionExpenses salonId={salonId} />}
           {activeSection === 'Staff settings'  && <SectionStaffSettings config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Run payroll'     && <SectionPayroll salonId={salonId} />}
         </div>
