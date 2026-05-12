@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
@@ -501,10 +502,18 @@ export default function Reports() {
   const [resolvedSalonName, setResolvedSalonName] = useState<string>(salonNameStore ?? '')
 
   // ── Navigation ──────────────────────────────────────────────────────────
+  const location = useLocation()
+  const hasMounted = useRef(false)
   const [view,          setView]          = useState<'landing' | 'finance' | 'payroll' | 'ytd'>('landing')
   const [showModal,     setShowModal]     = useState<'finance' | 'payroll' | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
   const [selectedYear,  setSelectedYear]  = useState<number>(new Date().getFullYear())
+
+  // Reset to landing when the Reports nav link is tapped while already on /reports
+  useEffect(() => {
+    if (!hasMounted.current) { hasMounted.current = true; return }
+    setView('landing')
+  }, [location])
 
   // ── Config ──────────────────────────────────────────────────────────────
   const [fyStartMonth,            setFyStartMonth]            = useState<number | null>(null)
