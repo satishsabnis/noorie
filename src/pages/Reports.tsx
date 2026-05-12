@@ -346,6 +346,17 @@ export default function Reports() {
   const [detailLoading,  setDetailLoading]  = useState(false)
   const [generating,     setGenerating]     = useState(false)
 
+  const [financeMonth,    setFinanceMonth]    = useState<number>(new Date().getMonth() + 1)
+  const [financeYear,     setFinanceYear]     = useState<number>(new Date().getFullYear())
+  const [financeIncome,   setFinanceIncome]   = useState({ cash: 0, card: 0, other: 0, total: 0 })
+  const [financeExpenses, setFinanceExpenses] = useState({
+    fixed:    { items: [] as { id: string; name: string; amount: number }[], total: 0 },
+    variable: { items: [] as { id: string; name: string; amount: number }[], total: 0 },
+    one_time: { items: [] as { id: string; name: string; amount: number }[], total: 0 },
+    grandTotal: 0,
+  })
+  const [financeLoading,  setFinanceLoading]  = useState(false)
+
   // ── Mount: fetch cycle summaries and salon name ─────────────────────────────
   useEffect(() => {
     let cancelled = false
@@ -491,6 +502,55 @@ export default function Reports() {
     setGenerating(false)
   }
 
+  // ── Finance Report fetch ────────────────────────────────────────────────────
+  async function fetchFinanceReport(month: number, year: number) {
+    if (!salonId) return
+    setFinanceLoading(true)
+    const start = new Date(year, month - 1, 1).toISOString()
+    const end   = new Date(year, month, 1).toISOString()
+
+    const [{ data: apptRows }, { data: expRows }] = await Promise.all([
+      supabase.from('appointments').select('id').eq('salon_id', salonId)
+        .gte('starts_at', start).lt('starts_at', end),
+      supabase.from('salon_expenses').select('id, category, name, amount')
+        .eq('salon_id', salonId).eq('month', month).eq('year', year),
+    ])
+
+    const apptIds = (apptRows ?? []).map(r => r.id as string)
+    const payData = apptIds.length > 0
+      ? (await supabase.from('payments').select('amount, method').in('appointment_id', apptIds)).data ?? []
+      : []
+
+    let cash = 0, card = 0, other = 0
+    for (const p of payData) {
+      const amt = (p.amount as number) ?? 0
+      const m = ((p.method as string) ?? '').toLowerCase()
+      if (m === 'cash') cash += amt
+      else if (m === 'card') card += amt
+      else other += amt
+    }
+    setFinanceIncome({ cash, card, other, total: cash + card + other })
+
+    const allExp = (expRows ?? []) as { id: string; category: string; name: string; amount: number }[]
+    const fixedItems    = allExp.filter(e => e.category === 'fixed')
+    const variableItems = allExp.filter(e => e.category === 'variable')
+    const oneTimeItems  = allExp.filter(e => e.category === 'one_time')
+    const fixedTotal    = fixedItems.reduce((s, e) => s + e.amount, 0)
+    const variableTotal = variableItems.reduce((s, e) => s + e.amount, 0)
+    const oneTimeTotal  = oneTimeItems.reduce((s, e) => s + e.amount, 0)
+    setFinanceExpenses({
+      fixed:    { items: fixedItems,    total: fixedTotal },
+      variable: { items: variableItems, total: variableTotal },
+      one_time: { items: oneTimeItems,  total: oneTimeTotal },
+      grandTotal: fixedTotal + variableTotal + oneTimeTotal,
+    })
+    setFinanceLoading(false)
+  }
+
+  useEffect(() => {
+    if (staffRecord?.role === 'owner') fetchFinanceReport(financeMonth, financeYear)
+  }, [salonId, financeMonth, financeYear]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Render ──────────────────────────────────────────────────────────────────
   const cycleTotals = selectedCycle
     ? selectedCycle.rows.reduce((acc, r) => ({
@@ -507,6 +567,127 @@ export default function Reports() {
 
       <div style={{ marginTop: 52, flex: 1, padding: '20px 28px 32px' }}>
         <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Reports</p>
+
+        {/* Finance Report — Owner only */}
+        {staffRecord?.role === 'owner' && (() => {
+          const net = financeIncome.total - financeExpenses.grandTotal
+          const selStyle: React.CSSProperties = { fontSize: 12, color: '#111', border: '0.5px solid #d1d5db', borderRadius: 6, padding: '5px 10px', backgroundColor: '#fff' }
+          const subLabel: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 8px' }
+          return (
+            <div style={cardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <div>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#034325', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px' }}>
+                    Finance Report — {MONTHS[financeMonth - 1]} {financeYear}
+                  </p>
+                  <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>Visible to owner only</p>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select value={financeMonth} onChange={e => setFinanceMonth(Number(e.target.value))} style={selStyle}>
+                    {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                  </select>
+                  <select value={financeYear} onChange={e => setFinanceYear(Number(e.target.value))} style={selStyle}>
+                    {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {financeLoading ? (
+                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading...</p>
+              ) : (
+                <>
+                  {/* Income */}
+                  <p style={subLabel}>Income</p>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+                    <tbody>
+                      <tr><td style={TD}>Cash</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.cash)}</td></tr>
+                      <tr><td style={TD}>Card</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.card)}</td></tr>
+                      <tr><td style={TD}>Other</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.other)}</td></tr>
+                      <tr>
+                        <td style={{ ...TD, fontWeight: 600, color: '#034325', borderBottom: 'none' }}>Total income</td>
+                        <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: '#034325', borderBottom: 'none' }}>AED {formatMoney(financeIncome.total)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {/* Fixed Expenses */}
+                  <p style={subLabel}>Fixed Expenses</p>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+                    <tbody>
+                      {financeExpenses.fixed.items.length === 0 ? (
+                        <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No expenses recorded yet</td></tr>
+                      ) : (
+                        <>
+                          {financeExpenses.fixed.items.map(e => (
+                            <tr key={e.id}><td style={TD}>{e.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td></tr>
+                          ))}
+                          <tr>
+                            <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total fixed</td>
+                            <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.fixed.total)}</td>
+                          </tr>
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+
+                  {/* Variable Expenses */}
+                  <p style={subLabel}>Variable Expenses</p>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+                    <tbody>
+                      {financeExpenses.variable.items.length === 0 ? (
+                        <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No expenses recorded yet</td></tr>
+                      ) : (
+                        <>
+                          {financeExpenses.variable.items.map(e => (
+                            <tr key={e.id}><td style={TD}>{e.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td></tr>
+                          ))}
+                          <tr>
+                            <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total variable</td>
+                            <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.variable.total)}</td>
+                          </tr>
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+
+                  {/* One-Time Expenses */}
+                  <p style={subLabel}>One-Time Expenses</p>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+                    <tbody>
+                      {financeExpenses.one_time.items.length === 0 ? (
+                        <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No expenses recorded yet</td></tr>
+                      ) : (
+                        <>
+                          {financeExpenses.one_time.items.map(e => (
+                            <tr key={e.id}><td style={TD}>{e.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td></tr>
+                          ))}
+                          <tr>
+                            <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total one-time</td>
+                            <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.one_time.total)}</td>
+                          </tr>
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+
+                  {/* Summary footer */}
+                  <div style={{ borderTop: '0.5px solid #e0e0e0', paddingTop: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                    <MetricCard label="Total income" value={financeIncome.total} valueColor="#034325" backgroundColor="#f0fdf4" />
+                    <MetricCard label="Total expenses" value={financeExpenses.grandTotal} valueColor="#991b1b" />
+                    <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Net — {MONTHS[financeMonth - 1]} {financeYear}
+                      </span>
+                      <span style={{ fontSize: 16, fontWeight: 600, color: net > 0 ? '#034325' : net < 0 ? '#991b1b' : '#111' }}>
+                        AED {net.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Section 1 — Payroll history */}
         <div style={cardStyle}>
