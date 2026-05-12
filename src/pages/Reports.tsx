@@ -304,7 +304,6 @@ function escapeHtml(s: string): string {
 function openPrintWindow(html: string, fallbackName: string) {
   const w = window.open('', '_blank', 'width=820,height=900')
   if (!w) {
-    // Popups blocked — fall back to a downloadable HTML file.
     const blob = new Blob([html], { type: 'text/html' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -332,22 +331,186 @@ const cardStyle: React.CSSProperties = {
 const TH: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', padding: '8px 10px', borderBottom: '0.5px solid #e0e0e0' }
 const TD: React.CSSProperties = { fontSize: 12, color: '#111', padding: '8px 10px', borderBottom: '0.5px solid #f0f0f0', verticalAlign: 'middle' }
 
+// ── Finance PDF builder ───────────────────────────────────────────────────────
+
+function buildFinancePDF(opts: {
+  salonName: string
+  month: number
+  year: number
+  income: { cash: number; card: number; other: number; total: number }
+  expenses: {
+    fixed:    { items: { id: string; name: string; amount: number }[]; total: number }
+    variable: { items: { id: string; name: string; amount: number }[]; total: number }
+    one_time: { items: { id: string; name: string; amount: number }[]; total: number }
+    grandTotal: number
+  }
+}): string {
+  const { salonName, month, year, income, expenses } = opts
+  const net = income.total - expenses.grandTotal
+  const periodLabel = `${MONTHS[month - 1]} ${year}`
+
+  function expBlock(items: { id: string; name: string; amount: number }[]): string {
+    if (items.length === 0) return `<tr><td colspan="2" style="padding:6px 0;font-size:12px;color:#6b7280;">No expenses recorded yet</td></tr>`
+    return items.map(e => `<tr><td style="padding:6px 0;font-size:12px;">${escapeHtml(e.name)}</td><td style="padding:6px 0;font-size:12px;text-align:right;">AED ${formatMoney(e.amount)}</td></tr>`).join('')
+  }
+
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Finance Report — ${escapeHtml(salonName)} — ${periodLabel}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111; background: #fff; }
+  .doc { max-width: 720px; margin: 0 auto; }
+  .hdr { background: #034325; color: #fff; padding: 22px 28px; }
+  .hdr .salon { font-size: 18px; font-weight: 600; margin: 0; }
+  .hdr .title { font-size: 13px; opacity: 0.85; margin: 6px 0 0; }
+  .body { padding: 24px 28px; }
+  .st { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 0 6px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 6px 0; font-size: 12px; border-bottom: 0.5px solid #f0f0f0; }
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 0.5px solid #e0e0e0; }
+  .metric { border: 0.5px solid #e0e0e0; border-radius: 6px; padding: 12px 14px; }
+  .metric .lbl { font-size: 10px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; display: block; }
+  .metric .val { font-size: 16px; font-weight: 600; margin-top: 4px; display: block; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="hdr">
+    <p class="salon">${escapeHtml(salonName)}</p>
+    <p class="title">Finance Report — ${periodLabel}</p>
+  </div>
+  <div class="body">
+    <p class="st">Income</p>
+    <table>
+      <tr><td>Cash</td><td style="text-align:right;">AED ${formatMoney(income.cash)}</td></tr>
+      <tr><td>Card</td><td style="text-align:right;">AED ${formatMoney(income.card)}</td></tr>
+      <tr><td>Other</td><td style="text-align:right;">AED ${formatMoney(income.other)}</td></tr>
+      <tr><td style="font-weight:600;color:#034325;border-bottom:none;">Total income</td><td style="text-align:right;font-weight:600;color:#034325;border-bottom:none;">AED ${formatMoney(income.total)}</td></tr>
+    </table>
+    <p class="st">Fixed Expenses</p>
+    <table><tbody>${expBlock(expenses.fixed.items)}</tbody></table>
+    <p class="st">Variable Expenses</p>
+    <table><tbody>${expBlock(expenses.variable.items)}</tbody></table>
+    <p class="st">One-Time Expenses</p>
+    <table><tbody>${expBlock(expenses.one_time.items)}</tbody></table>
+    <div class="summary">
+      <div class="metric" style="background:#f0fdf4;border-color:#034325;"><span class="lbl">Total income</span><span class="val" style="color:#034325;">AED ${formatMoney(income.total)}</span></div>
+      <div class="metric"><span class="lbl">Total expenses</span><span class="val" style="color:#991b1b;">AED ${formatMoney(expenses.grandTotal)}</span></div>
+      <div class="metric"><span class="lbl">Net — ${periodLabel}</span><span class="val" style="color:${net > 0 ? '#034325' : net < 0 ? '#991b1b' : '#111'};">AED ${formatMoney(net)}</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`
+}
+
+// ── YTD PDF builder ───────────────────────────────────────────────────────────
+
+function buildYTDPDF(opts: {
+  salonName: string
+  fyStartMonth: number
+  selectedMonth: number
+  selectedYear: number
+  ytdData: {
+    months: { month: number; year: number; income: number; expenses: { name: string; category: string; amount: number }[] }[]
+    totalIncome: number
+    totalExpenses: number
+    net: number
+  }
+}): string {
+  const { salonName, fyStartMonth, selectedMonth, selectedYear, ytdData } = opts
+  const startYear = selectedMonth >= fyStartMonth ? selectedYear : selectedYear - 1
+  const title = `YTD Balance Sheet — ${MONTHS[fyStartMonth - 1]} ${startYear} – ${MONTHS[selectedMonth - 1]} ${selectedYear}`
+
+  const monthRows = ytdData.months.map(m => {
+    const expTotal = m.expenses.reduce((s, e) => s + e.amount, 0)
+    const expLines = m.expenses.length === 0
+      ? `<tr><td colspan="3" style="font-size:11px;color:#6b7280;padding:4px 0;">No expenses recorded</td></tr>`
+      : m.expenses.map(e => `<tr>
+          <td style="font-size:11px;padding:4px 0 4px 10px;">${escapeHtml(e.name)}</td>
+          <td style="font-size:11px;padding:4px 0;color:#6b7280;text-transform:capitalize;">${e.category.replace('_', '-')}</td>
+          <td style="font-size:11px;padding:4px 0;text-align:right;">AED ${formatMoney(e.amount)}</td>
+        </tr>`).join('')
+    const monthNet = m.income - expTotal
+    return `
+      <tr style="background:#f9fafb;">
+        <td colspan="3" style="font-size:13px;font-weight:600;padding:12px 0 6px;">${MONTHS[m.month - 1]} ${m.year}</td>
+      </tr>
+      <tr><td colspan="3" style="font-size:10px;font-weight:600;color:#6b7280;padding:4px 0;text-transform:uppercase;letter-spacing:0.04em;">Income</td></tr>
+      <tr><td style="font-size:11px;padding:4px 0;" colspan="2">Total payments</td><td style="font-size:11px;padding:4px 0;text-align:right;">AED ${formatMoney(m.income)}</td></tr>
+      <tr><td colspan="3" style="font-size:10px;font-weight:600;color:#6b7280;padding:8px 0 4px;text-transform:uppercase;letter-spacing:0.04em;">Expenses</td></tr>
+      ${expLines}
+      <tr style="border-top:0.5px solid #e0e0e0;">
+        <td style="font-size:11px;font-weight:600;padding:6px 0;" colspan="2">Net this month</td>
+        <td style="font-size:11px;font-weight:600;padding:6px 0;text-align:right;color:${monthNet >= 0 ? '#034325' : '#991b1b'};">AED ${formatMoney(monthNet)}</td>
+      </tr>`
+  }).join('')
+
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(title)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111; background: #fff; }
+  .doc { max-width: 720px; margin: 0 auto; }
+  .hdr { background: #034325; color: #fff; padding: 22px 28px; }
+  .hdr .salon { font-size: 18px; font-weight: 600; margin: 0; }
+  .hdr .title { font-size: 13px; opacity: 0.85; margin: 6px 0 0; }
+  .body { padding: 24px 28px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 6px 0; }
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 0.5px solid #e0e0e0; }
+  .metric { border: 0.5px solid #e0e0e0; border-radius: 6px; padding: 12px 14px; }
+  .metric .lbl { font-size: 10px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; display: block; }
+  .metric .val { font-size: 16px; font-weight: 600; margin-top: 4px; display: block; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="hdr">
+    <p class="salon">${escapeHtml(salonName)}</p>
+    <p class="title">${escapeHtml(title)}</p>
+  </div>
+  <div class="body">
+    <table><tbody>${monthRows}</tbody></table>
+    <div class="summary">
+      <div class="metric" style="background:#f0fdf4;border-color:#034325;"><span class="lbl">Total income YTD</span><span class="val" style="color:#034325;">AED ${formatMoney(ytdData.totalIncome)}</span></div>
+      <div class="metric"><span class="lbl">Total expenses YTD</span><span class="val" style="color:#991b1b;">AED ${formatMoney(ytdData.totalExpenses)}</span></div>
+      <div class="metric"><span class="lbl">Net YTD</span><span class="val" style="color:${ytdData.net > 0 ? '#034325' : ytdData.net < 0 ? '#991b1b' : '#111'};">AED ${formatMoney(ytdData.net)}</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Reports() {
-  const staffRecord = useAuthStore(s => s.staffRecord)
+  const staffRecord    = useAuthStore(s => s.staffRecord)
   const salonNameStore = useAuthStore(s => s.salonName)
   const salonId = staffRecord?.salon_id ?? ''
+  const role    = staffRecord?.role ?? ''
   const [resolvedSalonName, setResolvedSalonName] = useState<string>(salonNameStore ?? '')
 
-  const [cycles,         setCycles]         = useState<CycleSummary[]>([])
-  const [selectedCycle,  setSelectedCycle]  = useState<SelectedCycle | null>(null)
-  const [loading,        setLoading]        = useState(true)
-  const [detailLoading,  setDetailLoading]  = useState(false)
-  const [generating,     setGenerating]     = useState(false)
+  // ── Navigation ──────────────────────────────────────────────────────────
+  const [view,          setView]          = useState<'landing' | 'finance' | 'payroll' | 'ytd'>('landing')
+  const [showModal,     setShowModal]     = useState<'finance' | 'payroll' | null>(null)
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
+  const [selectedYear,  setSelectedYear]  = useState<number>(new Date().getFullYear())
 
-  const [financeMonth,    setFinanceMonth]    = useState<number>(new Date().getMonth() + 1)
-  const [financeYear,     setFinanceYear]     = useState<number>(new Date().getFullYear())
+  // ── Config ──────────────────────────────────────────────────────────────
+  const [fyStartMonth,            setFyStartMonth]            = useState<number | null>(null)
+  const [supervisorViewFinancials, setSupervisorViewFinancials] = useState(false)
+
+  // ── Finance ─────────────────────────────────────────────────────────────
   const [financeIncome,   setFinanceIncome]   = useState({ cash: 0, card: 0, other: 0, total: 0 })
   const [financeExpenses, setFinanceExpenses] = useState({
     fixed:    { items: [] as { id: string; name: string; amount: number }[], total: 0 },
@@ -355,16 +518,32 @@ export default function Reports() {
     one_time: { items: [] as { id: string; name: string; amount: number }[], total: 0 },
     grandTotal: 0,
   })
-  const [financeLoading,  setFinanceLoading]  = useState(false)
+  const [financeLoading, setFinanceLoading] = useState(false)
 
-  // ── Mount: fetch cycle summaries and salon name ─────────────────────────────
+  // ── YTD ─────────────────────────────────────────────────────────────────
+  const [ytdData, setYtdData] = useState<{
+    months: { month: number; year: number; income: number; expenses: { name: string; category: string; amount: number }[] }[]
+    totalIncome: number; totalExpenses: number; net: number
+  }>({ months: [], totalIncome: 0, totalExpenses: 0, net: 0 })
+  const [ytdLoading, setYtdLoading] = useState(false)
+
+  // ── Payroll ─────────────────────────────────────────────────────────────
+  const [cycles,        setCycles]        = useState<CycleSummary[]>([])
+  const [selectedCycle, setSelectedCycle] = useState<SelectedCycle | null>(null)
+  const [loading,       setLoading]       = useState(true)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [generating,    setGenerating]    = useState(false)
+
+  const canViewFinance = role === 'owner' || (role === 'supervisor' && supervisorViewFinancials)
+
+  // ── Mount: payroll cycles + salon name + config ─────────────────────────
   useEffect(() => {
     let cancelled = false
     async function load() {
       if (!salonId) { setLoading(false); return }
       setLoading(true)
 
-      const [{ data: runs }, { data: salonRow }] = await Promise.all([
+      const [{ data: runs }, salonResult, { data: configRow }] = await Promise.all([
         supabase
           .from('payroll_runs')
           .select('period_month, period_year, basic_salary, commission_earned, advance_deductions, net_payable, staff_id, created_at')
@@ -372,19 +551,25 @@ export default function Reports() {
         salonNameStore
           ? Promise.resolve({ data: { name: salonNameStore } })
           : supabase.from('salons').select('name').eq('id', salonId).single(),
+        supabase.from('salon_config').select('fy_start_month, supervisor_view_financials').eq('salon_id', salonId).single(),
       ])
 
       if (cancelled) return
 
-      if (salonRow && (salonRow as { name?: string }).name) {
-        setResolvedSalonName((salonRow as { name: string }).name)
+      const sd = salonResult.data as { name?: string } | null
+      if (sd?.name) setResolvedSalonName(sd.name)
+
+      if (configRow) {
+        const c = configRow as { fy_start_month?: number | null; supervisor_view_financials?: boolean }
+        setFyStartMonth(c.fy_start_month ?? null)
+        setSupervisorViewFinancials(c.supervisor_view_financials ?? false)
       }
 
       const map = new Map<string, CycleSummary>()
       ;(runs ?? []).forEach(r => {
         const month = r.period_month as number
-        const year  = r.period_year as number
-        const key = `${year}-${month}`
+        const year  = r.period_year  as number
+        const key   = `${year}-${month}`
         const basic = (r.basic_salary as number | null) ?? 0
         const comm  = (r.commission_earned as number | null) ?? 0
         const ded   = (r.advance_deductions as number | null) ?? 0
@@ -419,7 +604,91 @@ export default function Reports() {
     return () => { cancelled = true }
   }, [salonId, salonNameStore])
 
-  // ── Open a cycle: fetch payroll_runs joined with staff ──────────────────────
+  // ── Finance fetch ───────────────────────────────────────────────────────
+  async function fetchFinanceReport(month: number, year: number) {
+    if (!salonId) return
+    setFinanceLoading(true)
+    const start = new Date(year, month - 1, 1).toISOString()
+    const end   = new Date(year, month, 1).toISOString()
+
+    const [{ data: apptRows }, { data: expRows }] = await Promise.all([
+      supabase.from('appointments').select('id').eq('salon_id', salonId)
+        .gte('starts_at', start).lt('starts_at', end),
+      supabase.from('salon_expenses').select('id, category, name, amount')
+        .eq('salon_id', salonId).eq('month', month).eq('year', year),
+    ])
+
+    const apptIds = (apptRows ?? []).map(r => r.id as string)
+    const payData = apptIds.length > 0
+      ? (await supabase.from('payments').select('amount, method').in('appointment_id', apptIds)).data ?? []
+      : []
+
+    let cash = 0, card = 0, other = 0
+    for (const p of payData) {
+      const amt = (p.amount as number) ?? 0
+      const m   = ((p.method as string) ?? '').toLowerCase()
+      if (m === 'cash') cash += amt
+      else if (m === 'card') card += amt
+      else other += amt
+    }
+    setFinanceIncome({ cash, card, other, total: cash + card + other })
+
+    const allExp        = (expRows ?? []) as { id: string; category: string; name: string; amount: number }[]
+    const fixedItems    = allExp.filter(e => e.category === 'fixed')
+    const variableItems = allExp.filter(e => e.category === 'variable')
+    const oneTimeItems  = allExp.filter(e => e.category === 'one_time')
+    const fixedTotal    = fixedItems.reduce((s, e) => s + e.amount, 0)
+    const variableTotal = variableItems.reduce((s, e) => s + e.amount, 0)
+    const oneTimeTotal  = oneTimeItems.reduce((s, e) => s + e.amount, 0)
+    setFinanceExpenses({
+      fixed:    { items: fixedItems,    total: fixedTotal },
+      variable: { items: variableItems, total: variableTotal },
+      one_time: { items: oneTimeItems,  total: oneTimeTotal },
+      grandTotal: fixedTotal + variableTotal + oneTimeTotal,
+    })
+    setFinanceLoading(false)
+  }
+
+  // ── YTD fetch ───────────────────────────────────────────────────────────
+  async function fetchYTD(month: number, year: number) {
+    if (!salonId || !fyStartMonth) return
+    setYtdLoading(true)
+
+    type MYPair = { month: number; year: number }
+    const range: MYPair[] = []
+    if (month >= fyStartMonth) {
+      for (let m = fyStartMonth; m <= month; m++) range.push({ month: m, year })
+    } else {
+      for (let m = fyStartMonth; m <= 12; m++) range.push({ month: m, year: year - 1 })
+      for (let m = 1; m <= month; m++) range.push({ month: m, year })
+    }
+
+    const monthData = await Promise.all(range.map(async ({ month: m, year: y }) => {
+      const start = new Date(y, m - 1, 1).toISOString()
+      const end   = new Date(y, m, 1).toISOString()
+
+      const [{ data: apptRows }, { data: expRows }] = await Promise.all([
+        supabase.from('appointments').select('id').eq('salon_id', salonId).gte('starts_at', start).lt('starts_at', end),
+        supabase.from('salon_expenses').select('name, category, amount').eq('salon_id', salonId).eq('month', m).eq('year', y),
+      ])
+
+      const apptIds = (apptRows ?? []).map(r => r.id as string)
+      const payData = apptIds.length > 0
+        ? (await supabase.from('payments').select('amount').in('appointment_id', apptIds)).data ?? []
+        : []
+
+      const income   = payData.reduce((s, p) => s + ((p.amount as number) ?? 0), 0)
+      const expenses = (expRows ?? []) as { name: string; category: string; amount: number }[]
+      return { month: m, year: y, income, expenses }
+    }))
+
+    const totalIncome   = monthData.reduce((s, m) => s + m.income, 0)
+    const totalExpenses = monthData.reduce((s, m) => s + m.expenses.reduce((ss, e) => ss + e.amount, 0), 0)
+    setYtdData({ months: monthData, totalIncome, totalExpenses, net: totalIncome - totalExpenses })
+    setYtdLoading(false)
+  }
+
+  // ── Payroll: open cycle ─────────────────────────────────────────────────
   async function openCycle(c: CycleSummary) {
     if (!salonId) return
     setDetailLoading(true)
@@ -443,7 +712,7 @@ export default function Reports() {
         advance_deductions: (r.advance_deductions as number | null) ?? 0,
         net_payable:        (r.net_payable as number | null) ?? 0,
         period_month:       r.period_month as number,
-        period_year:        r.period_year as number,
+        period_year:        r.period_year  as number,
         created_at:         (r.created_at as string) ?? '',
       }
     })
@@ -452,43 +721,40 @@ export default function Reports() {
     setDetailLoading(false)
   }
 
-  // ── PDF: per-staff slip ─────────────────────────────────────────────────────
+  // ── Payroll: download slip ──────────────────────────────────────────────
   async function downloadSlip(row: CyclePayrollRow) {
     if (!selectedCycle) return
     setGenerating(true)
     const { data: advData } = await supabase
-      .from('staff_advances')
-      .select('*')
-      .eq('staff_id', row.staff_id)
-      .eq('status', 'active')
+      .from('staff_advances').select('*').eq('staff_id', row.staff_id).eq('status', 'active')
     const advances = (advData ?? []) as AdvanceRow[]
     const html = buildSlipHTML({
-      salonName:          resolvedSalonName || 'Salon',
-      staffName:          row.staff_name,
-      staffRole:          row.staff_role,
-      month:              selectedCycle.period_month,
-      year:               selectedCycle.period_year,
-      basicSalary:        row.basic_salary,
-      commissionEarned:   row.commission_earned,
-      advanceDeductions:  row.advance_deductions,
-      netPayable:         row.net_payable,
+      salonName:         resolvedSalonName || 'Salon',
+      staffName:         row.staff_name,
+      staffRole:         row.staff_role,
+      month:             selectedCycle.period_month,
+      year:              selectedCycle.period_year,
+      basicSalary:       row.basic_salary,
+      commissionEarned:  row.commission_earned,
+      advanceDeductions: row.advance_deductions,
+      netPayable:        row.net_payable,
       advances,
     })
     openPrintWindow(html, `salary-slip-${row.staff_name}-${MONTHS[selectedCycle.period_month - 1]}-${selectedCycle.period_year}`)
     setGenerating(false)
   }
 
-  // ── PDF: consolidated for entire cycle ──────────────────────────────────────
+  // ── Payroll: download consolidated ─────────────────────────────────────
   async function downloadConsolidated() {
     if (!selectedCycle) return
     setGenerating(true)
     const mostRecent = selectedCycle.rows.reduce((acc, r) => r.created_at > acc ? r.created_at : acc, '')
     const runDate = mostRecent ? formatDate(mostRecent) : formatDate(new Date().toISOString())
     const html = buildConsolidatedHTML({
-      salonName:  resolvedSalonName || 'Salon',
-      month:      selectedCycle.period_month,
-      year:       selectedCycle.period_year,
-      rows:       selectedCycle.rows.map(r => ({
+      salonName: resolvedSalonName || 'Salon',
+      month:     selectedCycle.period_month,
+      year:      selectedCycle.period_year,
+      rows:      selectedCycle.rows.map(r => ({
         staff_name:         r.staff_name,
         staff_role:         r.staff_role,
         basic_salary:       r.basic_salary,
@@ -502,56 +768,7 @@ export default function Reports() {
     setGenerating(false)
   }
 
-  // ── Finance Report fetch ────────────────────────────────────────────────────
-  async function fetchFinanceReport(month: number, year: number) {
-    if (!salonId) return
-    setFinanceLoading(true)
-    const start = new Date(year, month - 1, 1).toISOString()
-    const end   = new Date(year, month, 1).toISOString()
-
-    const [{ data: apptRows }, { data: expRows }] = await Promise.all([
-      supabase.from('appointments').select('id').eq('salon_id', salonId)
-        .gte('starts_at', start).lt('starts_at', end),
-      supabase.from('salon_expenses').select('id, category, name, amount')
-        .eq('salon_id', salonId).eq('month', month).eq('year', year),
-    ])
-
-    const apptIds = (apptRows ?? []).map(r => r.id as string)
-    const payData = apptIds.length > 0
-      ? (await supabase.from('payments').select('amount, method').in('appointment_id', apptIds)).data ?? []
-      : []
-
-    let cash = 0, card = 0, other = 0
-    for (const p of payData) {
-      const amt = (p.amount as number) ?? 0
-      const m = ((p.method as string) ?? '').toLowerCase()
-      if (m === 'cash') cash += amt
-      else if (m === 'card') card += amt
-      else other += amt
-    }
-    setFinanceIncome({ cash, card, other, total: cash + card + other })
-
-    const allExp = (expRows ?? []) as { id: string; category: string; name: string; amount: number }[]
-    const fixedItems    = allExp.filter(e => e.category === 'fixed')
-    const variableItems = allExp.filter(e => e.category === 'variable')
-    const oneTimeItems  = allExp.filter(e => e.category === 'one_time')
-    const fixedTotal    = fixedItems.reduce((s, e) => s + e.amount, 0)
-    const variableTotal = variableItems.reduce((s, e) => s + e.amount, 0)
-    const oneTimeTotal  = oneTimeItems.reduce((s, e) => s + e.amount, 0)
-    setFinanceExpenses({
-      fixed:    { items: fixedItems,    total: fixedTotal },
-      variable: { items: variableItems, total: variableTotal },
-      one_time: { items: oneTimeItems,  total: oneTimeTotal },
-      grandTotal: fixedTotal + variableTotal + oneTimeTotal,
-    })
-    setFinanceLoading(false)
-  }
-
-  useEffect(() => {
-    if (staffRecord?.role === 'owner') fetchFinanceReport(financeMonth, financeYear)
-  }, [salonId, financeMonth, financeYear]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Computed ────────────────────────────────────────────────────────────
   const cycleTotals = selectedCycle
     ? selectedCycle.rows.reduce((acc, r) => ({
         basic:      acc.basic      + r.basic_salary,
@@ -561,271 +778,481 @@ export default function Reports() {
       }), { basic: 0, commission: 0, deductions: 0, net: 0 })
     : null
 
+  const financeNet  = financeIncome.total - financeExpenses.grandTotal
+  const fyStartYear = (fyStartMonth !== null && selectedMonth >= fyStartMonth) ? selectedYear : selectedYear - 1
+  const ytdTitle    = fyStartMonth
+    ? `YTD Balance Sheet — ${MONTHS[fyStartMonth - 1]} ${fyStartYear} – ${MONTHS[selectedMonth - 1]} ${selectedYear}`
+    : 'YTD Balance Sheet'
+
+  // ── Shared style atoms ──────────────────────────────────────────────────
+  const selStyle: React.CSSProperties = {
+    fontSize: 12, color: '#111', border: '0.5px solid #d1d5db',
+    borderRadius: 6, padding: '5px 10px', backgroundColor: '#fff',
+  }
+  const subLabel: React.CSSProperties = {
+    fontSize: 11, fontWeight: 600, color: '#6b7280',
+    textTransform: 'uppercase' as const, letterSpacing: '0.04em', margin: '0 0 8px',
+  }
+  const backBtn: React.CSSProperties = {
+    backgroundColor: 'transparent', color: '#034325',
+    border: '0.5px solid #034325', borderRadius: 6,
+    padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+  }
+  const dlBtn: React.CSSProperties = {
+    backgroundColor: '#034325', color: '#ffffff',
+    border: 'none', borderRadius: 6,
+    padding: '6px 14px', fontSize: 12, cursor: 'pointer',
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
       <Topbar />
 
       <div style={{ marginTop: 52, flex: 1, padding: '20px 28px 32px' }}>
-        <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Reports</p>
 
-        {/* Finance Report — Owner only */}
-        {staffRecord?.role === 'owner' && (() => {
-          const net = financeIncome.total - financeExpenses.grandTotal
-          const selStyle: React.CSSProperties = { fontSize: 12, color: '#111', border: '0.5px solid #d1d5db', borderRadius: 6, padding: '5px 10px', backgroundColor: '#fff' }
-          const subLabel: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 8px' }
-          return (
-            <div style={cardStyle}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                <div>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: '#034325', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px' }}>
-                    Finance Report — {MONTHS[financeMonth - 1]} {financeYear}
-                  </p>
-                  <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>Visible to owner only</p>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <select value={financeMonth} onChange={e => setFinanceMonth(Number(e.target.value))} style={selStyle}>
-                    {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-                  </select>
-                  <select value={financeYear} onChange={e => setFinanceYear(Number(e.target.value))} style={selStyle}>
-                    {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
+        {/* ── Modal overlay ── */}
+        {showModal !== null && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            minHeight: 400,
+          }}>
+            <div style={{
+              backgroundColor: '#fff', borderRadius: 10, padding: 24,
+              width: 320, boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+            }}>
+              <p style={{ fontSize: 15, fontWeight: 600, color: '#111', margin: '0 0 18px' }}>Select period</p>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 22 }}>
+                <select
+                  value={selectedMonth}
+                  onChange={e => setSelectedMonth(Number(e.target.value))}
+                  style={{ ...selStyle, flex: 1 }}
+                >
+                  {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                </select>
+                <select
+                  value={selectedYear}
+                  onChange={e => setSelectedYear(Number(e.target.value))}
+                  style={selStyle}
+                >
+                  {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
               </div>
-
-              {financeLoading ? (
-                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading...</p>
-              ) : (
-                <>
-                  {/* Income */}
-                  <p style={subLabel}>Income</p>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
-                    <tbody>
-                      <tr><td style={TD}>Cash</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.cash)}</td></tr>
-                      <tr><td style={TD}>Card</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.card)}</td></tr>
-                      <tr><td style={TD}>Other</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.other)}</td></tr>
-                      <tr>
-                        <td style={{ ...TD, fontWeight: 600, color: '#034325', borderBottom: 'none' }}>Total income</td>
-                        <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: '#034325', borderBottom: 'none' }}>AED {formatMoney(financeIncome.total)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-
-                  {/* Fixed Expenses */}
-                  <p style={subLabel}>Fixed Expenses</p>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
-                    <tbody>
-                      {financeExpenses.fixed.items.length === 0 ? (
-                        <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No expenses recorded yet</td></tr>
-                      ) : (
-                        <>
-                          {financeExpenses.fixed.items.map(e => (
-                            <tr key={e.id}><td style={TD}>{e.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td></tr>
-                          ))}
-                          <tr>
-                            <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total fixed</td>
-                            <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.fixed.total)}</td>
-                          </tr>
-                        </>
-                      )}
-                    </tbody>
-                  </table>
-
-                  {/* Variable Expenses */}
-                  <p style={subLabel}>Variable Expenses</p>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
-                    <tbody>
-                      {financeExpenses.variable.items.length === 0 ? (
-                        <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No expenses recorded yet</td></tr>
-                      ) : (
-                        <>
-                          {financeExpenses.variable.items.map(e => (
-                            <tr key={e.id}><td style={TD}>{e.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td></tr>
-                          ))}
-                          <tr>
-                            <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total variable</td>
-                            <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.variable.total)}</td>
-                          </tr>
-                        </>
-                      )}
-                    </tbody>
-                  </table>
-
-                  {/* One-Time Expenses */}
-                  <p style={subLabel}>One-Time Expenses</p>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
-                    <tbody>
-                      {financeExpenses.one_time.items.length === 0 ? (
-                        <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No expenses recorded yet</td></tr>
-                      ) : (
-                        <>
-                          {financeExpenses.one_time.items.map(e => (
-                            <tr key={e.id}><td style={TD}>{e.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td></tr>
-                          ))}
-                          <tr>
-                            <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total one-time</td>
-                            <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.one_time.total)}</td>
-                          </tr>
-                        </>
-                      )}
-                    </tbody>
-                  </table>
-
-                  {/* Summary footer */}
-                  <div style={{ borderTop: '0.5px solid #e0e0e0', paddingTop: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                    <MetricCard label="Total income" value={financeIncome.total} valueColor="#034325" backgroundColor="#f0fdf4" />
-                    <MetricCard label="Total expenses" value={financeExpenses.grandTotal} valueColor="#991b1b" />
-                    <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        Net — {MONTHS[financeMonth - 1]} {financeYear}
-                      </span>
-                      <span style={{ fontSize: 16, fontWeight: 600, color: net > 0 ? '#034325' : net < 0 ? '#991b1b' : '#111' }}>
-                        AED {net.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )
-        })()}
-
-        {/* Section 1 — Payroll history */}
-        <div style={cardStyle}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: '#034325', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 12px' }}>Payroll history</p>
-          {loading ? (
-            <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p>
-          ) : cycles.length === 0 ? (
-            <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>No payroll cycles yet.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {cycles.map(c => {
-                const isSelected = !!selectedCycle && selectedCycle.period_month === c.period_month && selectedCycle.period_year === c.period_year
-                return (
-                  <div
-                    key={`${c.period_year}-${c.period_month}`}
-                    onClick={() => openCycle(c)}
-                    style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      padding: '12px 8px', cursor: 'pointer',
-                      borderBottom: '0.5px solid #f0f0f0',
-                      backgroundColor: isSelected ? '#f0fdf4' : 'transparent',
-                    }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: 13, color: '#111', fontWeight: 500 }}>{MONTHS[c.period_month - 1]} {c.period_year}</span>
-                      <span style={{ fontSize: 11, color: '#6b7280' }}>
-                        Run {c.most_recent_created_at ? formatDate(c.most_recent_created_at) : '—'} · {c.staff_count} staff
-                      </span>
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#034325' }}>AED {formatMoney(c.total_net_payable)}</span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Section 2 — Selected cycle detail */}
-        {selectedCycle && cycleTotals && (() => {
-          const { start, end } = periodBounds(selectedCycle.period_month, selectedCycle.period_year)
-          return (
-            <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
-              <div style={{ backgroundColor: '#034325', color: '#ffffff', padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
-                    Payroll report — {MONTHS[selectedCycle.period_month - 1]} {selectedCycle.period_year}
-                  </p>
-                  <p style={{ margin: '4px 0 0', fontSize: 11, opacity: 0.85 }}>
-                    {formatDate(start.toISOString())} – {formatDate(end.toISOString())}
-                  </p>
-                </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowModal(null)} style={backBtn}>Cancel</button>
                 <button
-                  onClick={() => setSelectedCycle(null)}
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.15)', color: '#ffffff',
-                    border: '0.5px solid rgba(255,255,255,0.3)', borderRadius: 6,
-                    padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+                  onClick={() => {
+                    const type = showModal
+                    setShowModal(null)
+                    if (type === 'finance') {
+                      setView('finance')
+                      fetchFinanceReport(selectedMonth, selectedYear)
+                    } else {
+                      setView('payroll')
+                    }
                   }}
-                >← Back</button>
+                  style={dlBtn}
+                >View Report</button>
               </div>
+            </div>
+          </div>
+        )}
 
-              <div style={{ padding: '18px 22px' }}>
-                {detailLoading ? (
-                  <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p>
-                ) : (
-                  <>
-                    {/* Summary metrics */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 18 }}>
-                      <MetricCard label="Total salary" value={cycleTotals.basic} />
-                      <MetricCard label="Total commission" value={cycleTotals.commission} />
-                      <MetricCard label="Total deductions" value={cycleTotals.deductions} valueColor="#991b1b" />
-                      <MetricCard label="Net payable" value={cycleTotals.net} valueColor="#034325" backgroundColor="#f0fdf4" />
-                    </div>
+        {/* ── Landing ── */}
+        {view === 'landing' && (
+          <>
+            <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Reports</p>
+            <div style={cardStyle}>
+              {canViewFinance && (
+                <div
+                  onClick={() => setShowModal('finance')}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '14px 8px', cursor: 'pointer', borderBottom: '0.5px solid #f0f0f0',
+                  }}
+                >
+                  <div>
+                    <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Finance Report</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Income, expenses, net</p>
+                  </div>
+                  <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
+                </div>
+              )}
+              <div
+                onClick={() => setShowModal('payroll')}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '14px 8px', cursor: 'pointer',
+                }}
+              >
+                <div>
+                  <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Payroll History</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Salary slips, payroll cycles</p>
+                </div>
+                <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
+              </div>
+            </div>
+          </>
+        )}
 
-                    {/* Salary slips table */}
-                    <p style={{ fontSize: 12, fontWeight: 600, color: '#034325', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '6px 0 10px' }}>Salary slips</p>
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr>
-                            <th style={TH}>Staff</th>
-                            <th style={{ ...TH, textAlign: 'right' }}>Basic salary</th>
-                            <th style={{ ...TH, textAlign: 'right' }}>Commission</th>
-                            <th style={{ ...TH, textAlign: 'right' }}>Deductions</th>
-                            <th style={{ ...TH, textAlign: 'right' }}>Net payable</th>
-                            <th style={{ ...TH, textAlign: 'right', width: 110 }}></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedCycle.rows.map(r => (
-                            <tr key={r.id}>
-                              <td style={TD}>
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontSize: 13, color: '#111' }}>{r.staff_name}</span>
-                                  <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'capitalize' }}>{r.staff_role}</span>
-                                </div>
-                              </td>
-                              <td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(r.basic_salary)}</td>
-                              <td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(r.commission_earned)}</td>
-                              <td style={{ ...TD, textAlign: 'right', color: '#991b1b' }}>AED {formatMoney(r.advance_deductions)}</td>
-                              <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: '#034325' }}>AED {formatMoney(r.net_payable)}</td>
-                              <td style={{ ...TD, textAlign: 'right' }}>
-                                <button
-                                  onClick={() => downloadSlip(r)}
-                                  disabled={generating}
-                                  style={{
-                                    backgroundColor: 'transparent', color: '#034325',
-                                    border: '0.5px solid #034325', borderRadius: 4,
-                                    padding: '4px 10px', fontSize: 11,
-                                    cursor: generating ? 'not-allowed' : 'pointer',
-                                  }}
-                                >Download</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+        {/* ── Finance Report ── */}
+        {view === 'finance' && canViewFinance && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button onClick={() => setView('landing')} style={backBtn}>Back</button>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#111' }}>
+                  Finance Report — {MONTHS[selectedMonth - 1]} {selectedYear}
+                </p>
+              </div>
+              <button
+                onClick={() => openPrintWindow(
+                  buildFinancePDF({
+                    salonName: resolvedSalonName || 'Salon',
+                    month: selectedMonth, year: selectedYear,
+                    income: financeIncome, expenses: financeExpenses,
+                  }),
+                  `finance-report-${MONTHS[selectedMonth - 1]}-${selectedYear}`
+                )}
+                style={dlBtn}
+              >Download PDF</button>
+            </div>
 
-                    <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end' }}>
+            {financeLoading ? (
+              <div style={cardStyle}><p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading...</p></div>
+            ) : (
+              <div style={cardStyle}>
+                {/* Income */}
+                <p style={subLabel}>Income</p>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+                  <tbody>
+                    <tr><td style={TD}>Cash</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.cash)}</td></tr>
+                    <tr><td style={TD}>Card</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.card)}</td></tr>
+                    <tr><td style={TD}>Other</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.other)}</td></tr>
+                    <tr>
+                      <td style={{ ...TD, fontWeight: 600, color: '#034325', borderBottom: 'none' }}>Total income</td>
+                      <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: '#034325', borderBottom: 'none' }}>AED {formatMoney(financeIncome.total)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Fixed Expenses */}
+                <p style={subLabel}>Fixed Expenses</p>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+                  <tbody>
+                    {financeExpenses.fixed.items.length === 0 ? (
+                      <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No expenses recorded yet</td></tr>
+                    ) : (
+                      <>
+                        {financeExpenses.fixed.items.map(e => (
+                          <tr key={e.id}><td style={TD}>{e.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td></tr>
+                        ))}
+                        <tr>
+                          <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total fixed</td>
+                          <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.fixed.total)}</td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Variable Expenses */}
+                <p style={subLabel}>Variable Expenses</p>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+                  <tbody>
+                    {financeExpenses.variable.items.length === 0 ? (
+                      <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No expenses recorded yet</td></tr>
+                    ) : (
+                      <>
+                        {financeExpenses.variable.items.map(e => (
+                          <tr key={e.id}><td style={TD}>{e.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td></tr>
+                        ))}
+                        <tr>
+                          <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total variable</td>
+                          <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.variable.total)}</td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* One-Time Expenses */}
+                <p style={subLabel}>One-Time Expenses</p>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+                  <tbody>
+                    {financeExpenses.one_time.items.length === 0 ? (
+                      <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No expenses recorded yet</td></tr>
+                    ) : (
+                      <>
+                        {financeExpenses.one_time.items.map(e => (
+                          <tr key={e.id}><td style={TD}>{e.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td></tr>
+                        ))}
+                        <tr>
+                          <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total one-time</td>
+                          <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.one_time.total)}</td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Summary footer */}
+                <div style={{ borderTop: '0.5px solid #e0e0e0', paddingTop: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: fyStartMonth !== null ? 16 : 0 }}>
+                  <MetricCard label="Total income" value={financeIncome.total} valueColor="#034325" backgroundColor="#f0fdf4" />
+                  <MetricCard label="Total expenses" value={financeExpenses.grandTotal} valueColor="#991b1b" />
+                  <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Net — {MONTHS[selectedMonth - 1]} {selectedYear}
+                    </span>
+                    <span style={{ fontSize: 16, fontWeight: 600, color: financeNet > 0 ? '#034325' : financeNet < 0 ? '#991b1b' : '#111' }}>
+                      AED {financeNet.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* YTD subsection */}
+                {fyStartMonth !== null && (
+                  <div style={{ borderTop: '0.5px solid #e0e0e0', paddingTop: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: '#111' }}>YTD Balance Sheet</p>
+                        <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>
+                          {MONTHS[fyStartMonth - 1]} {fyStartYear} – {MONTHS[selectedMonth - 1]} {selectedYear}
+                        </p>
+                      </div>
                       <button
-                        onClick={downloadConsolidated}
-                        disabled={generating || selectedCycle.rows.length === 0}
-                        style={{
-                          backgroundColor: (generating || selectedCycle.rows.length === 0) ? '#e0e0e0' : '#034325',
-                          color: (generating || selectedCycle.rows.length === 0) ? '#9ca3af' : '#ffffff',
-                          border: 'none', borderRadius: 6, padding: '9px 16px',
-                          fontSize: 12, fontWeight: 600,
-                          cursor: (generating || selectedCycle.rows.length === 0) ? 'not-allowed' : 'pointer',
-                        }}
-                      >Download consolidated report</button>
+                        onClick={() => { setView('ytd'); fetchYTD(selectedMonth, selectedYear) }}
+                        style={dlBtn}
+                      >View YTD</button>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ── YTD Balance Sheet ── */}
+        {view === 'ytd' && canViewFinance && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button onClick={() => setView('finance')} style={backBtn}>Back</button>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#111' }}>{ytdTitle}</p>
+              </div>
+              <button
+                onClick={() => {
+                  if (fyStartMonth) openPrintWindow(
+                    buildYTDPDF({ salonName: resolvedSalonName || 'Salon', fyStartMonth, selectedMonth, selectedYear, ytdData }),
+                    `ytd-${MONTHS[selectedMonth - 1]}-${selectedYear}`
+                  )
+                }}
+                style={dlBtn}
+              >Download PDF</button>
             </div>
-          )
-        })()}
+
+            {ytdLoading ? (
+              <div style={cardStyle}><p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading...</p></div>
+            ) : (
+              <div style={cardStyle}>
+                {ytdData.months.map(m => {
+                  const expTotal = m.expenses.reduce((s, e) => s + e.amount, 0)
+                  const monthNet = m.income - expTotal
+                  return (
+                    <div key={`${m.year}-${m.month}`} style={{ marginBottom: 22 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 8px', paddingBottom: 6, borderBottom: '0.5px solid #e0e0e0' }}>
+                        {MONTHS[m.month - 1]} {m.year}
+                      </p>
+
+                      <p style={{ ...subLabel, margin: '0 0 4px' }}>Income</p>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 10 }}>
+                        <tbody>
+                          <tr><td style={TD}>Total payments</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(m.income)}</td></tr>
+                        </tbody>
+                      </table>
+
+                      <p style={{ ...subLabel, margin: '0 0 4px' }}>Expenses</p>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
+                        <tbody>
+                          {m.expenses.length === 0 ? (
+                            <tr><td colSpan={3} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No expenses recorded</td></tr>
+                          ) : (
+                            <>
+                              {m.expenses.map((e, i) => (
+                                <tr key={i}>
+                                  <td style={TD}>{e.name}</td>
+                                  <td style={{ ...TD, color: '#6b7280', textTransform: 'capitalize' }}>{e.category.replace('_', '-')}</td>
+                                  <td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td>
+                                </tr>
+                              ))}
+                              <tr>
+                                <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }} colSpan={2}>Expenses subtotal</td>
+                                <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(expTotal)}</td>
+                              </tr>
+                            </>
+                          )}
+                        </tbody>
+                      </table>
+
+                      <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: monthNet >= 0 ? '#034325' : '#991b1b' }}>
+                        Net: AED {formatMoney(monthNet)}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* YTD summary footer */}
+                <div style={{ borderTop: '0.5px solid #e0e0e0', paddingTop: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                  <MetricCard label="Total income YTD" value={ytdData.totalIncome} valueColor="#034325" backgroundColor="#f0fdf4" />
+                  <MetricCard label="Total expenses YTD" value={ytdData.totalExpenses} valueColor="#991b1b" />
+                  <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Net YTD</span>
+                    <span style={{ fontSize: 16, fontWeight: 600, color: ytdData.net > 0 ? '#034325' : ytdData.net < 0 ? '#991b1b' : '#111' }}>
+                      AED {ytdData.net.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Payroll ── */}
+        {view === 'payroll' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <button onClick={() => { setView('landing'); setSelectedCycle(null) }} style={backBtn}>Back</button>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#111' }}>Payroll History</p>
+            </div>
+
+            <div style={cardStyle}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: '#034325', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 12px' }}>Payroll history</p>
+              {loading ? (
+                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p>
+              ) : cycles.length === 0 ? (
+                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>No payroll cycles yet.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {cycles.map(c => {
+                    const isSelected = !!selectedCycle && selectedCycle.period_month === c.period_month && selectedCycle.period_year === c.period_year
+                    return (
+                      <div
+                        key={`${c.period_year}-${c.period_month}`}
+                        onClick={() => openCycle(c)}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '12px 8px', cursor: 'pointer',
+                          borderBottom: '0.5px solid #f0f0f0',
+                          backgroundColor: isSelected ? '#f0fdf4' : 'transparent',
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: 13, color: '#111', fontWeight: 500 }}>{MONTHS[c.period_month - 1]} {c.period_year}</span>
+                          <span style={{ fontSize: 11, color: '#6b7280' }}>
+                            Run {c.most_recent_created_at ? formatDate(c.most_recent_created_at) : '—'} · {c.staff_count} staff
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#034325' }}>AED {formatMoney(c.total_net_payable)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {selectedCycle && cycleTotals && (() => {
+              const { start, end } = periodBounds(selectedCycle.period_month, selectedCycle.period_year)
+              return (
+                <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
+                  <div style={{ backgroundColor: '#034325', color: '#ffffff', padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
+                        Payroll report — {MONTHS[selectedCycle.period_month - 1]} {selectedCycle.period_year}
+                      </p>
+                      <p style={{ margin: '4px 0 0', fontSize: 11, opacity: 0.85 }}>
+                        {formatDate(start.toISOString())} – {formatDate(end.toISOString())}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedCycle(null)}
+                      style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#ffffff', border: '0.5px solid rgba(255,255,255,0.3)', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer' }}
+                    >← Back</button>
+                  </div>
+
+                  <div style={{ padding: '18px 22px' }}>
+                    {detailLoading ? (
+                      <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p>
+                    ) : (
+                      <>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 18 }}>
+                          <MetricCard label="Total salary" value={cycleTotals.basic} />
+                          <MetricCard label="Total commission" value={cycleTotals.commission} />
+                          <MetricCard label="Total deductions" value={cycleTotals.deductions} valueColor="#991b1b" />
+                          <MetricCard label="Net payable" value={cycleTotals.net} valueColor="#034325" backgroundColor="#f0fdf4" />
+                        </div>
+
+                        <p style={{ fontSize: 12, fontWeight: 600, color: '#034325', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '6px 0 10px' }}>Salary slips</p>
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                <th style={TH}>Staff</th>
+                                <th style={{ ...TH, textAlign: 'right' }}>Basic salary</th>
+                                <th style={{ ...TH, textAlign: 'right' }}>Commission</th>
+                                <th style={{ ...TH, textAlign: 'right' }}>Deductions</th>
+                                <th style={{ ...TH, textAlign: 'right' }}>Net payable</th>
+                                <th style={{ ...TH, textAlign: 'right', width: 110 }}></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedCycle.rows.map(r => (
+                                <tr key={r.id}>
+                                  <td style={TD}>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                      <span style={{ fontSize: 13, color: '#111' }}>{r.staff_name}</span>
+                                      <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'capitalize' }}>{r.staff_role}</span>
+                                    </div>
+                                  </td>
+                                  <td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(r.basic_salary)}</td>
+                                  <td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(r.commission_earned)}</td>
+                                  <td style={{ ...TD, textAlign: 'right', color: '#991b1b' }}>AED {formatMoney(r.advance_deductions)}</td>
+                                  <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: '#034325' }}>AED {formatMoney(r.net_payable)}</td>
+                                  <td style={{ ...TD, textAlign: 'right' }}>
+                                    <button
+                                      onClick={() => downloadSlip(r)}
+                                      disabled={generating}
+                                      style={{ backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325', borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: generating ? 'not-allowed' : 'pointer' }}
+                                    >Download</button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={downloadConsolidated}
+                            disabled={generating || selectedCycle.rows.length === 0}
+                            style={{
+                              backgroundColor: (generating || selectedCycle.rows.length === 0) ? '#e0e0e0' : '#034325',
+                              color: (generating || selectedCycle.rows.length === 0) ? '#9ca3af' : '#ffffff',
+                              border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 12, fontWeight: 600,
+                              cursor: (generating || selectedCycle.rows.length === 0) ? 'not-allowed' : 'pointer',
+                            }}
+                          >Download consolidated report</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
       </div>
 
       <div style={{ textAlign: 'center', padding: '10px 0 14px' }}>
