@@ -829,7 +829,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({ prompt: userMsg, salonId: staffRecord.salon_id }),
+        body: JSON.stringify({ prompt: userMsg, salonId }),
       })
       
       if (!res.ok) { const t = await res.text(); throw new Error(`API error ${res.status}: ${t}`) }
