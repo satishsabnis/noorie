@@ -820,25 +820,16 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
     abortRef.current = controller
     setScanning(true); setScanError(null)
     try {
-      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string
       const userMsg = `Research beauty salons competing with ${salon.name} in the ${salon.name} area and neighbourhood of ${salon.city}, ${salon.country}. Focus on salons within 2-3km. Return a JSON object with exactly these keys: competitors (array of objects with: name, location, services, price_range, rating, reviews_summary), trends (array of strings describing current market trends), offers (array of strings describing competitor promotions), pricing_insights (single string summarising the pricing landscape), loyalty_programs (array of strings describing loyalty schemes), recommendations (array of strings with actionable recommendations for ${salon.name}). Return ONLY the JSON object. No other text.`
-      
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/competitor-scan', {
         method: 'POST',
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
+          'Authorization': `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 4000,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          system: 'You are a salon business intelligence analyst. Return ONLY valid JSON. Start with { and end with }. No markdown, no backticks, no explanation.',
-          messages: [{ role: 'user', content: userMsg }],
-        }),
+        body: JSON.stringify({ prompt: userMsg, salonId: staffRecord.salon_id }),
       })
       
       if (!res.ok) { const t = await res.text(); throw new Error(`API error ${res.status}: ${t}`) }
