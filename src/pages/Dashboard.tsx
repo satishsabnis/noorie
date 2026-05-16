@@ -227,7 +227,29 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Appointment table (drilldown) ─────────────────────────────────────────────
 
-function ApptTable({ rows, showPayment = false }: { rows: typeof mockAllAppts; showPayment?: boolean }) {
+interface ApptRow {
+  client: string;
+  service: string;
+  staff: string;
+  time: string;
+  status: string;
+  walkIn: boolean;
+  payment: number;
+}
+
+function cardsToRows(cards: ApptFetched[]): ApptRow[] {
+  return cards.map(card => ({
+    client:  card.clientName,
+    service: card.services.map(s => s.name).join(', '),
+    staff:   card.staffName ?? 'Multiple staff',
+    time:    new Date(card.starts_at).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }),
+    status:  card.status,
+    walkIn:  card.is_walk_in,
+    payment: card.totalPaid,
+  }))
+}
+
+function ApptTable({ rows, showPayment = false }: { rows: ApptRow[]; showPayment?: boolean }) {
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -242,8 +264,8 @@ function ApptTable({ rows, showPayment = false }: { rows: typeof mockAllAppts; s
           </tr>
         </thead>
         <tbody>
-          {rows.map(a => (
-            <tr key={a.id}>
+          {rows.map((a, i) => (
+            <tr key={i}>
               <td style={TD}>{a.client}</td>
               <td style={TD}>{a.service}</td>
               <td style={TD}>{a.staff}</td>
@@ -260,7 +282,7 @@ function ApptTable({ rows, showPayment = false }: { rows: typeof mockAllAppts; s
 
 // ── Drill-down panel ──────────────────────────────────────────────────────────
 
-function DrillDownPanel({ drilldown, onBack, onDrilldown }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: DrillDown) => void }) {
+function DrillDownPanel({ drilldown, onBack, onDrilldown, cards }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: DrillDown) => void; cards: ApptFetched[] }) {
   return (
     <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: 16, margin: '0 16px 16px' }}>
 
@@ -292,11 +314,11 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown }: { drilldown: NonNull
         </div>
       )}
 
-      {drilldown === 'appointments' && <ApptTable rows={mockAllAppts} />}
+      {drilldown === 'appointments' && <ApptTable rows={cardsToRows(cards)} />}
 
-      {drilldown === 'walkins' && <ApptTable rows={mockAllAppts.filter(a => a.walkIn)} />}
+      {drilldown === 'walkins' && <ApptTable rows={cardsToRows(cards.filter(c => c.is_walk_in))} />}
 
-      {drilldown === 'completed' && <ApptTable rows={mockAllAppts.filter(a => a.status === 'completed')} showPayment />}
+      {drilldown === 'completed' && <ApptTable rows={cardsToRows(cards.filter(c => c.status === 'completed'))} showPayment />}
 
       {drilldown === 'toprunner' && (
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
@@ -1191,7 +1213,7 @@ export default function Dashboard() {
 
         {/* ── Main area ── */}
         {drilldown !== null ? (
-          <DrillDownPanel drilldown={drilldown} onBack={() => setDrilldown(null)} onDrilldown={setDrilldown} />
+          <DrillDownPanel drilldown={drilldown} onBack={() => setDrilldown(null)} onDrilldown={setDrilldown} cards={cards} />
         ) : (
           <>
             {/* Card grid */}
