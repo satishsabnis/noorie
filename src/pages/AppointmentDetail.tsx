@@ -523,12 +523,12 @@ export default function AppointmentDetail() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate(-1)}
             style={{ background: 'transparent', border: '0.5px solid #034325', color: '#034325', borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}
           >
             Back
           </button>
-          <span style={{ color: '#6b7280', fontSize: 12 }}>Dashboard › Appointment detail</span>
+          <span style={{ color: '#6b7280', fontSize: 12 }}>Appointment detail</span>
         </div>
 
         {loading ? (
