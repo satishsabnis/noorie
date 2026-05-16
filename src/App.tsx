@@ -15,6 +15,8 @@ import StaffForm from './pages/StaffForm'
 import Reports from './pages/Reports'
 import Admin from './pages/Admin'
 import StaffApp from './pages/StaffApp'
+import TestMarketPulse from './pages/TestMarketPulse'
+import NoorieBot from './components/NoorieBot'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -31,7 +33,7 @@ function OwnerRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { isLoading, initialize } = useAuthStore()
+  const { isLoading, initialize, isAuthenticated } = useAuthStore()
 
   useEffect(() => {
     initialize()
@@ -46,6 +48,7 @@ function AppRoutes() {
   }
 
   return (
+    <>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
@@ -106,8 +109,11 @@ function AppRoutes() {
           <Reports />
         </OwnerRoute>
       } />
+      <Route path="/test-market" element={<TestMarketPulse />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+    {isAuthenticated && <NoorieBot />}
+    </>
   )
 }
 

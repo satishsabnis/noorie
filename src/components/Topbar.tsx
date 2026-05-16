@@ -11,7 +11,6 @@ const NAV_LINKS = [
   { label: 'Staff',        to: '/staff' },
   { label: 'Reports',      to: '/reports' },
   { label: 'Admin',        to: '/admin'  },
-  { label: 'Ask Noorie',   to: '/ask' },
 ]
 
 function MenuItem({ label, color = '#1a1a1a', onClick }: { label: string; color?: string; onClick: () => void }) {
