@@ -247,7 +247,7 @@ export default function AppointmentDetail() {
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState<'cash' | 'card'>('cash')
 
-  const [allServices, setAllServices] = useState<{ id: string; name: string }[]>([])
+  const [allServices, setAllServices] = useState<{ id: string; name: string; price: number }[]>([])
   const [allStaff, setAllStaff] = useState<{ id: string; name: string }[]>([])
   const [addSvcId, setAddSvcId] = useState('')
   const [addStaffId, setAddStaffId] = useState('')
@@ -358,13 +358,13 @@ export default function AppointmentDetail() {
     let cancelled = false
 
     supabase.from('services')
-      .select('id, name')
+      .select('id, name, price')
       .eq('salon_id', salonId)
       .eq('is_active', true)
       .order('name', { ascending: true })
       .then(({ data }) => {
         if (cancelled || !data) return
-        setAllServices(data.map(s => ({ id: s.id as string, name: s.name as string })))
+        setAllServices(data.map(s => ({ id: s.id as string, name: s.name as string, price: (s.price as number) ?? 0 })))
       })
 
     supabase.from('staff')
@@ -586,7 +586,12 @@ export default function AppointmentDetail() {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <select
                     value={addSvcId}
-                    onChange={e => setAddSvcId(e.target.value)}
+                    onChange={e => {
+                      const nextId = e.target.value
+                      setAddSvcId(nextId)
+                      const selected = allServices.find(s => s.id === nextId)
+                      if (selected && selected.price > 0) setAddPrice(String(selected.price))
+                    }}
                     style={{ flex: 2, minWidth: 140, fontSize: 12, color: addSvcId ? '#000000' : '#9ca3af', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '6px 8px', outline: 'none', cursor: 'pointer', backgroundColor: '#ffffff' }}
                   >
                     <option value="">Select service…</option>
