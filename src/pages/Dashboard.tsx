@@ -282,7 +282,7 @@ function ApptTable({ rows, showPayment = false }: { rows: ApptRow[]; showPayment
 
 // ── Drill-down panel ──────────────────────────────────────────────────────────
 
-function DrillDownPanel({ drilldown, onBack, onDrilldown, cards }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: DrillDown) => void; cards: ApptFetched[] }) {
+function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: DrillDown) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[] }) {
   return (
     <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: 16, margin: '0 16px 16px' }}>
 
@@ -362,16 +362,24 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards }: { drilldown: 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr><th style={TH}>Service</th><th style={{ ...TH, textAlign: 'right' }}>AED</th></tr></thead>
               <tbody>
-                {mockRevenueByService.map(r => (
-                  <tr key={r.service}>
-                    <td style={TD}>{r.service}</td>
-                    <td style={{ ...TD, textAlign: 'right' }}>{r.amount.toFixed(2)}</td>
+                {revenueByService.length === 0 ? (
+                  <tr>
+                    <td style={{ ...TD, color: '#6b7280', fontStyle: 'italic' }} colSpan={2}>No revenue today</td>
                   </tr>
-                ))}
-                <tr>
-                  <td style={{ ...TD, fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>Total</td>
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>{mockRevenueByService.reduce((s, r) => s + r.amount, 0).toFixed(2)}</td>
-                </tr>
+                ) : (
+                  <>
+                    {revenueByService.map(r => (
+                      <tr key={r.service}>
+                        <td style={TD}>{r.service}</td>
+                        <td style={{ ...TD, textAlign: 'right' }}>{r.amount.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ ...TD, fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>Total</td>
+                      <td style={{ ...TD, textAlign: 'right', fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>{revenueByService.reduce((s, r) => s + r.amount, 0).toFixed(2)}</td>
+                    </tr>
+                  </>
+                )}
               </tbody>
             </table>
           </div>
@@ -380,16 +388,24 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards }: { drilldown: 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr><th style={TH}>Technician</th><th style={{ ...TH, textAlign: 'right' }}>AED</th></tr></thead>
               <tbody>
-                {mockRevenueByStaff.map(r => (
-                  <tr key={r.staff}>
-                    <td style={TD}>{r.staff}</td>
-                    <td style={{ ...TD, textAlign: 'right' }}>{r.amount.toFixed(2)}</td>
+                {revenueByStaff.length === 0 ? (
+                  <tr>
+                    <td style={{ ...TD, color: '#6b7280', fontStyle: 'italic' }} colSpan={2}>No revenue today</td>
                   </tr>
-                ))}
-                <tr>
-                  <td style={{ ...TD, fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>Total</td>
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>{mockRevenueByStaff.reduce((s, r) => s + r.amount, 0).toFixed(2)}</td>
-                </tr>
+                ) : (
+                  <>
+                    {revenueByStaff.map(r => (
+                      <tr key={r.staff}>
+                        <td style={TD}>{r.staff}</td>
+                        <td style={{ ...TD, textAlign: 'right' }}>{r.amount.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ ...TD, fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>Total</td>
+                      <td style={{ ...TD, textAlign: 'right', fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>{revenueByStaff.reduce((s, r) => s + r.amount, 0).toFixed(2)}</td>
+                    </tr>
+                  </>
+                )}
               </tbody>
             </table>
           </div>
@@ -969,6 +985,8 @@ export default function Dashboard() {
   const [cardsLoading, setCardsLoading] = useState(true)
   const [focusTick, setFocusTick] = useState(0)
   const [summaryRevenue,      setSummaryRevenue]      = useState({ total: 0, paymentsCount: 0 })
+  const [revenueByService,    setRevenueByService]    = useState<{ service: string; amount: number }[]>([])
+  const [revenueByStaff,      setRevenueByStaff]      = useState<{ staff: string; amount: number }[]>([])
   const [summaryAppointments, setSummaryAppointments] = useState({ total: 0, completed: 0, walkIns: 0, noShow: 0 })
   const [summaryTopRunner,    setSummaryTopRunner]    = useState<{ name: string; revenue: number; appointments: number } | null>(null)
   const [briefSlots,          setBriefSlots]          = useState<BriefSlot[]>([])
@@ -1024,6 +1042,8 @@ export default function Dashboard() {
           setCards([])
           setSummaryAppointments(summaryAppts)
           setSummaryRevenue({ total: 0, paymentsCount: 0 })
+          setRevenueByService([])
+          setRevenueByStaff([])
           setSummaryTopRunner(null)
           if (firstLoad) { setCardsLoading(false); firstLoad = false }
         }
@@ -1110,10 +1130,31 @@ export default function Dashboard() {
         }
       }
 
+      // Derive revenue-by-service and revenue-by-staff from today's completed appointment_services
+      const svcRevMap: Record<string, number> = {}
+      const staffRev2Map: Record<string, number> = {}
+      for (const row of svcRows ?? []) {
+        const apptId = row.appointment_id as string
+        if (!completedIds.has(apptId)) continue
+        const price = (row.price as number | null) ?? 0
+        const sName = (row.services as unknown as { name: string } | null)?.name || 'Unassigned'
+        const stName = (row.staff as unknown as { name: string } | null)?.name || 'Unassigned'
+        svcRevMap[sName]    = (svcRevMap[sName]    ?? 0) + price
+        staffRev2Map[stName] = (staffRev2Map[stName] ?? 0) + price
+      }
+      const revByService = Object.entries(svcRevMap)
+        .map(([service, amount]) => ({ service, amount: Math.round(amount * 100) / 100 }))
+        .sort((a, b) => b.amount - a.amount)
+      const revByStaff = Object.entries(staffRev2Map)
+        .map(([staff, amount]) => ({ staff, amount: Math.round(amount * 100) / 100 }))
+        .sort((a, b) => b.amount - a.amount)
+
       if (!cancelled) {
         setCards(withPayments)
         setSummaryAppointments(summaryAppts)
         setSummaryRevenue({ total: revTotal, paymentsCount: revCount })
+        setRevenueByService(revByService)
+        setRevenueByStaff(revByStaff)
         setSummaryTopRunner(topRunner)
         if (firstLoad) { setCardsLoading(false); firstLoad = false }
       }
@@ -1213,7 +1254,7 @@ export default function Dashboard() {
 
         {/* ── Main area ── */}
         {drilldown !== null ? (
-          <DrillDownPanel drilldown={drilldown} onBack={() => setDrilldown(null)} onDrilldown={setDrilldown} cards={cards} />
+          <DrillDownPanel drilldown={drilldown} onBack={() => setDrilldown(null)} onDrilldown={setDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} />
         ) : (
           <>
             {/* Card grid */}
