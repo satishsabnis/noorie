@@ -133,7 +133,7 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
       <img
         src={blueFlutelogo}
         alt="Blue Flute"
-        style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
+        style={{ width: 80, height: 80, objectFit: 'contain', flexShrink: 0 }}
       />
     </header>
   )
