@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, NavLink } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { supabase } from '../lib/supabase'
+import blueFlutelogo from '../assets/blueflute-logo.png'
 
 const NAV_LINKS = [
   { label: 'Dashboard',    to: '/dashboard' },
@@ -76,7 +77,7 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 6,
-              color: '#ffffff', fontSize: 13, fontWeight: 500,
+              color: '#ffffff', fontSize: 18, fontWeight: 700,
               padding: 0, whiteSpace: 'nowrap',
             }}
           >
@@ -129,18 +130,11 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
           )
         })}
       </nav>
-      {salonName && (
-        <div style={{
-          width: 32, height: 32, borderRadius: '50%',
-          backgroundColor: 'rgba(255,255,255,0.15)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#ffffff' }}>
-            {salonName.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase()}
-          </span>
-        </div>
-      )}
+      <img
+        src={blueFlutelogo}
+        alt="Blue Flute"
+        style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
+      />
     </header>
   )
 }
