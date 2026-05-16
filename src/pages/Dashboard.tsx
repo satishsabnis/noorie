@@ -45,6 +45,14 @@ interface BriefLapsedClient {
   clientId: string
 }
 
+interface BriefTopClient {
+  name: string
+  visits: number
+  spend: number
+  lastVisit: string
+  phone: string | null
+}
+
 interface BriefUnpaid {
   clientName: string
   phone: string
@@ -898,20 +906,73 @@ async function fetchBriefUnpaid(salonId: string): Promise<BriefUnpaid[]> {
   return results.slice(0, 3)
 }
 
+async function fetchBriefTopClient(salonId: string): Promise<BriefTopClient | null> {
+  const dubaiNow = new Date(Date.now() + 4 * 60 * 60 * 1000)
+  const ty = dubaiNow.getUTCFullYear()
+  const tm = dubaiNow.getUTCMonth()
+  const lastDay = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate()
+  const mm = String(tm + 1).padStart(2, '0')
+  const monthStart = `${ty}-${mm}-01T00:00:00+04:00`
+  const monthEnd   = `${ty}-${mm}-${String(lastDay).padStart(2, '0')}T23:59:59+04:00`
+
+  const { data: apptRows } = await supabase
+    .from('appointments')
+    .select('id, client_id, starts_at, clients!inner(name, phone)')
+    .eq('salon_id', salonId)
+    .eq('status', 'completed')
+    .gte('starts_at', monthStart)
+    .lte('starts_at', monthEnd)
+
+  if (!apptRows || apptRows.length === 0) return null
+
+  const apptIds = apptRows.map(a => a.id as string)
+  const { data: payRows } = await supabase
+    .from('payments')
+    .select('appointment_id, amount, status')
+    .in('appointment_id', apptIds)
+    .eq('status', 'completed')
+
+  const apptToClient: Record<string, string> = {}
+  for (const a of apptRows) apptToClient[a.id as string] = a.client_id as string
+
+  const map: Record<string, { name: string; phone: string | null; visits: Set<string>; spend: number; lastVisit: string }> = {}
+  for (const a of apptRows) {
+    const cid = a.client_id as string
+    const client = a.clients as unknown as { name: string; phone: string | null } | null
+    const starts = (a.starts_at as string | null) ?? ''
+    if (!map[cid]) map[cid] = { name: client?.name ?? 'Client', phone: client?.phone ?? null, visits: new Set(), spend: 0, lastVisit: '' }
+    map[cid].visits.add(a.id as string)
+    if (starts > map[cid].lastVisit) map[cid].lastVisit = starts
+  }
+  for (const p of payRows ?? []) {
+    const aid = p.appointment_id as string
+    const cid = apptToClient[aid]
+    if (!cid || !map[cid]) continue
+    map[cid].spend += (p.amount as number | null) ?? 0
+  }
+
+  const ranked = Object.values(map)
+    .map(v => ({ name: v.name, phone: v.phone, visits: v.visits.size, spend: Math.round(v.spend * 100) / 100, lastVisit: v.lastVisit }))
+    .sort((a, b) => b.spend - a.spend)
+
+  return ranked[0] ?? null
+}
+
 // ── Morning Brief component ───────────────────────────────────────────────────
 
 function MorningBrief({
-  slots, lapsedClient, unpaid, loading,
+  slots, lapsedClient, unpaid, topClient, loading,
   errors,
 }: {
   slots: BriefSlot[]
   lapsedClient: BriefLapsedClient | null
   unpaid: BriefUnpaid[]
+  topClient: BriefTopClient | null
   loading: boolean
-  errors: { slots: boolean; lapsed: boolean; unpaid: boolean }
+  errors: { slots: boolean; lapsed: boolean; unpaid: boolean; topClient: boolean }
 }) {
   const [dtLabel, setDtLabel] = useState(dubaiDateTimeLabel())
-  const [activeModal, setActiveModal] = useState<'slots' | 'lapsed' | 'unpaid' | null>(null)
+  const [activeModal, setActiveModal] = useState<'slots' | 'lapsed' | 'unpaid' | 'topClient' | null>(null)
 
   useEffect(() => {
     const t = setInterval(() => setDtLabel(dubaiDateTimeLabel()), 60_000)
@@ -933,6 +994,8 @@ function MorningBrief({
     ? "Today's appointment gaps"
     : activeModal === 'lapsed'
     ? 'Clients to call'
+    : activeModal === 'topClient'
+    ? "This month's top client"
     : 'Balance to collect'
 
   const unpaidTotal = unpaid.reduce((s, u) => s + u.amountOwed, 0)
@@ -1021,6 +1084,34 @@ function MorningBrief({
                   </div>
             )}
 
+            {/* Top client this month */}
+            {activeModal === 'topClient' && (
+              loading
+                ? <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>Loading...</p>
+                : errors.topClient
+                ? <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>Could not load data.</p>
+                : !topClient
+                ? <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>No completed appointments this month.</p>
+                : <div>
+                    <p style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: '#034325' }}>{topClient.name}</p>
+                    <p style={{ margin: '0 0 4px', fontSize: 13, color: '#6b7280' }}>{topClient.visits} visit{topClient.visits === 1 ? '' : 's'} this month</p>
+                    <p style={{ margin: '0 0 4px', fontSize: 13, color: '#6b7280' }}>AED {topClient.spend.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent this month</p>
+                    <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6b7280' }}>
+                      Last visit: {topClient.lastVisit
+                        ? new Date(topClient.lastVisit).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                        : '—'}
+                    </p>
+                    {topClient.phone && (
+                      <button
+                        onClick={() => window.open(`https://wa.me/${topClient.phone!.replace(/\D/g, '')}`, '_blank')}
+                        style={{ backgroundColor: '#25D366', color: '#ffffff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 13, cursor: 'pointer' }}
+                      >
+                        WhatsApp
+                      </button>
+                    )}
+                  </div>
+            )}
+
           </div>
         </div>
       )}
@@ -1041,8 +1132,8 @@ function MorningBrief({
           </p>
         </div>
 
-        {/* Three tappable tiles */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+        {/* Four tappable tiles */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
           <div onClick={() => setActiveModal('slots')} style={tileStyle}>
             <p style={{ fontSize: 13, fontWeight: 500, color: '#ffffff', margin: 0 }}>Today's appointment gaps</p>
           </div>
@@ -1051,6 +1142,9 @@ function MorningBrief({
           </div>
           <div onClick={() => setActiveModal('unpaid')} style={tileStyle}>
             <p style={{ fontSize: 13, fontWeight: 500, color: '#ffffff', margin: 0 }}>Balance to collect</p>
+          </div>
+          <div onClick={() => setActiveModal('topClient')} style={tileStyle}>
+            <p style={{ fontSize: 13, fontWeight: 500, color: '#ffffff', margin: 0 }}>This month's top client</p>
           </div>
         </div>
       </div>
@@ -1083,8 +1177,9 @@ export default function Dashboard() {
   const [briefSlots,          setBriefSlots]          = useState<BriefSlot[]>([])
   const [briefLapsedClient,   setBriefLapsedClient]   = useState<BriefLapsedClient | null>(null)
   const [briefUnpaid,         setBriefUnpaid]         = useState<BriefUnpaid[]>([])
+  const [briefTopClient,      setBriefTopClient]      = useState<BriefTopClient | null>(null)
   const [briefLoading,        setBriefLoading]        = useState(true)
-  const [briefErrors,         setBriefErrors]         = useState({ slots: false, lapsed: false, unpaid: false })
+  const [briefErrors,         setBriefErrors]         = useState({ slots: false, lapsed: false, unpaid: false, topClient: false })
 
   // Re-fetch whenever the window regains focus (e.g. navigating back from appointment detail)
   useEffect(() => {
@@ -1410,16 +1505,18 @@ export default function Dashboard() {
       const salonId = staffRecord?.salon_id
       if (!salonId || cancelled) return
       setBriefLoading(true)
-      const [slotsRes, lapsedRes, unpaidRes] = await Promise.all([
+      const [slotsRes, lapsedRes, unpaidRes, topClientRes] = await Promise.all([
         fetchBriefSlots(salonId).then(d => ({ d, e: false })).catch(() => ({ d: [] as BriefSlot[], e: true })),
         fetchBriefLapsedClient(salonId).then(d => ({ d, e: false })).catch(() => ({ d: null as BriefLapsedClient | null, e: true })),
         fetchBriefUnpaid(salonId).then(d => ({ d, e: false })).catch(() => ({ d: [] as BriefUnpaid[], e: true })),
+        fetchBriefTopClient(salonId).then(d => ({ d, e: false })).catch(() => ({ d: null as BriefTopClient | null, e: true })),
       ])
       if (!cancelled) {
         setBriefSlots(slotsRes.d)
         setBriefLapsedClient(lapsedRes.d)
         setBriefUnpaid(unpaidRes.d)
-        setBriefErrors({ slots: slotsRes.e, lapsed: lapsedRes.e, unpaid: unpaidRes.e })
+        setBriefTopClient(topClientRes.d)
+        setBriefErrors({ slots: slotsRes.e, lapsed: lapsedRes.e, unpaid: unpaidRes.e, topClient: topClientRes.e })
         setBriefLoading(false)
       }
     }
@@ -1460,6 +1557,7 @@ export default function Dashboard() {
           slots={briefSlots}
           lapsedClient={briefLapsedClient}
           unpaid={briefUnpaid}
+          topClient={briefTopClient}
           loading={briefLoading}
           errors={briefErrors}
         />
