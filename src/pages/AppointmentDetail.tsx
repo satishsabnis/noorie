@@ -247,6 +247,13 @@ export default function AppointmentDetail() {
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState<'cash' | 'card'>('cash')
 
+  const [allServices, setAllServices] = useState<{ id: string; name: string }[]>([])
+  const [allStaff, setAllStaff] = useState<{ id: string; name: string }[]>([])
+  const [addSvcId, setAddSvcId] = useState('')
+  const [addStaffId, setAddStaffId] = useState('')
+  const [addPrice, setAddPrice] = useState('')
+  const [addingSvc, setAddingSvc] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [pendingPhoto, setPendingPhoto] = useState<{ serviceId: string; field: 'before_photos' | 'after_photos' } | null>(null)
 
@@ -345,6 +352,35 @@ export default function AppointmentDetail() {
     return () => { cancelled = true }
   }, [id, refreshTick])
 
+  useEffect(() => {
+    const salonId = appt?.salon_id
+    if (!salonId) return
+    let cancelled = false
+
+    supabase.from('services')
+      .select('id, name')
+      .eq('salon_id', salonId)
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        setAllServices(data.map(s => ({ id: s.id as string, name: s.name as string })))
+      })
+
+    supabase.from('staff')
+      .select('id, name')
+      .eq('salon_id', salonId)
+      .eq('is_active', true)
+      .neq('role', 'owner')
+      .order('name', { ascending: true })
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        setAllStaff(data.map(s => ({ id: s.id as string, name: s.name as string })))
+      })
+
+    return () => { cancelled = true }
+  }, [appt?.salon_id])
+
   async function handleStartService(serviceId: string) {
     setSaving(true)
     const now = new Date().toISOString()
@@ -412,6 +448,31 @@ export default function AppointmentDetail() {
     }
     setSaving(false)
     setPayAmount('')
+    refresh()
+  }
+
+  async function handleAddService() {
+    if (!appt) return
+    if (!addSvcId || !addStaffId) return
+    const priceNum = parseFloat(addPrice)
+    if (isNaN(priceNum) || priceNum < 0) return
+    setAddingSvc(true)
+    const { error } = await supabase.from('appointment_services').insert({
+      appointment_id: appt.id,
+      service_id: addSvcId,
+      staff_id: addStaffId,
+      price: priceNum,
+      status: 'pending',
+    })
+    if (error) {
+      console.error('[AppointmentDetail] handleAddService error:', error)
+      setAddingSvc(false)
+      return
+    }
+    setAddSvcId('')
+    setAddStaffId('')
+    setAddPrice('')
+    setAddingSvc(false)
     refresh()
   }
 
@@ -518,6 +579,60 @@ export default function AppointmentDetail() {
                 onPhoto={field => triggerPhoto(svc.id, field)}
               />
             ))}
+
+            {(appt.status === 'scheduled' || appt.status === 'in_progress') && (
+              <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14 }}>
+                <p style={{ fontSize: 11, fontWeight: 500, color: '#034325', margin: '0 0 10px' }}>Add service</p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select
+                    value={addSvcId}
+                    onChange={e => setAddSvcId(e.target.value)}
+                    style={{ flex: 2, minWidth: 140, fontSize: 12, color: addSvcId ? '#000000' : '#9ca3af', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '6px 8px', outline: 'none', cursor: 'pointer', backgroundColor: '#ffffff' }}
+                  >
+                    <option value="">Select service…</option>
+                    {allServices.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={addStaffId}
+                    onChange={e => setAddStaffId(e.target.value)}
+                    style={{ flex: 2, minWidth: 120, fontSize: 12, color: addStaffId ? '#000000' : '#9ca3af', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '6px 8px', outline: 'none', cursor: 'pointer', backgroundColor: '#ffffff' }}
+                  >
+                    <option value="">Select staff…</option>
+                    {allStaff.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={addPrice}
+                    onChange={e => setAddPrice(e.target.value)}
+                    placeholder="Price"
+                    style={{ width: 80, fontSize: 12, color: '#000000', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '6px 8px', outline: 'none', textAlign: 'right', backgroundColor: '#ffffff' }}
+                  />
+                  <button
+                    onClick={handleAddService}
+                    disabled={addingSvc || !addSvcId || !addStaffId || !addPrice.trim()}
+                    style={{
+                      backgroundColor: 'transparent',
+                      color: '#034325',
+                      border: '0.5px solid #034325',
+                      borderRadius: 6,
+                      padding: '6px 14px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: addingSvc || !addSvcId || !addStaffId || !addPrice.trim() ? 'not-allowed' : 'pointer',
+                      opacity: addingSvc || !addSvcId || !addStaffId || !addPrice.trim() ? 0.5 : 1,
+                    }}
+                  >
+                    {addingSvc ? '…' : 'Add'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {(!allSvcCompleted || isTerminal) ? (
               <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '14px 16px', opacity: 0.5 }}>
