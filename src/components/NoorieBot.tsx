@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../stores/authStore'
+import { supabase } from '../lib/supabase'
 import newlookLogo from '../assets/newlook-logo.jpg'
 
 interface Message {
@@ -18,21 +19,243 @@ export default function NoorieBot() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [isListening, setIsListening] = useState(false)
+  const [salonContext, setSalonContext] = useState<string>('')
+  const [contextLoading, setContextLoading] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
+  const prevContextLoadingRef = useRef(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
     setMessages([{
       role: 'noorie',
-      text: `Hi ${ownerName}! I am Noorie. What can I help you with today?`,
+      text: `Hi ${ownerName}! I am Noorie. Give me a moment while I load your salon data...`,
     }])
   }, [ownerName])
 
   useEffect(() => {
+    if (prevContextLoadingRef.current && !contextLoading) {
+      setMessages(m => [...m, { role: 'noorie', text: 'Ready! Ask me anything about your salon.' }])
+    }
+    prevContextLoadingRef.current = contextLoading
+  }, [contextLoading])
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
+
+  useEffect(() => {
+    if (isOpen && !salonContext) {
+      fetchSalonContext()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen])
+
+  const fetchSalonContext = async () => {
+    if (!staffRecord?.salon_id) return
+    setContextLoading(true)
+    const salonId = staffRecord.salon_id
+
+    const today = new Date()
+    const dubaiOffset = 4 * 60
+    const dubaiNow = new Date(today.getTime() + (dubaiOffset - today.getTimezoneOffset()) * 60000)
+    const todayYMD = dubaiNow.toISOString().split('T')[0]
+    const todayStart = `${todayYMD}T00:00:00+04:00`
+    const todayEnd = `${todayYMD}T23:59:59+04:00`
+
+    const weekDay = (dubaiNow.getUTCDay() + 6) % 7
+    const mondayMs = dubaiNow.getTime() - weekDay * 86400000
+    const mondayYMD = new Date(mondayMs).toISOString().split('T')[0]
+    const weekStart = `${mondayYMD}T00:00:00+04:00`
+    const sundayYMD = new Date(mondayMs + 6 * 86400000).toISOString().split('T')[0]
+    const weekEnd = `${sundayYMD}T23:59:59+04:00`
+
+    const month = dubaiNow.getUTCMonth()
+    const year = dubaiNow.getUTCFullYear()
+    const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01T00:00:00+04:00`
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+    const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59+04:00`
+    const yearStart = `${year}-01-01T00:00:00+04:00`
+    const yearEnd = `${year}-12-31T23:59:59+04:00`
+
+    try {
+      const [apptRes, todayPayRes, weekPayRes, monthPayRes, yearPayRes, unpaidRes, expensesRes, clientsRes] = await Promise.all([
+
+        // 1. Today's appointments
+        supabase.from('appointments')
+          .select('id, starts_at, status, is_walk_in, clients(name), staff(name), appointment_services(price, services(name))')
+          .eq('salon_id', salonId)
+          .gte('starts_at', todayStart)
+          .lte('starts_at', todayEnd)
+          .order('starts_at'),
+
+        // 2. Today's payments
+        supabase.from('payments')
+          .select('amount, method')
+          .eq('salon_id', salonId)
+          .eq('status', 'completed')
+          .gte('created_at', todayStart)
+          .lte('created_at', todayEnd),
+
+        // 3. This week's payments
+        supabase.from('payments')
+          .select('amount')
+          .eq('salon_id', salonId)
+          .eq('status', 'completed')
+          .gte('created_at', weekStart)
+          .lte('created_at', weekEnd),
+
+        // 4. This month's payments
+        supabase.from('payments')
+          .select('amount')
+          .eq('salon_id', salonId)
+          .eq('status', 'completed')
+          .gte('created_at', monthStart)
+          .lte('created_at', monthEnd),
+
+        // 5. This year's payments
+        supabase.from('payments')
+          .select('amount')
+          .eq('salon_id', salonId)
+          .eq('status', 'completed')
+          .gte('created_at', yearStart)
+          .lte('created_at', yearEnd),
+
+        // 6. Outstanding unpaid appointments
+        supabase.from('appointments')
+          .select('id, starts_at, clients(name), appointment_services(price)')
+          .eq('salon_id', salonId)
+          .eq('status', 'completed')
+          .order('starts_at', { ascending: false })
+          .limit(20),
+
+        // 7. This month's expenses
+        supabase.from('salon_expenses')
+          .select('category, name, amount')
+          .eq('salon_id', salonId)
+          .eq('month', month + 1)
+          .eq('year', year),
+
+        // 8. Top clients this month
+        supabase.from('appointments')
+          .select('client_id, clients(name), payments(amount, status)')
+          .eq('salon_id', salonId)
+          .eq('status', 'completed')
+          .gte('starts_at', monthStart)
+          .lte('starts_at', monthEnd),
+      ])
+
+      // Build today's appointment summary
+      const appts = apptRes.data ?? []
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const apptLines = appts.map((a: any) => {
+        const clientName = a.clients?.name ?? 'Walk-in'
+        const staffName = a.staff?.name ?? 'Unassigned'
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const services = (a.appointment_services ?? []).map((s: any) => s.services?.name).filter(Boolean).join(', ')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const totalPaid = (a.appointment_services ?? []).reduce((sum: number, s: any) => sum + (s.price ?? 0), 0)
+        const time = new Date(a.starts_at).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })
+        return `  - ${time}: ${clientName} with ${staffName} — ${services || 'no services'} (AED ${totalPaid}, status: ${a.status})`
+      }).join('\n')
+
+      // Revenue totals
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const todayRev = (todayPayRes.data ?? []).reduce((s: number, p: any) => s + (p.amount ?? 0), 0)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const weekRev = (weekPayRes.data ?? []).reduce((s: number, p: any) => s + (p.amount ?? 0), 0)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const monthRev = (monthPayRes.data ?? []).reduce((s: number, p: any) => s + (p.amount ?? 0), 0)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const yearRev = (yearPayRes.data ?? []).reduce((s: number, p: any) => s + (p.amount ?? 0), 0)
+
+      // Unpaid balances — find appointments where sum of payments < sum of service prices
+      const unpaidAppts = unpaidRes.data ?? []
+      const unpaidLines: string[] = []
+      for (const a of unpaidAppts) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const totalDue = ((a as any).appointment_services ?? []).reduce((s: number, sv: any) => s + (sv.price ?? 0), 0)
+        if (totalDue > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const clientName = (a as any).clients?.name ?? 'Unknown'
+          const date = new Date(a.starts_at as string).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', timeZone: 'Asia/Dubai' })
+          unpaidLines.push(`  - ${clientName}: AED ${totalDue} (${date})`)
+        }
+      }
+
+      // Expenses
+      const expenses = expensesRes.data ?? []
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fixedTotal = expenses.filter((e: any) => e.category === 'fixed').reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const variableTotal = expenses.filter((e: any) => e.category === 'variable').reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const oneTimeTotal = expenses.filter((e: any) => e.category === 'one_time').reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const expenseLines = expenses.map((e: any) => `  - ${e.name}: AED ${e.amount} (${e.category})`).join('\n')
+
+      // Top clients this month
+      const clientSpend: Record<string, number> = {}
+      for (const a of (clientsRes.data ?? [])) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const name = (a as any).clients?.name ?? 'Unknown'
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const paid = ((a as any).payments ?? []).filter((p: any) => p.status === 'completed').reduce((s: number, p: any) => s + (p.amount ?? 0), 0)
+        clientSpend[name] = (clientSpend[name] ?? 0) + paid
+      }
+      const topClients = Object.entries(clientSpend).sort((a, b) => b[1] - a[1]).slice(0, 5)
+      const topClientLines = topClients.map(([name, spend], i) => `  ${i + 1}. ${name}: AED ${spend}`).join('\n')
+
+      // Top runner today
+      const staffRevToday: Record<string, number> = {}
+      for (const a of appts) {
+        if (a.status !== 'completed') continue
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const name = (a as any).staff?.name ?? 'Unassigned'
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rev = ((a as any).appointment_services ?? []).reduce((s: number, sv: any) => s + (sv.price ?? 0), 0)
+        staffRevToday[name] = (staffRevToday[name] ?? 0) + rev
+      }
+      const topRunnerToday = Object.entries(staffRevToday).sort((a, b) => b[1] - a[1])[0]
+
+      // Build the context string
+      const context = `
+SALON DATA FOR ${staffRecord?.name ?? 'Owner'} — ${new Date().toLocaleDateString('en-AE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Dubai' })}
+
+REVENUE:
+- Today: AED ${todayRev.toFixed(2)}
+- This week (Mon-Sun): AED ${weekRev.toFixed(2)}
+- This month: AED ${monthRev.toFixed(2)}
+- This year: AED ${yearRev.toFixed(2)}
+
+TODAY'S APPOINTMENTS (${appts.length} total):
+${apptLines || '  No appointments today'}
+
+TOP RUNNER TODAY: ${topRunnerToday ? `${topRunnerToday[0]} with AED ${topRunnerToday[1]}` : 'No completed appointments today'}
+
+TOP 5 CLIENTS THIS MONTH:
+${topClientLines || '  No data'}
+
+OUTSTANDING BALANCES (recent completed appointments with service prices):
+${unpaidLines.slice(0, 5).join('\n') || '  None found'}
+
+THIS MONTH EXPENSES:
+- Fixed: AED ${fixedTotal}
+- Variable: AED ${variableTotal}
+- One-time: AED ${oneTimeTotal}
+- Total: AED ${(fixedTotal + variableTotal + oneTimeTotal).toFixed(2)}
+${expenseLines ? '\nExpense details:\n' + expenseLines : ''}
+`.trim()
+
+      setSalonContext(context)
+    } catch (err) {
+      console.error('NoorieBot context fetch failed:', err)
+      setSalonContext('Salon data could not be loaded. Answer based on general salon knowledge only.')
+    } finally {
+      setContextLoading(false)
+    }
+  }
 
   async function handleSend() {
     const trimmed = input.trim()
@@ -45,10 +268,15 @@ export default function NoorieBot() {
     setLoading(true)
 
     try {
-      const today = new Date().toLocaleDateString('en-GB', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-      })
-      const system = `You are Noorie, an AI assistant for ${salonName ?? 'your'} salon. You help the salon owner with questions about their business. Be concise, friendly, and helpful. Answer in 2-3 sentences maximum unless more detail is needed. Today's date is ${today}.`
+      const systemPrompt = `You are Noorie, the AI assistant for ${salonName ?? 'this salon'}. You have access to real-time salon data shown below. Answer questions directly and concisely using this data. Be friendly and specific — use actual names, dates, and AED amounts from the data. If the answer is not in the data, say so honestly.
+
+${salonContext || 'Salon data is loading...'}
+
+Rules:
+- Always answer in 1-3 sentences unless more detail is genuinely needed
+- Use AED for all currency amounts
+- Use Dubai timezone for all times and dates
+- Never invent data that is not in the context above`
 
       const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined
       if (!apiKey) throw new Error('VITE_ANTHROPIC_API_KEY missing')
@@ -64,7 +292,7 @@ export default function NoorieBot() {
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 1000,
-          system,
+          system: systemPrompt,
           messages: next.map(m => ({
             role: m.role === 'noorie' ? 'assistant' : 'user',
             content: m.text,
