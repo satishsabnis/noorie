@@ -59,7 +59,7 @@ interface ConfigData {
   supervisor_view_financials: boolean
 }
 
-interface ServiceRow { id: string; name: string; duration_minutes: number; active: boolean }
+interface ServiceRow { id: string; name: string; duration_minutes: number; active: boolean; price: number; category: string }
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -445,23 +445,39 @@ function SectionServices({ salonId }: { salonId: string }) {
   const [editId, setEditId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editDur, setEditDur] = useState('')
+  const [editPrice, setEditPrice] = useState('')
+  const [editCategory, setEditCategory] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteBlocked, setDeleteBlocked] = useState(false)
   const [newName, setNewName] = useState('')
   const [newDur, setNewDur] = useState('')
+  const [newPrice, setNewPrice] = useState<number>(0)
+  const [newCategory, setNewCategory] = useState('')
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function load() {
-    const { data } = await supabase.from('services').select('id, name, duration_minutes, is_active').eq('salon_id', salonId).order('name')
-    setServices((data ?? []).map(s => ({ id: s.id as string, name: s.name as string, duration_minutes: (s.duration_minutes as number) ?? 0, active: (s.is_active as boolean) ?? true })))
+    const { data } = await supabase.from('services').select('id, name, duration_minutes, is_active, price, category').eq('salon_id', salonId).order('name')
+    setServices((data ?? []).map(s => ({
+      id: s.id as string,
+      name: s.name as string,
+      duration_minutes: (s.duration_minutes as number) ?? 0,
+      active: (s.is_active as boolean) ?? true,
+      price: (s.price as number) ?? 0,
+      category: (s.category as string) ?? '',
+    })))
     setLoading(false)
   }
   useEffect(() => { load() }, [salonId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveEdit(id: string) {
     try {
-      const { data, error } = await supabase.from('services').update({ name: editName.trim(), duration_minutes: parseInt(editDur) }).eq('id', id).select()
+      const { data, error } = await supabase.from('services').update({
+        name: editName.trim(),
+        duration_minutes: parseInt(editDur),
+        price: parseFloat(editPrice) || 0,
+        category: editCategory.trim(),
+      }).eq('id', id).select()
       console.log('[Admin] Services saveEdit result:', { data, error })
       if (error) { console.error('[Admin] Services saveEdit error:', error); setError(error.message); return }
       setEditId(null); load()
@@ -501,9 +517,16 @@ function SectionServices({ salonId }: { salonId: string }) {
     if (!newName.trim() || !newDur.trim()) return
     setAdding(true)
     try {
-      const { error } = await supabase.from('services').insert({ salon_id: salonId, name: newName.trim(), duration_minutes: parseInt(newDur), price: 0, is_active: true })
+      const { error } = await supabase.from('services').insert({
+        salon_id: salonId,
+        name: newName.trim(),
+        duration_minutes: parseInt(newDur),
+        price: newPrice,
+        category: newCategory.trim(),
+        is_active: true,
+      })
       if (error) { console.error('[Admin] Services addService error:', error); setError(error.message); setAdding(false); return }
-      setNewName(''); setNewDur(''); setAdding(false); load()
+      setNewName(''); setNewDur(''); setNewPrice(0); setNewCategory(''); setAdding(false); load()
     } catch (err) {
       console.error('[Admin] Services addService exception:', err)
       setError('Unexpected error — check console.'); setAdding(false)
@@ -518,10 +541,23 @@ function SectionServices({ salonId }: { salonId: string }) {
       <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Services</p>
       {error && <p style={{ fontSize: 12, color: '#991b1b', margin: '0 0 10px' }}>{error}</p>}
 
+      <div style={cardStyle}>
+        <p style={subHeading}>Add new service</p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ flex: 2, minWidth: 140 }}><label style={labelStyle}>Service name</label><input value={newName} onChange={e => setNewName(e.target.value)} style={inputStyle} placeholder="Service name" /></div>
+          <div style={{ flex: 1, minWidth: 110 }}><label style={labelStyle}>Category</label><input value={newCategory} onChange={e => setNewCategory(e.target.value)} style={inputStyle} placeholder="Category e.g. Hair, Nails, Skin" /></div>
+          <div style={{ flex: 1, minWidth: 90 }}><label style={labelStyle}>Duration (min)</label><input value={newDur} onChange={e => setNewDur(e.target.value)} type="number" style={inputStyle} placeholder="60" /></div>
+          <div style={{ flex: 1, minWidth: 90 }}><label style={labelStyle}>Price (AED)</label><input value={newPrice} onChange={e => setNewPrice(parseFloat(e.target.value) || 0)} type="number" style={inputStyle} placeholder="Price (AED)" /></div>
+          <button onClick={addService} disabled={adding || !newName.trim() || !newDur.trim()} style={{ backgroundColor: !newName.trim() || !newDur.trim() ? '#e0e0e0' : '#034325', color: !newName.trim() || !newDur.trim() ? '#9ca3af' : '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontSize: 12, fontWeight: 500, cursor: !newName.trim() || !newDur.trim() ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
+            {adding ? '…' : '+ Add'}
+          </button>
+        </div>
+      </div>
+
       <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
         {loading ? <p style={{ padding: 24, textAlign: 'center', fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={TH}>Service</th><th style={TH}>Duration</th><th style={TH}>Status</th><th style={TH}>Actions</th></tr></thead>
+            <thead><tr><th style={TH}>Service</th><th style={TH}>Category</th><th style={TH}>Duration</th><th style={TH}>Price (AED)</th><th style={TH}>Status</th><th style={TH}>Actions</th></tr></thead>
             <tbody>
               {services.map(svc => (
                 <tr key={svc.id} style={{ opacity: svc.active ? 1 : 0.5 }}>
@@ -532,8 +568,18 @@ function SectionServices({ salonId }: { salonId: string }) {
                   </td>
                   <td style={TD}>
                     {editId === svc.id
+                      ? <input value={editCategory} onChange={e => setEditCategory(e.target.value)} style={{ ...inputStyle, width: 120 }} placeholder="Category" />
+                      : (svc.category || '—')}
+                  </td>
+                  <td style={TD}>
+                    {editId === svc.id
                       ? <input value={editDur} onChange={e => setEditDur(e.target.value)} type="number" style={{ ...inputStyle, width: 80 }} />
                       : `${svc.duration_minutes} min`}
+                  </td>
+                  <td style={TD}>
+                    {editId === svc.id
+                      ? <input value={editPrice} onChange={e => setEditPrice(e.target.value)} type="number" style={{ ...inputStyle, width: 90 }} />
+                      : svc.price.toLocaleString()}
                   </td>
                   <td style={TD}>
                     {!svc.active && <span style={{ fontSize: 10, backgroundColor: '#f3f4f6', color: '#6b7280', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>Inactive</span>}
@@ -547,7 +593,7 @@ function SectionServices({ salonId }: { salonId: string }) {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => { console.log('Edit clicked:', svc.id); setEditId(svc.id); setEditName(svc.name); setEditDur(String(svc.duration_minutes)) }} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Edit</button>
+                        <button onClick={() => { console.log('Edit clicked:', svc.id); setEditId(svc.id); setEditName(svc.name); setEditDur(String(svc.duration_minutes)); setEditPrice(String(svc.price)); setEditCategory(svc.category) }} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Edit</button>
                         <button onClick={() => { console.log('Suspend clicked:', svc.id); toggleActive(svc.id, svc.active) }} style={{ fontSize: 11, border: `0.5px solid ${svc.active ? '#6b7280' : '#034325'}`, color: svc.active ? '#6b7280' : '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>{svc.active ? 'Suspend' : 'Resume'}</button>
                         <button onClick={() => { setDeleteId(svc.id); setDeleteBlocked(false); setError(null) }} style={{ fontSize: 11, border: '0.5px solid #991b1b', color: '#991b1b', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Delete</button>
                       </div>
@@ -570,17 +616,6 @@ function SectionServices({ salonId }: { salonId: string }) {
             </tbody>
           </table>
         )}
-      </div>
-
-      <div style={cardStyle}>
-        <p style={subHeading}>Add new service</p>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-          <div style={{ flex: 2 }}><label style={labelStyle}>Service name</label><input value={newName} onChange={e => setNewName(e.target.value)} style={inputStyle} placeholder="Service name" /></div>
-          <div style={{ flex: 1 }}><label style={labelStyle}>Duration (min)</label><input value={newDur} onChange={e => setNewDur(e.target.value)} type="number" style={inputStyle} placeholder="60" /></div>
-          <button onClick={addService} disabled={adding || !newName.trim() || !newDur.trim()} style={{ backgroundColor: !newName.trim() || !newDur.trim() ? '#e0e0e0' : '#034325', color: !newName.trim() || !newDur.trim() ? '#9ca3af' : '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontSize: 12, fontWeight: 500, cursor: !newName.trim() || !newDur.trim() ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
-            {adding ? '…' : '+ Add'}
-          </button>
-        </div>
       </div>
     </div>
   )
