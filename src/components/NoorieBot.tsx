@@ -743,7 +743,10 @@ export default function NoorieBot() {
           }),
         })
 
-        if (!res.ok) throw new Error(`API error ${res.status}`)
+        if (!res.ok) {
+          const body = await res.text()
+          throw new Error(`API error ${res.status}: ${body}`)
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const data: any = await res.json()
 
@@ -785,7 +788,8 @@ export default function NoorieBot() {
 
     } catch (err) {
       console.error('[NoorieBot] handleSend error:', err)
-      setMessages(m => [...m, { role: 'noorie', text: 'Sorry, I could not connect. Please try again.' }])
+      const errMsg = err instanceof Error ? err.message : String(err)
+      setMessages(m => [...m, { role: 'noorie', text: `Debug: ${errMsg}` }])
     } finally {
       setLoading(false)
     }
