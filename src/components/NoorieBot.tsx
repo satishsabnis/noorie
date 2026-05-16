@@ -735,7 +735,7 @@ export default function NoorieBot() {
             'anthropic-dangerous-direct-browser-access': 'true',
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-6-20250514',
+            model: 'claude-sonnet-4-5-20251001',
             max_tokens: 2000,
             system: systemPrompt,
             tools: TOOLS_ARRAY,
