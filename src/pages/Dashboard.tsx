@@ -282,7 +282,7 @@ function ApptTable({ rows, showPayment = false }: { rows: ApptRow[]; showPayment
 
 // ── Drill-down panel ──────────────────────────────────────────────────────────
 
-function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff, weeklyRevenue, monthlyRevenue, yearlyRevenue }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: DrillDown) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[]; weeklyRevenue: { day: string; appointments: number; revenue: number; past: boolean }[]; monthlyRevenue: { period: string; appointments: number; revenue: number; past: boolean }[]; yearlyRevenue: { month: string; appointments: number; revenue: number; past: boolean }[] }) {
+function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff, weeklyRevenue, monthlyRevenue, yearlyRevenue }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: Exclude<DrillDown, null>) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[]; weeklyRevenue: { day: string; appointments: number; revenue: number; past: boolean }[]; monthlyRevenue: { period: string; appointments: number; revenue: number; past: boolean }[]; yearlyRevenue: { month: string; appointments: number; revenue: number; past: boolean }[] }) {
   return (
     <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: 16, margin: '0 16px 16px' }}>
 
@@ -1009,7 +1009,11 @@ function MorningBrief({
 export default function Dashboard() {
   const navigate = useNavigate()
   const staffRecord = useAuthStore(s => s.staffRecord)
-  const [drilldown, setDrilldown] = useState<DrillDown>(null)
+  const [drilldownStack, setDrilldownStack] = useState<Exclude<DrillDown, null>[]>([])
+  const drilldown: DrillDown = drilldownStack.length > 0 ? drilldownStack[drilldownStack.length - 1] : null
+  const pushDrilldown = (d: Exclude<DrillDown, null>) => setDrilldownStack(s => [...s, d])
+  const popDrilldown = () => setDrilldownStack(s => s.slice(0, -1))
+  const resetDrilldown = () => setDrilldownStack([])
   const [cards, setCards] = useState<ApptFetched[]>([])
   const [cardsLoading, setCardsLoading] = useState(true)
   const [focusTick, setFocusTick] = useState(0)
@@ -1344,7 +1348,7 @@ export default function Dashboard() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
 
-      <Topbar onDashboardClick={() => setDrilldown(null)} />
+      <Topbar onDashboardClick={resetDrilldown} />
 
       <div style={{ marginTop: 52, flex: 1, display: 'flex', flexDirection: 'column' }}>
 
@@ -1361,12 +1365,12 @@ export default function Dashboard() {
         <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
           <SummaryCard
             label="Revenue today"
-            value={<Clickable onClick={() => setDrilldown('revenue-today')}>AED {summaryRevenue.total.toLocaleString()}</Clickable>}
+            value={<Clickable onClick={() => pushDrilldown('revenue-today')}>AED {summaryRevenue.total.toLocaleString()}</Clickable>}
             sub={<span style={{ color: '#6b7280', fontSize: 11 }}>{summaryRevenue.paymentsCount} payments collected</span>}
           />
           <SummaryCard
             label="Top runner today"
-            value={<Clickable onClick={() => setDrilldown('toprunner')}><span style={{ fontSize: 18 }}>{summaryTopRunner?.name ?? '—'}</span></Clickable>}
+            value={<Clickable onClick={() => pushDrilldown('toprunner')}><span style={{ fontSize: 18 }}>{summaryTopRunner?.name ?? '—'}</span></Clickable>}
             sub={<span style={{ color: '#6b7280', fontSize: 11 }}>AED {summaryTopRunner?.revenue ?? 0} · {summaryTopRunner?.appointments ?? 0} appointments</span>}
           />
           <SummaryCard
@@ -1379,12 +1383,12 @@ export default function Dashboard() {
                 + New
               </button>
             }
-            value={<Clickable onClick={() => setDrilldown('appointments')}>{summaryAppointments.total}</Clickable>}
+            value={<Clickable onClick={() => pushDrilldown('appointments')}>{summaryAppointments.total}</Clickable>}
             sub={
               <span style={{ fontSize: 11 }}>
-                <Clickable onClick={() => setDrilldown('completed')}><span style={{ color: '#034325' }}>{summaryAppointments.completed} completed</span></Clickable>
+                <Clickable onClick={() => pushDrilldown('completed')}><span style={{ color: '#034325' }}>{summaryAppointments.completed} completed</span></Clickable>
                 <span style={{ color: '#6b7280' }}> · </span>
-                <Clickable onClick={() => setDrilldown('walkins')}><span style={{ color: '#034325' }}>{summaryAppointments.walkIns} walk-ins</span></Clickable>
+                <Clickable onClick={() => pushDrilldown('walkins')}><span style={{ color: '#034325' }}>{summaryAppointments.walkIns} walk-ins</span></Clickable>
                 <span style={{ color: '#6b7280' }}> · {summaryAppointments.noShow} no-show</span>
               </span>
             }
@@ -1393,7 +1397,7 @@ export default function Dashboard() {
 
         {/* ── Main area ── */}
         {drilldown !== null ? (
-          <DrillDownPanel drilldown={drilldown} onBack={() => setDrilldown(null)} onDrilldown={setDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} weeklyRevenue={weeklyRevenue} monthlyRevenue={monthlyRevenue} yearlyRevenue={yearlyRevenue} />
+          <DrillDownPanel drilldown={drilldown} onBack={popDrilldown} onDrilldown={pushDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} weeklyRevenue={weeklyRevenue} monthlyRevenue={monthlyRevenue} yearlyRevenue={yearlyRevenue} />
         ) : (
           <>
             {/* Card grid */}
