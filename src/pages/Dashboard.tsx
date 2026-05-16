@@ -1115,6 +1115,10 @@ export default function Dashboard() {
   const pushDrilldown = (d: Exclude<DrillDown, null>) => setDrilldownStack(s => [...s, d])
   const popDrilldown = () => setDrilldownStack(s => s.slice(0, -1))
   const resetDrilldown = () => setDrilldownStack([])
+
+  const [showMarketPulse,     setShowMarketPulse]     = useState(false)
+  const [marketPulseLastScan, setMarketPulseLastScan] = useState<string | null>(null)
+  const [mpCardHovered,       setMpCardHovered]       = useState(false)
   const [cards, setCards] = useState<ApptFetched[]>([])
   const [cardsLoading, setCardsLoading] = useState(true)
   const [focusTick, setFocusTick] = useState(0)
@@ -1140,6 +1144,24 @@ export default function Dashboard() {
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [])
+
+  useEffect(() => {
+    const salonId = staffRecord?.salon_id
+    if (!salonId) return
+    let cancelled = false
+    supabase
+      .from('competitor_reports')
+      .select('created_at')
+      .eq('salon_id', salonId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return
+        if (data?.created_at) setMarketPulseLastScan(data.created_at as string)
+      })
+    return () => { cancelled = true }
+  }, [staffRecord?.salon_id])
 
   useEffect(() => {
     let cancelled = false
@@ -1516,7 +1538,7 @@ export default function Dashboard() {
         />
 
         {/* ── Summary strip ── */}
-        <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
           <SummaryCard
             label="Revenue today"
             value={<Clickable onClick={() => pushDrilldown('revenue-today')}>AED {summaryRevenue.total.toLocaleString()}</Clickable>}
@@ -1547,6 +1569,28 @@ export default function Dashboard() {
               </span>
             }
           />
+          <div
+            onClick={() => setShowMarketPulse(true)}
+            onMouseEnter={() => setMpCardHovered(true)}
+            onMouseLeave={() => setMpCardHovered(false)}
+            style={{
+              backgroundColor: '#ffffff', borderRadius: 8,
+              border: `0.5px solid ${mpCardHovered ? '#034325' : '#e0e0e0'}`,
+              padding: '12px 16px', flex: 1,
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <p style={{ color: '#6b7280', fontSize: 11, margin: 0 }}>Market Pulse</p>
+              <span style={{ backgroundColor: '#C9A227', color: '#ffffff', fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4 }}>Premium</span>
+            </div>
+            <p style={{ color: '#034325', fontSize: 16, fontWeight: 500, margin: '0 0 4px', lineHeight: 1.2 }}>View report</p>
+            <p style={{ color: '#6b7280', fontSize: 11, margin: 0 }}>
+              {marketPulseLastScan
+                ? `Last scan: ${new Date(marketPulseLastScan).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                : 'No scan yet'}
+            </p>
+          </div>
         </div>
 
         {/* ── Main area ── */}
@@ -1575,9 +1619,6 @@ export default function Dashboard() {
 
             {/* Birthday strip */}
             <BirthdayStrip salonId={staffRecord?.salon_id ?? null} />
-
-            {/* Market Pulse */}
-            <MarketPulse />
           </>
         )}
 
@@ -1589,6 +1630,48 @@ export default function Dashboard() {
           Powered by Blue Flute Consulting LLC-FZ
         </p>
       </div>
+
+      {/* ── Market Pulse modal ── */}
+      {showMarketPulse && (
+        <div
+          onClick={() => setShowMarketPulse(false)}
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+            zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              backgroundColor: '#ffffff', borderRadius: 12,
+              width: 680, maxWidth: 'calc(100vw - 48px)', maxHeight: '80vh',
+              overflowY: 'auto', padding: 24,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <p style={{ fontSize: 18, fontWeight: 500, color: '#034325', margin: 0 }}>Market Pulse</p>
+                <p style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 0' }}>
+                  {marketPulseLastScan
+                    ? `Last scan: ${new Date(marketPulseLastScan).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                    : 'No scan yet'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowMarketPulse(false)}
+                style={{
+                  backgroundColor: 'transparent', color: '#034325',
+                  border: '0.5px solid #034325', borderRadius: 6,
+                  padding: '6px 16px', fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <MarketPulse />
+          </div>
+        </div>
+      )}
 
     </div>
   )
