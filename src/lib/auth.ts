@@ -37,3 +37,13 @@ export async function getStaffByPhone(phone: string) {
   if (error) throw error
   return data
 }
+
+export async function getStaffByUserId(userId: string) {
+  const { data, error } = await supabase
+    .from('staff')
+    .select('id, name, role, phone, auth_user_id, salon_id')
+    .eq('auth_user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}

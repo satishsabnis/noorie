@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
-import { signInWithMobile, getStaffRecord } from '../lib/auth'
+import { signInWithMobile, getStaffByUserId } from '../lib/auth'
 import { useAuthStore } from '../stores/authStore'
 
 const COUNTRY_CODES = ['+971', '+91', '+1', '+44']
@@ -26,7 +26,7 @@ export default function Login() {
       const { user } = await signInWithMobile(countryCode, mobile, password)
       if (!user) throw new Error('Sign in failed')
 
-      const staff = await getStaffRecord(countryCode, mobile)
+      const staff = await getStaffByUserId(user.id)
       if (!staff) throw new Error('Staff record not found')
 
       if (!staff.role) {
