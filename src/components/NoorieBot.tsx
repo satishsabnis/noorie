@@ -59,7 +59,7 @@ export default function NoorieBot() {
 
     const today = new Date()
     const dubaiOffset = 4 * 60
-    const dubaiNow = new Date(today.getTime() + (dubaiOffset - today.getTimezoneOffset()) * 60000)
+    const dubaiNow = new Date(today.getTime() + 4 * 60 * 60 * 1000)
     const todayYMD = dubaiNow.toISOString().split('T')[0]
     const todayStart = `${todayYMD}T00:00:00+04:00`
     const todayEnd = `${todayYMD}T23:59:59+04:00`
