@@ -512,7 +512,7 @@ export default function Reports() {
   const [topRunnerData, setTopRunnerData] = useState<{ name: string; revenue: number; appointments: number }[]>([])
   const [topRunnerLoading, setTopRunnerLoading] = useState(false)
   const [topClientsTab,  setTopClientsTab]  = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly')
-  const [topClientsData, setTopClientsData] = useState<{ name: string; visits: number; spend: number }[]>([])
+  const [topClientsData, setTopClientsData] = useState<{ name: string; visits: number; spend: number; last_visit: string }[]>([])
   const [topClientsLoading, setTopClientsLoading] = useState(false)
 
   // Reset to landing when the Reports nav link is tapped while already on /reports
@@ -726,18 +726,20 @@ export default function Reports() {
 
     const { data } = await supabase
       .from('appointments')
-      .select('id, client_id, clients!inner(name), payments(amount, status)')
+      .select('id, client_id, starts_at, clients!inner(name), payments(amount, status)')
       .eq('salon_id', salonId)
       .eq('status', 'completed')
       .gte('starts_at', rangeStart)
       .lte('starts_at', rangeEnd)
 
-    const map: Record<string, { visits: Set<string>; spend: number }> = {}
+    const map: Record<string, { visits: Set<string>; spend: number; lastStartsAt: string }> = {}
     for (const row of data ?? []) {
       const name = (row.clients as unknown as { name: string } | null)?.name || 'Unknown'
       const aid = row.id as string
-      if (!map[name]) map[name] = { visits: new Set(), spend: 0 }
+      const startsAt = (row.starts_at as string | null) ?? ''
+      if (!map[name]) map[name] = { visits: new Set(), spend: 0, lastStartsAt: '' }
       map[name].visits.add(aid)
+      if (startsAt > map[name].lastStartsAt) map[name].lastStartsAt = startsAt
       const pays = (row.payments as unknown as { amount: number | null; status: string | null }[] | null) ?? []
       for (const p of pays) {
         if (p.status !== 'completed') continue
@@ -746,7 +748,12 @@ export default function Reports() {
     }
 
     const result = Object.entries(map)
-      .map(([name, v]) => ({ name, visits: v.visits.size, spend: Math.round(v.spend * 100) / 100 }))
+      .map(([name, v]) => ({
+        name,
+        visits: v.visits.size,
+        spend: Math.round(v.spend * 100) / 100,
+        last_visit: v.lastStartsAt ? formatDate(v.lastStartsAt) : '—',
+      }))
       .sort((a, b) => b.spend - a.spend)
 
     setTopClientsData(result)
@@ -1579,6 +1586,7 @@ export default function Reports() {
                                 <th style={{ ...TH, width: 50 }}>Rank</th>
                                 <th style={TH}>Client</th>
                                 <th style={{ ...TH, textAlign: 'right' }}>Visits</th>
+                                <th style={TH}>Last Visit</th>
                                 <th style={{ ...TH, textAlign: 'right' }}>Spend (AED)</th>
                               </tr>
                             </thead>
@@ -1588,6 +1596,7 @@ export default function Reports() {
                                   <td style={TD}>{i + 1}</td>
                                   <td style={TD}>{r.name}</td>
                                   <td style={{ ...TD, textAlign: 'right' }}>{r.visits}</td>
+                                  <td style={TD}>{r.last_visit}</td>
                                   <td style={{ ...TD, textAlign: 'right' }}>{formatMoney(r.spend)}</td>
                                 </tr>
                               ))}
