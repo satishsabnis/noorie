@@ -356,6 +356,10 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
       )}
 
       {drilldown === 'revenue-today' && (
+        <>
+          <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
+            Total today: AED {revenueByStaff.reduce((s, r) => s + r.amount, 0).toLocaleString()}
+          </p>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 240, backgroundColor: '#f9fafb', borderRadius: 8, padding: 14 }}>
             <p style={{ color: '#034325', fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>By service</p>
@@ -410,9 +414,14 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
             </table>
           </div>
         </div>
+        </>
       )}
 
       {drilldown === 'revenue-week' && (
+        <>
+        <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
+          Total this week: AED {weeklyRevenue.reduce((s, r) => s + r.revenue, 0).toLocaleString()}
+        </p>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={TH}>Day</th><th style={{ ...TH, textAlign: 'right' }}>Appointments</th><th style={{ ...TH, textAlign: 'right' }}>Revenue</th></tr></thead>
           <tbody>
@@ -428,9 +437,14 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
             })}
           </tbody>
         </table>
+        </>
       )}
 
       {drilldown === 'revenue-month' && (
+        <>
+        <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
+          Total this month: AED {monthlyRevenue.reduce((s, r) => s + r.revenue, 0).toLocaleString()}
+        </p>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={TH}>Period</th><th style={{ ...TH, textAlign: 'right' }}>Appointments</th><th style={{ ...TH, textAlign: 'right' }}>Revenue</th></tr></thead>
           <tbody>
@@ -446,9 +460,14 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
             })}
           </tbody>
         </table>
+        </>
       )}
 
       {drilldown === 'revenue-year' && (
+        <>
+        <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
+          Total this year: AED {yearlyRevenue.reduce((s, r) => s + r.revenue, 0).toLocaleString()}
+        </p>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={TH}>Month</th><th style={{ ...TH, textAlign: 'right' }}>Appointments</th><th style={{ ...TH, textAlign: 'right' }}>Revenue</th></tr></thead>
           <tbody>
@@ -464,6 +483,7 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
             })}
           </tbody>
         </table>
+        </>
       )}
 
     </div>
