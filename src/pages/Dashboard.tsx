@@ -282,7 +282,7 @@ function ApptTable({ rows, showPayment = false }: { rows: ApptRow[]; showPayment
 
 // ── Drill-down panel ──────────────────────────────────────────────────────────
 
-function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff, weeklyRevenue, monthlyRevenue, yearlyRevenue, topRunnerName, topRunnerAppointmentIds, topRunnerWeek }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: Exclude<DrillDown, null>) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[]; weeklyRevenue: { day: string; appointments: number; revenue: number; past: boolean }[]; monthlyRevenue: { period: string; appointments: number; revenue: number; past: boolean }[]; yearlyRevenue: { month: string; appointments: number; revenue: number; past: boolean }[]; topRunnerName: string | null; topRunnerAppointmentIds: string[]; topRunnerWeek: { day: string; appointments: number; revenue: number; past: boolean }[] }) {
+function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff, weeklyRevenue, monthlyRevenue, yearlyRevenue, topRunnerName, topRunnerAppointmentIds, topRunnerWeek, summaryAppointments }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: Exclude<DrillDown, null>) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[]; weeklyRevenue: { day: string; appointments: number; revenue: number; past: boolean }[]; monthlyRevenue: { period: string; appointments: number; revenue: number; past: boolean }[]; yearlyRevenue: { month: string; appointments: number; revenue: number; past: boolean }[]; topRunnerName: string | null; topRunnerAppointmentIds: string[]; topRunnerWeek: { day: string; appointments: number; revenue: number; past: boolean }[]; summaryAppointments: { total: number; completed: number; walkIns: number; noShow: number } }) {
   return (
     <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: 16, margin: '0 16px 16px' }}>
 
@@ -314,11 +314,47 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
         </div>
       )}
 
-      {drilldown === 'appointments' && <ApptTable rows={cardsToRows(cards)} />}
+      {drilldown === 'appointments' && (() => {
+        const rows = cardsToRows(cards)
+        return (
+          <>
+            <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
+              Total appointments today: {summaryAppointments.total.toLocaleString()}
+            </p>
+            {rows.length === 0
+              ? <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>No appointments today</p>
+              : <ApptTable rows={rows} />}
+          </>
+        )
+      })()}
 
-      {drilldown === 'walkins' && <ApptTable rows={cardsToRows(cards.filter(c => c.is_walk_in))} />}
+      {drilldown === 'walkins' && (() => {
+        const rows = cardsToRows(cards.filter(c => c.is_walk_in))
+        return (
+          <>
+            <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
+              Total walk-ins today: {summaryAppointments.walkIns.toLocaleString()}
+            </p>
+            {rows.length === 0
+              ? <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>No walk-ins today</p>
+              : <ApptTable rows={rows} />}
+          </>
+        )
+      })()}
 
-      {drilldown === 'completed' && <ApptTable rows={cardsToRows(cards.filter(c => c.status === 'completed'))} showPayment />}
+      {drilldown === 'completed' && (() => {
+        const rows = cardsToRows(cards.filter(c => c.status === 'completed'))
+        return (
+          <>
+            <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
+              Total completed today: {summaryAppointments.completed.toLocaleString()}
+            </p>
+            {rows.length === 0
+              ? <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>No completed appointments today</p>
+              : <ApptTable rows={rows} showPayment />}
+          </>
+        )
+      })()}
 
       {drilldown === 'toprunner' && (() => {
         const tpAppts = cards.filter(c => topRunnerAppointmentIds.includes(c.id))
@@ -1464,7 +1500,7 @@ export default function Dashboard() {
 
         {/* ── Main area ── */}
         {drilldown !== null ? (
-          <DrillDownPanel drilldown={drilldown} onBack={popDrilldown} onDrilldown={pushDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} weeklyRevenue={weeklyRevenue} monthlyRevenue={monthlyRevenue} yearlyRevenue={yearlyRevenue} topRunnerName={summaryTopRunner?.name ?? null} topRunnerAppointmentIds={summaryTopRunner?.appointmentIds ?? []} topRunnerWeek={topRunnerWeek} />
+          <DrillDownPanel drilldown={drilldown} onBack={popDrilldown} onDrilldown={pushDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} weeklyRevenue={weeklyRevenue} monthlyRevenue={monthlyRevenue} yearlyRevenue={yearlyRevenue} topRunnerName={summaryTopRunner?.name ?? null} topRunnerAppointmentIds={summaryTopRunner?.appointmentIds ?? []} topRunnerWeek={topRunnerWeek} summaryAppointments={summaryAppointments} />
         ) : (
           <>
             {/* Card grid */}
