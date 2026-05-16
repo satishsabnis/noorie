@@ -282,7 +282,7 @@ function ApptTable({ rows, showPayment = false }: { rows: ApptRow[]; showPayment
 
 // ── Drill-down panel ──────────────────────────────────────────────────────────
 
-function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff, weeklyRevenue, monthlyRevenue, yearlyRevenue }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: Exclude<DrillDown, null>) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[]; weeklyRevenue: { day: string; appointments: number; revenue: number; past: boolean }[]; monthlyRevenue: { period: string; appointments: number; revenue: number; past: boolean }[]; yearlyRevenue: { month: string; appointments: number; revenue: number; past: boolean }[] }) {
+function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff, weeklyRevenue, monthlyRevenue, yearlyRevenue, topRunnerName, topRunnerAppointmentIds, topRunnerWeek }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: Exclude<DrillDown, null>) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[]; weeklyRevenue: { day: string; appointments: number; revenue: number; past: boolean }[]; monthlyRevenue: { period: string; appointments: number; revenue: number; past: boolean }[]; yearlyRevenue: { month: string; appointments: number; revenue: number; past: boolean }[]; topRunnerName: string | null; topRunnerAppointmentIds: string[]; topRunnerWeek: { day: string; appointments: number; revenue: number; past: boolean }[] }) {
   return (
     <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: 16, margin: '0 16px 16px' }}>
 
@@ -320,40 +320,58 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
 
       {drilldown === 'completed' && <ApptTable rows={cardsToRows(cards.filter(c => c.status === 'completed'))} showPayment />}
 
-      {drilldown === 'toprunner' && (
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 280 }}>
-            <p style={{ color: '#034325', fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>Today's top runner</p>
-            <ApptTable rows={mockAllAppts} showPayment />
-          </div>
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <p style={{ color: '#034325', fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>This week's stats</p>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={TH}>Day</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Appts</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockTopRunnerWeek.map(row => (
-                  <tr key={row.day}>
-                    <td style={TD}>{row.day}</td>
-                    <td style={{ ...TD, textAlign: 'right' }}>{row.appointments}</td>
-                    <td style={{ ...TD, textAlign: 'right', fontWeight: 500 }}>AED {row.revenue}</td>
-                  </tr>
-                ))}
-                <tr>
-                  <td style={{ ...TD, fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>Total</td>
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>{mockTopRunnerWeek.reduce((s, r) => s + r.appointments, 0)}</td>
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>AED {mockTopRunnerWeek.reduce((s, r) => s + r.revenue, 0)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      {drilldown === 'toprunner' && (() => {
+        const tpAppts = cards.filter(c => topRunnerAppointmentIds.includes(c.id))
+        const tpRows  = cardsToRows(tpAppts)
+        const wkAppts = topRunnerWeek.reduce((s, r) => s + r.appointments, 0)
+        const wkRev   = topRunnerWeek.reduce((s, r) => s + r.revenue, 0)
+        return (
+          <>
+            <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
+              Total this week: AED {wkRev.toLocaleString()}
+            </p>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 280 }}>
+                <p style={{ color: '#034325', fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>
+                  {topRunnerName ?? '—'}'s appointments today
+                </p>
+                {tpRows.length === 0
+                  ? <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>No appointments today</p>
+                  : <ApptTable rows={tpRows} showPayment />}
+              </div>
+              <div style={{ flex: 1, minWidth: 240 }}>
+                <p style={{ color: '#034325', fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>This week's stats</p>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={TH}>Day</th>
+                      <th style={{ ...TH, textAlign: 'right' }}>Appts</th>
+                      <th style={{ ...TH, textAlign: 'right' }}>Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topRunnerWeek.map(row => {
+                      const hasRev = row.revenue > 0
+                      return (
+                        <tr key={row.day} style={{ opacity: row.past ? 1 : 0.4 }}>
+                          <td style={TD}>{row.day}</td>
+                          <td style={{ ...TD, textAlign: 'right' }}>{hasRev ? row.appointments : '—'}</td>
+                          <td style={{ ...TD, textAlign: 'right', fontWeight: hasRev ? 500 : 400 }}>{hasRev ? `AED ${row.revenue.toLocaleString()}` : '—'}</td>
+                        </tr>
+                      )
+                    })}
+                    <tr>
+                      <td style={{ ...TD, fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>Total</td>
+                      <td style={{ ...TD, textAlign: 'right', fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>{wkAppts}</td>
+                      <td style={{ ...TD, textAlign: 'right', fontWeight: 700, borderTop: '0.5px solid #e0e0e0' }}>AED {wkRev.toLocaleString()}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )
+      })()}
 
       {drilldown === 'revenue-today' && (
         <>
@@ -1023,8 +1041,9 @@ export default function Dashboard() {
   const [weeklyRevenue,       setWeeklyRevenue]       = useState<{ day: string; appointments: number; revenue: number; past: boolean }[]>([])
   const [monthlyRevenue,      setMonthlyRevenue]      = useState<{ period: string; appointments: number; revenue: number; past: boolean }[]>([])
   const [yearlyRevenue,       setYearlyRevenue]       = useState<{ month: string; appointments: number; revenue: number; past: boolean }[]>([])
+  const [topRunnerWeek,       setTopRunnerWeek]       = useState<{ day: string; appointments: number; revenue: number; past: boolean }[]>([])
   const [summaryAppointments, setSummaryAppointments] = useState({ total: 0, completed: 0, walkIns: 0, noShow: 0 })
-  const [summaryTopRunner,    setSummaryTopRunner]    = useState<{ name: string; revenue: number; appointments: number } | null>(null)
+  const [summaryTopRunner,    setSummaryTopRunner]    = useState<{ name: string; revenue: number; appointments: number; appointmentIds: string[] } | null>(null)
   const [briefSlots,          setBriefSlots]          = useState<BriefSlot[]>([])
   const [briefLapsedClient,   setBriefLapsedClient]   = useState<BriefLapsedClient | null>(null)
   const [briefUnpaid,         setBriefUnpaid]         = useState<BriefUnpaid[]>([])
@@ -1184,6 +1203,7 @@ export default function Dashboard() {
           setWeeklyRevenue(weeklyOut)
           setMonthlyRevenue(monthlyOut)
           setYearlyRevenue(yearlyOut)
+          setTopRunnerWeek([])
           setSummaryTopRunner(null)
           if (firstLoad) { setCardsLoading(false); firstLoad = false }
         }
@@ -1262,12 +1282,53 @@ export default function Dashboard() {
         staffRevMap[staffName].revenue += (row.price as number) ?? 0
         staffRevMap[staffName].apptIds.add(apptId)
       }
-      let topRunner: { name: string; revenue: number; appointments: number } | null = null
+      let topRunner: { name: string; revenue: number; appointments: number; appointmentIds: string[] } | null = null
       for (const [name, data] of Object.entries(staffRevMap)) {
         const rev = Math.round(data.revenue * 100) / 100
         if (!topRunner || rev > topRunner.revenue) {
-          topRunner = { name, revenue: rev, appointments: data.apptIds.size }
+          topRunner = { name, revenue: rev, appointments: data.apptIds.size, appointmentIds: Array.from(data.apptIds) }
         }
+      }
+
+      // Top runner's Mon-Sun stats for current week (uses mondayMs/weekDateStrs/dayLabels/todayYMD from trend block)
+      let topRunnerWeekOut: { day: string; appointments: number; revenue: number; past: boolean }[] = []
+      if (topRunner) {
+        const weekStartISO = `${new Date(mondayMs).toISOString().slice(0, 10)}T00:00:00+04:00`
+        const sundayMs = mondayMs + 6 * 86_400_000
+        const weekEndISO   = `${new Date(sundayMs).toISOString().slice(0, 10)}T23:59:59+04:00`
+
+        const { data: trSvcRows } = await supabase
+          .from('appointment_services')
+          .select('appointment_id, price, staff!inner(name), appointments!inner(starts_at, status, salon_id)')
+          .eq('appointments.salon_id', salonId)
+          .eq('appointments.status', 'completed')
+          .eq('staff.name', topRunner.name)
+          .gte('appointments.starts_at', weekStartISO)
+          .lt('appointments.starts_at', weekEndISO)
+
+        const trBuckets = dayLabels.map((day, i) => ({
+          day,
+          appointments: 0,
+          revenue: 0,
+          past: weekDateStrs[i] < todayYMD,
+          _ids: new Set<string>(),
+        }))
+
+        for (const row of trSvcRows ?? []) {
+          const appt = (row.appointments as unknown as { starts_at: string } | null)
+          if (!appt?.starts_at) continue
+          const ds = new Date(new Date(appt.starts_at).getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+          const wi = weekDateStrs.indexOf(ds)
+          if (wi === -1) continue
+          trBuckets[wi]._ids.add(row.appointment_id as string)
+          trBuckets[wi].revenue += (row.price as number | null) ?? 0
+        }
+        topRunnerWeekOut = trBuckets.map(b => ({
+          day: b.day,
+          appointments: b._ids.size,
+          revenue: Math.round(b.revenue * 100) / 100,
+          past: b.past,
+        }))
       }
 
       // Derive revenue-by-service and revenue-by-staff from today's completed appointment_services
@@ -1298,6 +1359,7 @@ export default function Dashboard() {
         setWeeklyRevenue(weeklyOut)
         setMonthlyRevenue(monthlyOut)
         setYearlyRevenue(yearlyOut)
+        setTopRunnerWeek(topRunnerWeekOut)
         setSummaryTopRunner(topRunner)
         if (firstLoad) { setCardsLoading(false); firstLoad = false }
       }
@@ -1397,7 +1459,7 @@ export default function Dashboard() {
 
         {/* ── Main area ── */}
         {drilldown !== null ? (
-          <DrillDownPanel drilldown={drilldown} onBack={popDrilldown} onDrilldown={pushDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} weeklyRevenue={weeklyRevenue} monthlyRevenue={monthlyRevenue} yearlyRevenue={yearlyRevenue} />
+          <DrillDownPanel drilldown={drilldown} onBack={popDrilldown} onDrilldown={pushDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} weeklyRevenue={weeklyRevenue} monthlyRevenue={monthlyRevenue} yearlyRevenue={yearlyRevenue} topRunnerName={summaryTopRunner?.name ?? null} topRunnerAppointmentIds={summaryTopRunner?.appointmentIds ?? []} topRunnerWeek={topRunnerWeek} />
         ) : (
           <>
             {/* Card grid */}
