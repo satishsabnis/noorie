@@ -1131,6 +1131,11 @@ export default function Dashboard() {
         day, appointments: 0, revenue: 0, past: weekDateStrs[i] < todayYMD,
       }))
 
+      // 7-row Mon-Sun zero template — reused as the top-runner-week fallback when there is no top runner today
+      const emptyTopRunnerWeek = dayLabels.map((day, i) => ({
+        day, appointments: 0, revenue: 0, past: weekDateStrs[i] < todayYMD,
+      }))
+
       const lastDayOfMonth = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate()
       const monthlyRanges = [
         { period: 'Week 1', start: 1,  end: 7 },
@@ -1203,7 +1208,7 @@ export default function Dashboard() {
           setWeeklyRevenue(weeklyOut)
           setMonthlyRevenue(monthlyOut)
           setYearlyRevenue(yearlyOut)
-          setTopRunnerWeek([])
+          setTopRunnerWeek(emptyTopRunnerWeek)
           setSummaryTopRunner(null)
           if (firstLoad) { setCardsLoading(false); firstLoad = false }
         }
@@ -1291,7 +1296,7 @@ export default function Dashboard() {
       }
 
       // Top runner's Mon-Sun stats for current week (uses mondayMs/weekDateStrs/dayLabels/todayYMD from trend block)
-      let topRunnerWeekOut: { day: string; appointments: number; revenue: number; past: boolean }[] = []
+      let topRunnerWeekOut: { day: string; appointments: number; revenue: number; past: boolean }[] = emptyTopRunnerWeek
       if (topRunner) {
         const weekStartISO = `${new Date(mondayMs).toISOString().slice(0, 10)}T00:00:00+04:00`
         const sundayMs = mondayMs + 6 * 86_400_000
