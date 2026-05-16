@@ -13,10 +13,30 @@ const NAV_LINKS = [
   { label: 'Ask Noorie',   to: '/ask' },
 ]
 
+function MenuItem({ label, color = '#1a1a1a', onClick }: { label: string; color?: string; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: '100%', textAlign: 'left',
+        background: hovered ? '#f5f5f5' : 'none',
+        border: 'none', fontSize: 13, color,
+        padding: '10px 16px', cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
 export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { signOut, staffRecord, salonName, setSalonName } = useAuthStore()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     const salonId = staffRecord?.salon_id
@@ -26,6 +46,16 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
       if (data?.name) setSalonName(data.name as string)
     })
   }, [staffRecord?.salon_id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handler = (e: MouseEvent) => {
+      const menu = document.getElementById('topbar-menu')
+      if (menu && !menu.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuOpen])
 
   const handleSignOut = () => {
     signOut()
@@ -40,9 +70,45 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
       padding: '0 16px', gap: 16,
     }}>
       {salonName && (
-        <p style={{ color: '#ffffff', fontSize: 13, fontWeight: 500, margin: 0, flexShrink: 0, whiteSpace: 'nowrap' }}>
-          {salonName}
-        </p>
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button
+            onClick={() => setMenuOpen(prev => !prev)}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6,
+              color: '#ffffff', fontSize: 13, fontWeight: 500,
+              padding: 0, whiteSpace: 'nowrap',
+            }}
+          >
+            {salonName}
+            <svg
+              width="12" height="12" viewBox="0 0 12 12"
+              style={{ transform: menuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
+            >
+              <path d="M3 4.5L6 7.5L9 4.5" stroke="#ffffff" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {menuOpen && (
+            <div
+              id="topbar-menu"
+              style={{
+                position: 'absolute', top: 40, left: 0, zIndex: 200,
+                backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0',
+                borderRadius: 8, minWidth: 200,
+                display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              }}
+            >
+              <MenuItem label="About Noorie"       onClick={() => setMenuOpen(false)} />
+              <MenuItem label="Privacy Disclaimer" onClick={() => setMenuOpen(false)} />
+              <div style={{ height: 0.5, background: '#e0e0e0', margin: '4px 0' }} />
+              <MenuItem
+                label="Sign out"
+                color="#991b1b"
+                onClick={() => { setMenuOpen(false); handleSignOut() }}
+              />
+            </div>
+          )}
+        </div>
       )}
       <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, overflowX: 'auto' }}>
         {NAV_LINKS.map(link => {
@@ -63,19 +129,18 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
           )
         })}
       </nav>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>BFC</span>
-        <button
-          onClick={handleSignOut}
-          style={{
-            background: 'none', border: '1px solid rgba(255,255,255,0.25)',
-            color: 'rgba(255,255,255,0.6)', fontSize: 11, borderRadius: 4,
-            padding: '3px 8px', cursor: 'pointer',
-          }}
-        >
-          Sign out
-        </button>
-      </div>
+      {salonName && (
+        <div style={{
+          width: 32, height: 32, borderRadius: '50%',
+          backgroundColor: 'rgba(255,255,255,0.15)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#ffffff' }}>
+            {salonName.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase()}
+          </span>
+        </div>
+      )}
     </header>
   )
 }
