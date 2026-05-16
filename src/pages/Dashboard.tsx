@@ -51,6 +51,7 @@ interface BriefTopClient {
   spend: number
   lastVisit: string
   phone: string | null
+  ytdSpend: number
 }
 
 interface BriefUnpaid {
@@ -951,11 +952,31 @@ async function fetchBriefTopClient(salonId: string): Promise<BriefTopClient | nu
     map[cid].spend += (p.amount as number | null) ?? 0
   }
 
-  const ranked = Object.values(map)
-    .map(v => ({ name: v.name, phone: v.phone, visits: v.visits.size, spend: Math.round(v.spend * 100) / 100, lastVisit: v.lastVisit }))
+  const ranked = Object.entries(map)
+    .map(([clientId, v]) => ({ clientId, name: v.name, phone: v.phone, visits: v.visits.size, spend: Math.round(v.spend * 100) / 100, lastVisit: v.lastVisit }))
     .sort((a, b) => b.spend - a.spend)
 
-  return ranked[0] ?? null
+  const top = ranked[0]
+  if (!top) return null
+
+  const { data: ytdPays, error: ytdErr } = await supabase
+    .from('payments')
+    .select('amount, status')
+    .eq('client_id', top.clientId)
+    .eq('status', 'completed')
+
+  const ytdSpend = ytdErr
+    ? 0
+    : Math.round((ytdPays ?? []).reduce((s, p) => s + ((p.amount as number) ?? 0), 0) * 100) / 100
+
+  return {
+    name: top.name,
+    phone: top.phone,
+    visits: top.visits,
+    spend: top.spend,
+    lastVisit: top.lastVisit,
+    ytdSpend,
+  }
 }
 
 // ── Morning Brief component ───────────────────────────────────────────────────
@@ -1096,6 +1117,7 @@ function MorningBrief({
                     <p style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: '#034325' }}>{topClient.name}</p>
                     <p style={{ margin: '0 0 4px', fontSize: 13, color: '#6b7280' }}>{topClient.visits} visit{topClient.visits === 1 ? '' : 's'} this month</p>
                     <p style={{ margin: '0 0 4px', fontSize: 13, color: '#6b7280' }}>AED {topClient.spend.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent this month</p>
+                    <p style={{ margin: '0 0 4px', fontSize: 13, color: '#6b7280' }}>AED {topClient.ytdSpend.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent in total</p>
                     <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6b7280' }}>
                       Last visit: {topClient.lastVisit
                         ? new Date(topClient.lastVisit).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
