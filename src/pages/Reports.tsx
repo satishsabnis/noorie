@@ -504,13 +504,16 @@ export default function Reports() {
   // ── Navigation ──────────────────────────────────────────────────────────
   const location = useLocation()
   const hasMounted = useRef(false)
-  const [view,          setView]          = useState<'landing' | 'finance' | 'payroll' | 'ytd' | 'toprunner'>('landing')
+  const [view,          setView]          = useState<'landing' | 'finance' | 'payroll' | 'ytd' | 'toprunner' | 'topclients'>('landing')
   const [showModal,     setShowModal]     = useState<'finance' | 'payroll' | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
   const [selectedYear,  setSelectedYear]  = useState<number>(new Date().getFullYear())
   const [topRunnerTab,  setTopRunnerTab]  = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly')
   const [topRunnerData, setTopRunnerData] = useState<{ name: string; revenue: number; appointments: number }[]>([])
   const [topRunnerLoading, setTopRunnerLoading] = useState(false)
+  const [topClientsTab,  setTopClientsTab]  = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly')
+  const [topClientsData, setTopClientsData] = useState<{ name: string; visits: number; spend: number }[]>([])
+  const [topClientsLoading, setTopClientsLoading] = useState(false)
 
   // Reset to landing when the Reports nav link is tapped while already on /reports
   useEffect(() => {
@@ -522,6 +525,11 @@ export default function Reports() {
   useEffect(() => {
     if (view === 'toprunner') fetchTopRunner(topRunnerTab)
   }, [view, topRunnerTab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refetch top-clients data whenever the view becomes 'topclients' or the tab changes
+  useEffect(() => {
+    if (view === 'topclients') fetchTopClients(topClientsTab)
+  }, [view, topClientsTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Config ──────────────────────────────────────────────────────────────
   const [fyStartMonth,            setFyStartMonth]            = useState<number | null>(null)
@@ -680,6 +688,69 @@ export default function Reports() {
 
     setTopRunnerData(result)
     setTopRunnerLoading(false)
+  }
+
+  // ── Top Clients fetch ───────────────────────────────────────────────────
+  async function fetchTopClients(tab: 'daily' | 'weekly' | 'monthly' | 'yearly') {
+    if (!salonId) return
+    setTopClientsLoading(true)
+
+    const dubaiNow = new Date(Date.now() + 4 * 60 * 60 * 1000)
+    const ty = dubaiNow.getUTCFullYear()
+    const tm = dubaiNow.getUTCMonth()
+    const td = dubaiNow.getUTCDate()
+
+    let rangeStart = ''
+    let rangeEnd = ''
+    if (tab === 'daily') {
+      const ymd = dubaiNow.toISOString().slice(0, 10)
+      rangeStart = `${ymd}T00:00:00+04:00`
+      rangeEnd   = `${ymd}T23:59:59+04:00`
+    } else if (tab === 'weekly') {
+      const dayIdx = (dubaiNow.getUTCDay() + 6) % 7
+      const mondayMs = Date.UTC(ty, tm, td) - dayIdx * 86_400_000
+      const sundayMs = mondayMs + 6 * 86_400_000
+      const monStr = new Date(mondayMs).toISOString().slice(0, 10)
+      const sunStr = new Date(sundayMs).toISOString().slice(0, 10)
+      rangeStart = `${monStr}T00:00:00+04:00`
+      rangeEnd   = `${sunStr}T23:59:59+04:00`
+    } else if (tab === 'monthly') {
+      const lastDay = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate()
+      const mm = String(tm + 1).padStart(2, '0')
+      rangeStart = `${ty}-${mm}-01T00:00:00+04:00`
+      rangeEnd   = `${ty}-${mm}-${String(lastDay).padStart(2, '0')}T23:59:59+04:00`
+    } else {
+      rangeStart = `${ty}-01-01T00:00:00+04:00`
+      rangeEnd   = `${ty}-12-31T23:59:59+04:00`
+    }
+
+    const { data } = await supabase
+      .from('appointments')
+      .select('id, client_id, clients!inner(name), payments(amount, status)')
+      .eq('salon_id', salonId)
+      .eq('status', 'completed')
+      .gte('starts_at', rangeStart)
+      .lte('starts_at', rangeEnd)
+
+    const map: Record<string, { visits: Set<string>; spend: number }> = {}
+    for (const row of data ?? []) {
+      const name = (row.clients as unknown as { name: string } | null)?.name || 'Unknown'
+      const aid = row.id as string
+      if (!map[name]) map[name] = { visits: new Set(), spend: 0 }
+      map[name].visits.add(aid)
+      const pays = (row.payments as unknown as { amount: number | null; status: string | null }[] | null) ?? []
+      for (const p of pays) {
+        if (p.status !== 'completed') continue
+        map[name].spend += (p.amount as number | null) ?? 0
+      }
+    }
+
+    const result = Object.entries(map)
+      .map(([name, v]) => ({ name, visits: v.visits.size, spend: Math.round(v.spend * 100) / 100 }))
+      .sort((a, b) => b.spend - a.spend)
+
+    setTopClientsData(result)
+    setTopClientsLoading(false)
   }
 
   // ── Finance fetch ───────────────────────────────────────────────────────
@@ -978,11 +1049,27 @@ export default function Reports() {
                   style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '14px 8px', cursor: 'pointer',
+                    borderBottom: '0.5px solid #f0f0f0',
                   }}
                 >
                   <div>
                     <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Top Runner Report</p>
                     <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Daily, weekly, monthly, yearly staff leaderboard</p>
+                  </div>
+                  <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
+                </div>
+              )}
+              {canViewTopRunner && (
+                <div
+                  onClick={() => setView('topclients')}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '14px 8px', cursor: 'pointer',
+                  }}
+                >
+                  <div>
+                    <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Top Clients Report</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Daily, weekly, monthly, yearly client spend leaderboard</p>
                   </div>
                   <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
                 </div>
@@ -1418,6 +1505,90 @@ export default function Reports() {
                                   <td style={TD}>{r.name}</td>
                                   <td style={{ ...TD, textAlign: 'right' }}>{r.appointments}</td>
                                   <td style={{ ...TD, textAlign: 'right' }}>{formatMoney(r.revenue)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+            </div>
+          )
+        })()}
+
+        {/* ── Top Clients Report ── */}
+        {view === 'topclients' && canViewTopRunner && (() => {
+          const totalCollected = topClientsData.reduce((s, r) => s + r.spend, 0)
+          const TABS: { key: 'daily' | 'weekly' | 'monthly' | 'yearly'; label: string }[] = [
+            { key: 'daily',   label: 'Daily'   },
+            { key: 'weekly',  label: 'Weekly'  },
+            { key: 'monthly', label: 'Monthly' },
+            { key: 'yearly',  label: 'Yearly'  },
+          ]
+          return (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <button onClick={() => setView('landing')} style={backBtn}>Back</button>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#111' }}>Top Clients Report</p>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+                {TABS.map(t => {
+                  const active = topClientsTab === t.key
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => setTopClientsTab(t.key)}
+                      style={{
+                        backgroundColor: active ? '#034325' : '#ffffff',
+                        color: active ? '#ffffff' : '#034325',
+                        border: '0.5px solid #034325',
+                        borderRadius: 6,
+                        padding: '6px 14px',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {topClientsLoading
+                ? <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: '0 0 14px' }}>Loading…</p>
+                : (
+                  <>
+                    <div style={{ marginBottom: 14 }}>
+                      <MetricCard label="Total collected" value={totalCollected} valueColor="#034325" backgroundColor="#f0fdf4" />
+                    </div>
+
+                    <div style={cardStyle}>
+                      {topClientsData.length === 0 ? (
+                        <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>
+                          No completed appointments for this period
+                        </p>
+                      ) : (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...TH, width: 50 }}>Rank</th>
+                                <th style={TH}>Client</th>
+                                <th style={{ ...TH, textAlign: 'right' }}>Visits</th>
+                                <th style={{ ...TH, textAlign: 'right' }}>Spend (AED)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {topClientsData.map((r, i) => (
+                                <tr key={r.name}>
+                                  <td style={TD}>{i + 1}</td>
+                                  <td style={TD}>{r.name}</td>
+                                  <td style={{ ...TD, textAlign: 'right' }}>{r.visits}</td>
+                                  <td style={{ ...TD, textAlign: 'right' }}>{formatMoney(r.spend)}</td>
                                 </tr>
                               ))}
                             </tbody>
