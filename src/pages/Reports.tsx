@@ -504,16 +504,24 @@ export default function Reports() {
   // ── Navigation ──────────────────────────────────────────────────────────
   const location = useLocation()
   const hasMounted = useRef(false)
-  const [view,          setView]          = useState<'landing' | 'finance' | 'payroll' | 'ytd'>('landing')
+  const [view,          setView]          = useState<'landing' | 'finance' | 'payroll' | 'ytd' | 'toprunner'>('landing')
   const [showModal,     setShowModal]     = useState<'finance' | 'payroll' | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
   const [selectedYear,  setSelectedYear]  = useState<number>(new Date().getFullYear())
+  const [topRunnerTab,  setTopRunnerTab]  = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly')
+  const [topRunnerData, setTopRunnerData] = useState<{ name: string; revenue: number; appointments: number }[]>([])
+  const [topRunnerLoading, setTopRunnerLoading] = useState(false)
 
   // Reset to landing when the Reports nav link is tapped while already on /reports
   useEffect(() => {
     if (!hasMounted.current) { hasMounted.current = true; return }
     setView('landing')
   }, [location])
+
+  // Refetch top-runner data whenever the view becomes 'toprunner' or the tab changes
+  useEffect(() => {
+    if (view === 'toprunner') fetchTopRunner(topRunnerTab)
+  }, [view, topRunnerTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Config ──────────────────────────────────────────────────────────────
   const [fyStartMonth,            setFyStartMonth]            = useState<number | null>(null)
@@ -544,6 +552,7 @@ export default function Reports() {
   const [generating,    setGenerating]    = useState(false)
 
   const canViewFinance = role === 'owner' || (role === 'supervisor' && supervisorViewFinancials)
+  const canViewTopRunner = role === 'owner'
 
   // ── Mount: payroll cycles + salon name + config ─────────────────────────
   useEffect(() => {
@@ -612,6 +621,66 @@ export default function Reports() {
     load()
     return () => { cancelled = true }
   }, [salonId, salonNameStore])
+
+  // ── Top Runner fetch ────────────────────────────────────────────────────
+  async function fetchTopRunner(tab: 'daily' | 'weekly' | 'monthly' | 'yearly') {
+    if (!salonId) return
+    setTopRunnerLoading(true)
+
+    const dubaiNow = new Date(Date.now() + 4 * 60 * 60 * 1000)
+    const ty = dubaiNow.getUTCFullYear()
+    const tm = dubaiNow.getUTCMonth()
+    const td = dubaiNow.getUTCDate()
+
+    let rangeStart = ''
+    let rangeEnd = ''
+    if (tab === 'daily') {
+      const ymd = dubaiNow.toISOString().slice(0, 10)
+      rangeStart = `${ymd}T00:00:00+04:00`
+      rangeEnd   = `${ymd}T23:59:59+04:00`
+    } else if (tab === 'weekly') {
+      const dayIdx = (dubaiNow.getUTCDay() + 6) % 7   // 0=Mon..6=Sun
+      const mondayMs = Date.UTC(ty, tm, td) - dayIdx * 86_400_000
+      const sundayMs = mondayMs + 6 * 86_400_000
+      const monStr = new Date(mondayMs).toISOString().slice(0, 10)
+      const sunStr = new Date(sundayMs).toISOString().slice(0, 10)
+      rangeStart = `${monStr}T00:00:00+04:00`
+      rangeEnd   = `${sunStr}T23:59:59+04:00`
+    } else if (tab === 'monthly') {
+      const lastDay = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate()
+      const mm = String(tm + 1).padStart(2, '0')
+      rangeStart = `${ty}-${mm}-01T00:00:00+04:00`
+      rangeEnd   = `${ty}-${mm}-${String(lastDay).padStart(2, '0')}T23:59:59+04:00`
+    } else {
+      rangeStart = `${ty}-01-01T00:00:00+04:00`
+      rangeEnd   = `${ty}-12-31T23:59:59+04:00`
+    }
+
+    const { data } = await supabase
+      .from('appointment_services')
+      .select('appointment_id, price, staff!inner(name), appointments!inner(status, salon_id, starts_at)')
+      .eq('appointments.salon_id', salonId)
+      .eq('appointments.status', 'completed')
+      .gte('appointments.starts_at', rangeStart)
+      .lte('appointments.starts_at', rangeEnd)
+
+    const map: Record<string, { revenue: number; apptIds: Set<string> }> = {}
+    for (const row of data ?? []) {
+      const name = (row.staff as unknown as { name: string } | null)?.name || 'Unassigned'
+      const price = (row.price as number | null) ?? 0
+      const aid = row.appointment_id as string
+      if (!map[name]) map[name] = { revenue: 0, apptIds: new Set() }
+      map[name].revenue += price
+      map[name].apptIds.add(aid)
+    }
+
+    const result = Object.entries(map)
+      .map(([name, v]) => ({ name, revenue: Math.round(v.revenue * 100) / 100, appointments: v.apptIds.size }))
+      .sort((a, b) => b.revenue - a.revenue)
+
+    setTopRunnerData(result)
+    setTopRunnerLoading(false)
+  }
 
   // ── Finance fetch ───────────────────────────────────────────────────────
   async function fetchFinanceReport(month: number, year: number) {
@@ -894,6 +963,7 @@ export default function Reports() {
                 style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   padding: '14px 8px', cursor: 'pointer',
+                  borderBottom: canViewTopRunner ? '0.5px solid #f0f0f0' : 'none',
                 }}
               >
                 <div>
@@ -902,6 +972,21 @@ export default function Reports() {
                 </div>
                 <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
               </div>
+              {canViewTopRunner && (
+                <div
+                  onClick={() => setView('toprunner')}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '14px 8px', cursor: 'pointer',
+                  }}
+                >
+                  <div>
+                    <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Top Runner Report</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Daily, weekly, monthly, yearly staff leaderboard</p>
+                  </div>
+                  <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -1261,6 +1346,90 @@ export default function Reports() {
             })()}
           </div>
         )}
+
+        {/* ── Top Runner Report ── */}
+        {view === 'toprunner' && canViewTopRunner && (() => {
+          const totalRevenue = topRunnerData.reduce((s, r) => s + r.revenue, 0)
+          const TABS: { key: 'daily' | 'weekly' | 'monthly' | 'yearly'; label: string }[] = [
+            { key: 'daily',   label: 'Daily'   },
+            { key: 'weekly',  label: 'Weekly'  },
+            { key: 'monthly', label: 'Monthly' },
+            { key: 'yearly',  label: 'Yearly'  },
+          ]
+          return (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <button onClick={() => setView('landing')} style={backBtn}>Back</button>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#111' }}>Top Runner Report</p>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+                {TABS.map(t => {
+                  const active = topRunnerTab === t.key
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => setTopRunnerTab(t.key)}
+                      style={{
+                        backgroundColor: active ? '#034325' : '#ffffff',
+                        color: active ? '#ffffff' : '#034325',
+                        border: '0.5px solid #034325',
+                        borderRadius: 6,
+                        padding: '6px 14px',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {topRunnerLoading
+                ? <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: '0 0 14px' }}>Loading…</p>
+                : (
+                  <>
+                    <div style={{ marginBottom: 14 }}>
+                      <MetricCard label="Total revenue" value={totalRevenue} valueColor="#034325" backgroundColor="#f0fdf4" />
+                    </div>
+
+                    <div style={cardStyle}>
+                      {topRunnerData.length === 0 ? (
+                        <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', margin: 0 }}>
+                          No completed appointments for this period
+                        </p>
+                      ) : (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...TH, width: 50 }}>Rank</th>
+                                <th style={TH}>Staff</th>
+                                <th style={{ ...TH, textAlign: 'right' }}>Appointments</th>
+                                <th style={{ ...TH, textAlign: 'right' }}>Revenue (AED)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {topRunnerData.map((r, i) => (
+                                <tr key={r.name}>
+                                  <td style={TD}>{i + 1}</td>
+                                  <td style={TD}>{r.name}</td>
+                                  <td style={{ ...TD, textAlign: 'right' }}>{r.appointments}</td>
+                                  <td style={{ ...TD, textAlign: 'right' }}>{formatMoney(r.revenue)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+            </div>
+          )
+        })()}
 
       </div>
 
