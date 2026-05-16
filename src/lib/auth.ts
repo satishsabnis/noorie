@@ -28,11 +28,11 @@ export async function getStaffRecord(countryCode: string, mobile: string) {
   return data
 }
 
-export async function getStaffByPhone(phone: string) {
+export async function getStaffByUserId(userId: string) {
   const { data, error } = await supabase
     .from('staff')
     .select('id, name, role, phone, auth_user_id, salon_id')
-    .eq('phone', phone)
+    .eq('auth_user_id', userId)
     .maybeSingle()
   if (error) throw error
   return data

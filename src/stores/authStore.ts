@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { getStaffByPhone } from '../lib/auth'
+import { getStaffByUserId } from '../lib/auth'
 
 interface StaffRecord {
   id: string
@@ -59,8 +59,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { data: { session } } = await supabase.auth.getSession()
 
     if (session?.user) {
-      const phone = session.user.email?.replace('@noorie.internal', '') ?? ''
-      const staff = await getStaffByPhone(phone).catch((): null => null)
+      const staff = await getStaffByUserId(session.user.id).catch((): null => null)
       if (staff) {
         set({ 
           user: session.user, 
@@ -81,8 +80,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       currentUserId = newUserId
 
       if (session?.user) {
-        const phone = session.user.email?.replace('@noorie.internal', '') ?? ''
-        const staff = await getStaffByPhone(phone).catch((): null => null)
+        const staff = await getStaffByUserId(session.user.id).catch((): null => null)
         set({
           user: session.user,
           staffRecord: staff,
