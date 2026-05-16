@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, NavLink } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { supabase } from '../lib/supabase'
-import blueFlutelogo from '../assets/blueflute-logo.png'
+import blueFlutelogo from '../assets/logo.png'
 
 const NAV_LINKS = [
   { label: 'Dashboard',    to: '/dashboard' },
@@ -130,11 +130,18 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
           )
         })}
       </nav>
-      <img
-        src={blueFlutelogo}
-        alt="Blue Flute"
-        style={{ width: 80, height: 80, objectFit: 'contain', flexShrink: 0 }}
-      />
+      <div style={{
+        backgroundColor: '#ffffff', borderRadius: 6,
+        padding: '4px 8px', height: 36,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        <img
+          src={blueFlutelogo}
+          alt="Blue Flute"
+          style={{ height: 28, width: 'auto', objectFit: 'contain' }}
+        />
+      </div>
     </header>
   )
 }
