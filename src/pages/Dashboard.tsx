@@ -282,7 +282,7 @@ function ApptTable({ rows, showPayment = false }: { rows: ApptRow[]; showPayment
 
 // ── Drill-down panel ──────────────────────────────────────────────────────────
 
-function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: DrillDown) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[] }) {
+function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff, weeklyRevenue, monthlyRevenue, yearlyRevenue }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: DrillDown) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[]; weeklyRevenue: { day: string; appointments: number; revenue: number; past: boolean }[]; monthlyRevenue: { period: string; appointments: number; revenue: number; past: boolean }[]; yearlyRevenue: { month: string; appointments: number; revenue: number; past: boolean }[] }) {
   return (
     <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: 16, margin: '0 16px 16px' }}>
 
@@ -416,13 +416,16 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={TH}>Day</th><th style={{ ...TH, textAlign: 'right' }}>Appointments</th><th style={{ ...TH, textAlign: 'right' }}>Revenue</th></tr></thead>
           <tbody>
-            {mockWeeklyRevenue.map(row => (
-              <tr key={row.day} style={{ opacity: row.past ? 1 : 0.4 }}>
-                <td style={TD}>{row.day}</td>
-                <td style={{ ...TD, textAlign: 'right' }}>{row.past ? row.appointments : '—'}</td>
-                <td style={{ ...TD, textAlign: 'right', fontWeight: row.past ? 500 : 400 }}>{row.past ? `AED ${row.revenue.toLocaleString()}` : '—'}</td>
-              </tr>
-            ))}
+            {weeklyRevenue.map(row => {
+              const hasRev = row.revenue > 0
+              return (
+                <tr key={row.day} style={{ opacity: row.past ? 1 : 0.4 }}>
+                  <td style={TD}>{row.day}</td>
+                  <td style={{ ...TD, textAlign: 'right' }}>{hasRev ? row.appointments : '—'}</td>
+                  <td style={{ ...TD, textAlign: 'right', fontWeight: hasRev ? 500 : 400 }}>{hasRev ? `AED ${row.revenue.toLocaleString()}` : '—'}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}
@@ -431,13 +434,16 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={TH}>Period</th><th style={{ ...TH, textAlign: 'right' }}>Appointments</th><th style={{ ...TH, textAlign: 'right' }}>Revenue</th></tr></thead>
           <tbody>
-            {mockMonthlyRevenue.map(row => (
-              <tr key={row.week}>
-                <td style={TD}>{row.week}</td>
-                <td style={{ ...TD, textAlign: 'right' }}>{row.appointments}</td>
-                <td style={{ ...TD, textAlign: 'right', fontWeight: 500 }}>AED {row.revenue.toLocaleString()}</td>
-              </tr>
-            ))}
+            {monthlyRevenue.map(row => {
+              const hasRev = row.revenue > 0
+              return (
+                <tr key={row.period} style={{ opacity: row.past ? 1 : 0.4 }}>
+                  <td style={TD}>{row.period}</td>
+                  <td style={{ ...TD, textAlign: 'right' }}>{hasRev ? row.appointments : '—'}</td>
+                  <td style={{ ...TD, textAlign: 'right', fontWeight: hasRev ? 500 : 400 }}>{hasRev ? `AED ${row.revenue.toLocaleString()}` : '—'}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}
@@ -446,13 +452,16 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={TH}>Month</th><th style={{ ...TH, textAlign: 'right' }}>Appointments</th><th style={{ ...TH, textAlign: 'right' }}>Revenue</th></tr></thead>
           <tbody>
-            {mockYearlyRevenue.map(row => (
-              <tr key={row.month}>
-                <td style={{ ...TD, color: row.past ? '#000000' : '#9ca3af' }}>{row.month}</td>
-                <td style={{ ...TD, textAlign: 'right', color: row.past ? '#000000' : '#9ca3af' }}>{row.past ? row.appointments : '—'}</td>
-                <td style={{ ...TD, textAlign: 'right', fontWeight: row.past ? 500 : 400, color: row.past ? '#000000' : '#9ca3af' }}>{row.past ? `AED ${row.revenue.toLocaleString()}` : '—'}</td>
-              </tr>
-            ))}
+            {yearlyRevenue.map(row => {
+              const hasRev = row.revenue > 0
+              return (
+                <tr key={row.month}>
+                  <td style={{ ...TD, color: row.past ? '#000000' : '#9ca3af' }}>{row.month}</td>
+                  <td style={{ ...TD, textAlign: 'right', color: row.past ? '#000000' : '#9ca3af' }}>{hasRev ? row.appointments : '—'}</td>
+                  <td style={{ ...TD, textAlign: 'right', fontWeight: hasRev ? 500 : 400, color: row.past ? '#000000' : '#9ca3af' }}>{hasRev ? `AED ${row.revenue.toLocaleString()}` : '—'}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}
@@ -987,6 +996,9 @@ export default function Dashboard() {
   const [summaryRevenue,      setSummaryRevenue]      = useState({ total: 0, paymentsCount: 0 })
   const [revenueByService,    setRevenueByService]    = useState<{ service: string; amount: number }[]>([])
   const [revenueByStaff,      setRevenueByStaff]      = useState<{ staff: string; amount: number }[]>([])
+  const [weeklyRevenue,       setWeeklyRevenue]       = useState<{ day: string; appointments: number; revenue: number; past: boolean }[]>([])
+  const [monthlyRevenue,      setMonthlyRevenue]      = useState<{ period: string; appointments: number; revenue: number; past: boolean }[]>([])
+  const [yearlyRevenue,       setYearlyRevenue]       = useState<{ month: string; appointments: number; revenue: number; past: boolean }[]>([])
   const [summaryAppointments, setSummaryAppointments] = useState({ total: 0, completed: 0, walkIns: 0, noShow: 0 })
   const [summaryTopRunner,    setSummaryTopRunner]    = useState<{ name: string; revenue: number; appointments: number } | null>(null)
   const [briefSlots,          setBriefSlots]          = useState<BriefSlot[]>([])
@@ -1037,6 +1049,107 @@ export default function Dashboard() {
         noShow:    appts.filter(a => a.status === 'no_show').length,
       }
 
+      // ── Trend revenue: week / month / year (year-wide, independent of today) ──
+      const dubaiNow = new Date(Date.now() + 4 * 60 * 60 * 1000)
+      const ty = dubaiNow.getUTCFullYear()
+      const tm = dubaiNow.getUTCMonth()   // 0..11
+      const td = dubaiNow.getUTCDate()
+      const todayYMD = dubaiNow.toISOString().slice(0, 10)
+
+      const yearStartISO = `${ty}-01-01T00:00:00+04:00`
+      const yearEndISO   = `${ty}-12-31T23:59:59+04:00`
+
+      const [{ data: yearAppts }, { data: yearPays }] = await Promise.all([
+        supabase.from('appointments')
+          .select('starts_at')
+          .eq('salon_id', salonId)
+          .eq('status', 'completed')
+          .gte('starts_at', yearStartISO)
+          .lt('starts_at', yearEndISO),
+        supabase.from('payments')
+          .select('amount, created_at')
+          .eq('salon_id', salonId)
+          .eq('status', 'completed')
+          .gte('created_at', yearStartISO)
+          .lt('created_at', yearEndISO),
+      ])
+
+      const toDubaiDate = (iso: string): string =>
+        new Date(new Date(iso).getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+      const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+      const dayIdx = (dubaiNow.getUTCDay() + 6) % 7
+      const mondayMs = Date.UTC(ty, tm, td) - dayIdx * 86_400_000
+      const weekDateStrs: string[] = []
+      for (let i = 0; i < 7; i++) {
+        weekDateStrs.push(new Date(mondayMs + i * 86_400_000).toISOString().slice(0, 10))
+      }
+      const weeklyBuckets = dayLabels.map((day, i) => ({
+        day, appointments: 0, revenue: 0, past: weekDateStrs[i] < todayYMD,
+      }))
+
+      const lastDayOfMonth = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate()
+      const monthlyRanges = [
+        { period: 'Week 1', start: 1,  end: 7 },
+        { period: 'Week 2', start: 8,  end: 14 },
+        { period: 'Week 3', start: 15, end: 21 },
+        { period: 'Week 4', start: 22, end: lastDayOfMonth },
+      ]
+      const monthlyBuckets = monthlyRanges.map(r => ({
+        period: r.period, appointments: 0, revenue: 0, past: r.end < td,
+      }))
+
+      const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      const yearlyBuckets = monthLabels.map((month, i) => ({
+        month, appointments: 0, revenue: 0, past: i < tm,
+      }))
+
+      for (const a of yearAppts ?? []) {
+        const ds = toDubaiDate(a.starts_at as string)
+        const wi = weekDateStrs.indexOf(ds)
+        if (wi !== -1) weeklyBuckets[wi].appointments++
+        const dy = parseInt(ds.slice(0, 4))
+        const dmo = parseInt(ds.slice(5, 7)) - 1
+        const dd = parseInt(ds.slice(8, 10))
+        if (dy === ty) {
+          yearlyBuckets[dmo].appointments++
+          if (dmo === tm) {
+            for (let j = 0; j < monthlyRanges.length; j++) {
+              if (dd >= monthlyRanges[j].start && dd <= monthlyRanges[j].end) {
+                monthlyBuckets[j].appointments++
+                break
+              }
+            }
+          }
+        }
+      }
+
+      for (const p of yearPays ?? []) {
+        const ds = toDubaiDate(p.created_at as string)
+        const amt = (p.amount as number) ?? 0
+        const wi = weekDateStrs.indexOf(ds)
+        if (wi !== -1) weeklyBuckets[wi].revenue += amt
+        const dy = parseInt(ds.slice(0, 4))
+        const dmo = parseInt(ds.slice(5, 7)) - 1
+        const dd = parseInt(ds.slice(8, 10))
+        if (dy === ty) {
+          yearlyBuckets[dmo].revenue += amt
+          if (dmo === tm) {
+            for (let j = 0; j < monthlyRanges.length; j++) {
+              if (dd >= monthlyRanges[j].start && dd <= monthlyRanges[j].end) {
+                monthlyBuckets[j].revenue += amt
+                break
+              }
+            }
+          }
+        }
+      }
+
+      const round2 = (n: number) => Math.round(n * 100) / 100
+      const weeklyOut  = weeklyBuckets.map(b => ({ ...b, revenue: round2(b.revenue) }))
+      const monthlyOut = monthlyBuckets.map(b => ({ ...b, revenue: round2(b.revenue) }))
+      const yearlyOut  = yearlyBuckets.map(b => ({ ...b, revenue: round2(b.revenue) }))
+
       if (appts.length === 0) {
         if (!cancelled) {
           setCards([])
@@ -1044,6 +1157,9 @@ export default function Dashboard() {
           setSummaryRevenue({ total: 0, paymentsCount: 0 })
           setRevenueByService([])
           setRevenueByStaff([])
+          setWeeklyRevenue(weeklyOut)
+          setMonthlyRevenue(monthlyOut)
+          setYearlyRevenue(yearlyOut)
           setSummaryTopRunner(null)
           if (firstLoad) { setCardsLoading(false); firstLoad = false }
         }
@@ -1155,6 +1271,9 @@ export default function Dashboard() {
         setSummaryRevenue({ total: revTotal, paymentsCount: revCount })
         setRevenueByService(revByService)
         setRevenueByStaff(revByStaff)
+        setWeeklyRevenue(weeklyOut)
+        setMonthlyRevenue(monthlyOut)
+        setYearlyRevenue(yearlyOut)
         setSummaryTopRunner(topRunner)
         if (firstLoad) { setCardsLoading(false); firstLoad = false }
       }
@@ -1254,7 +1373,7 @@ export default function Dashboard() {
 
         {/* ── Main area ── */}
         {drilldown !== null ? (
-          <DrillDownPanel drilldown={drilldown} onBack={() => setDrilldown(null)} onDrilldown={setDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} />
+          <DrillDownPanel drilldown={drilldown} onBack={() => setDrilldown(null)} onDrilldown={setDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} weeklyRevenue={weeklyRevenue} monthlyRevenue={monthlyRevenue} yearlyRevenue={yearlyRevenue} />
         ) : (
           <>
             {/* Card grid */}
