@@ -345,7 +345,8 @@ export default function NewAppointment() {
 
       const startsAt = `${date}T${time}:00+04:00`
       const endsAt = endTime ? `${date}T${endTime}:00+04:00` : startsAt
-      const firstStaff = completeRows[0].staffId
+      const uniqueStaff = [...new Set(completeRows.map(r => r.staffId))]
+      const apptStaffId = uniqueStaff.length === 1 ? uniqueStaff[0] : null
       const salonId = staffRecord?.salon_id ?? null
 
       const { data: appt, error: apptErr } = await supabase
@@ -353,7 +354,7 @@ export default function NewAppointment() {
         .insert({
           salon_id: salonId,
           client_id: client.id,
-          staff_id: firstStaff,
+          staff_id: apptStaffId,
           starts_at: startsAt,
           ends_at: endsAt,
           is_walk_in: false,

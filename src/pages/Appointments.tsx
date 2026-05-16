@@ -347,7 +347,7 @@ export default function Appointments() {
                         {a.clients?.name ?? '—'}
                       </td>
                       <td style={TD}>{a.serviceNames}</td>
-                      <td style={TD}>{a.staff?.name ?? '—'}</td>
+                      <td style={TD}>{a.staff?.name ?? 'Multiple staff'}</td>
                       <td style={TD}><StatusBadge status={a.status} /></td>
                       <td style={{ ...TD, textAlign: 'center' }}>
                         {a.is_walk_in
