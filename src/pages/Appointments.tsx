@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/authStore'
 
 interface ApptRow {
   id: string
+  reference_number: number | null
   starts_at: string
   ends_at: string
   status: string
@@ -14,6 +15,10 @@ interface ApptRow {
   staff: { id: string; name: string } | null
   serviceNames: string
   totalPrice: number
+}
+
+function fmtApptRef(n: number | null | undefined): string {
+  return n != null ? `APT-${String(n).padStart(4, '0')}` : '—'
 }
 
 function todayStr() {
@@ -90,6 +95,7 @@ export default function Appointments() {
         .from('appointments')
         .select(`
           id,
+          reference_number,
           starts_at,
           ends_at,
           status,
@@ -167,6 +173,7 @@ export default function Appointments() {
         
         return {
           id: a.id as string,
+          reference_number: (a.reference_number as number | null) ?? null,
           starts_at: a.starts_at as string,
           ends_at: a.ends_at as string,
           status: a.status as string,
@@ -326,6 +333,7 @@ export default function Appointments() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr>
+                  <th style={TH}>Ref</th>
                   <th style={TH}>Time</th>
                   <th style={TH}>Client</th>
                   <th style={TH}>Services</th>
@@ -340,6 +348,19 @@ export default function Appointments() {
                   const payment = a.status === 'completed' ? a.totalPrice : 0
                   return (
                     <tr key={a.id} onClick={() => navigate(`/appointment/${a.id}`)} style={{ cursor: 'pointer' }}>
+                      <td style={TD}>
+                        <span style={{
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                          color: 'var(--color-text-secondary, #6b7280)',
+                          backgroundColor: 'var(--color-background-secondary, #f9fafb)',
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          border: '0.5px solid #e0e0e0',
+                        }}>
+                          {fmtApptRef(a.reference_number)}
+                        </span>
+                      </td>
                       <td style={{ ...TD, fontVariantNumeric: 'tabular-nums', color: '#6b7280' }}>
                         {fmtTime(a.starts_at)}
                       </td>

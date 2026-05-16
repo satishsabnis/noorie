@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 
 interface ApptDetail {
   id: string
+  reference_number: number | null
   starts_at: string
   ends_at: string
   status: string
@@ -18,6 +19,10 @@ interface ApptDetail {
     visit_count: number | null
     last_visit_at: string | null
   } | null
+}
+
+function fmtApptRef(n: number | null | undefined): string {
+  return n != null ? `APT-${String(n).padStart(4, '0')}` : '—'
 }
 
 interface PaymentRow {
@@ -256,7 +261,7 @@ export default function AppointmentDetail() {
     async function fetchData() {
       const { data: apptData, error: apptErr } = await supabase
         .from('appointments')
-        .select('id, starts_at, ends_at, status, is_walk_in, notes, client_id, salon_id, clients (name, phone, visit_count, last_visit_at)')
+        .select('id, reference_number, starts_at, ends_at, status, is_walk_in, notes, client_id, salon_id, clients (name, phone, visit_count, last_visit_at)')
         .eq('id', id)
         .single()
 
@@ -488,8 +493,15 @@ export default function AppointmentDetail() {
                   {appt.is_walk_in && ' · Walk-in'}
                 </p>
               </div>
-              <div style={{ flexShrink: 0, paddingTop: 2 }}>
+              <div style={{ flexShrink: 0, paddingTop: 2, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
                 <ApptStatusBadge status={appt.status} />
+                <span style={{
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  color: 'var(--color-text-secondary, rgba(255,255,255,0.6))',
+                }}>
+                  {fmtApptRef(appt.reference_number)}
+                </span>
               </div>
             </div>
 
@@ -515,7 +527,16 @@ export default function AppointmentDetail() {
               </div>
             ) : (
               <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 16 }}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: '#034325', margin: '0 0 12px' }}>Payment</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '0 0 12px' }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#034325', margin: 0 }}>Payment</p>
+                  <span style={{
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                    color: 'var(--color-text-secondary, #6b7280)',
+                  }}>
+                    {fmtApptRef(appt.reference_number)}
+                  </span>
+                </div>
 
                 {services.map(svc => (
                   <div key={svc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid #f0f0f0', gap: 8 }}>
