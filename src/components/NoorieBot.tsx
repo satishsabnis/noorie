@@ -9,6 +9,7 @@ interface Message {
 
 export default function NoorieBot() {
   const staffRecord = useAuthStore(s => s.staffRecord)
+  if (staffRecord?.role !== 'owner') return null
   const salonName = useAuthStore(s => s.salonName)
   const ownerName = staffRecord?.name ?? 'there'
 
