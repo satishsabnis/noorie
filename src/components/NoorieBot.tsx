@@ -735,7 +735,7 @@ export default function NoorieBot() {
             'anthropic-dangerous-direct-browser-access': 'true',
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-5-20251001',
+            model: 'claude-haiku-4-5-20251001',
             max_tokens: 2000,
             system: systemPrompt,
             tools: TOOLS_ARRAY,
@@ -743,10 +743,7 @@ export default function NoorieBot() {
           }),
         })
 
-        if (!res.ok) {
-          const body = await res.text()
-          throw new Error(`API error ${res.status}: ${body}`)
-        }
+        if (!res.ok) throw new Error(`API error ${res.status}`)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const data: any = await res.json()
 
@@ -788,8 +785,7 @@ export default function NoorieBot() {
 
     } catch (err) {
       console.error('[NoorieBot] handleSend error:', err)
-      const errMsg = err instanceof Error ? err.message : String(err)
-      setMessages(m => [...m, { role: 'noorie', text: `Debug: ${errMsg}` }])
+      setMessages(m => [...m, { role: 'noorie', text: 'Sorry, I could not connect. Please try again.' }])
     } finally {
       setLoading(false)
     }
