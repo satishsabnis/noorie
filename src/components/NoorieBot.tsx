@@ -704,9 +704,9 @@ export default function NoorieBot() {
       return
     }
 
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined
-    if (!apiKey) {
-      setMessages(m => [...m, { role: 'noorie', text: 'API key missing. Please contact support.' }])
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) {
+      setMessages(m => [...m, { role: 'noorie', text: 'Not signed in. Please sign in to use Noorie.' }])
       setLoading(false)
       return
     }
@@ -728,13 +728,11 @@ FORMATTING: Never use markdown, bold, bullets, headers, or emojis. Plain convers
       while (iterations < MAX_ITERATIONS) {
         iterations++
 
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/noorie-bot`, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
+            'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
             model: 'claude-haiku-4-5-20251001',
@@ -742,6 +740,7 @@ FORMATTING: Never use markdown, bold, bullets, headers, or emojis. Plain convers
             system: systemPrompt,
             tools: TOOLS_ARRAY,
             messages: anthropicMessages,
+            salonId,
           }),
         })
 
