@@ -38,6 +38,7 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
   const { signOut, staffRecord, salonName, setSalonName } = useAuthStore()
   const [menuOpen, setMenuOpen] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
 
   useEffect(() => {
     const salonId = staffRecord?.salon_id
@@ -101,7 +102,7 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
               }}
             >
               <MenuItem label="About Noorie"       onClick={() => { setMenuOpen(false); setShowAbout(true) }} />
-              <MenuItem label="Privacy Disclaimer" onClick={() => setMenuOpen(false)} />
+              <MenuItem label="Privacy Disclaimer" onClick={() => { setMenuOpen(false); setShowPrivacy(true) }} />
               <div style={{ height: 0.5, background: '#e0e0e0', margin: '4px 0' }} />
               <MenuItem
                 label="Sign out"
@@ -183,6 +184,52 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
           </p>
           <p style={{ margin: 0, fontSize: 14, color: '#133257', lineHeight: 1.5 }}>
             Built by Blue Flute Consulting LLC-FZ, Dubai.
+          </p>
+        </div>
+      </div>
+    )}
+
+    {showPrivacy && (
+      <div
+        onClick={() => setShowPrivacy(false)}
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 300,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            backgroundColor: '#ffffff', borderRadius: 12,
+            maxWidth: 420, width: '90%', padding: 24,
+            maxHeight: '60vh', overflowY: 'auto',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <p style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#034325' }}>Privacy Disclaimer</p>
+            <button
+              onClick={() => setShowPrivacy(false)}
+              style={{
+                background: 'none', border: '0.5px solid #034325',
+                color: '#034325', borderRadius: 6,
+                padding: '4px 12px', fontSize: 13, cursor: 'pointer',
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <p style={{ margin: '0 0 12px', fontSize: 14, color: '#133257', lineHeight: 1.5 }}>
+            Noorie stores all your salon data in a secure Supabase database hosted in the Asia Pacific region. Every salon's data is isolated at the database level. Your salon's records are never visible to any other salon using Noorie.
+          </p>
+          <p style={{ margin: '0 0 12px', fontSize: 14, color: '#133257', lineHeight: 1.5 }}>
+            Noorie uses Anthropic's Claude AI to generate insights from your data. When you ask the AI a question or load the Morning Brief, the relevant salon data is sent to Anthropic for processing. Anthropic does not use this data to train its models. Every AI query is logged with a timestamp and salon ID for audit purposes.
+          </p>
+          <p style={{ margin: '0 0 12px', fontSize: 14, color: '#133257', lineHeight: 1.5 }}>
+            Noorie operates on three third party services: Supabase (database and authentication), Anthropic (AI processing), and Vercel (web hosting). No data is shared with any party outside these services.
+          </p>
+          <p style={{ margin: 0, fontSize: 14, color: '#133257', lineHeight: 1.5 }}>
+            You own your salon data. You can request a full export or permanent deletion at any time by writing to info@bluefluteconsulting.com.
           </p>
         </div>
       </div>
