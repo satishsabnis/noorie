@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
+import { getOutstandingBalances } from '../lib/balances'
 import { useAuthStore } from '../stores/authStore'
 import MarketPulse from '../components/MarketPulse'
 
@@ -801,41 +802,13 @@ async function fetchBriefLapsedClient(salonId: string): Promise<BriefLapsedClien
 }
 
 async function fetchBriefUnpaid(salonId: string): Promise<BriefUnpaid[]> {
-  const { data: apptRows } = await supabase
-    .from('appointments')
-    .select('id, starts_at, clients ( name, phone )')
-    .eq('salon_id', salonId).eq('status', 'completed')
-  if (!apptRows || apptRows.length === 0) return []
-  const apptIds = apptRows.map(a => a.id as string)
-  const [{ data: svcRows }, { data: payRows }] = await Promise.all([
-    supabase.from('appointment_services').select('appointment_id, price').in('appointment_id', apptIds),
-    supabase.from('payments').select('appointment_id, amount').in('appointment_id', apptIds),
-  ])
-  const svcMap: Record<string, number> = {}
-  for (const s of svcRows ?? []) {
-    const aid = s.appointment_id as string
-    svcMap[aid] = (svcMap[aid] ?? 0) + ((s.price as number) ?? 0)
-  }
-  const payMap: Record<string, number> = {}
-  for (const p of payRows ?? []) {
-    const aid = p.appointment_id as string
-    payMap[aid] = (payMap[aid] ?? 0) + ((p.amount as number) ?? 0)
-  }
-  const results: BriefUnpaid[] = []
-  for (const a of apptRows) {
-    const aid = a.id as string
-    const balance = Math.round(((svcMap[aid] ?? 0) - (payMap[aid] ?? 0)) * 100) / 100
-    if (balance <= 0) continue
-    const client = a.clients as unknown as { name: string; phone: string | null } | null
-    results.push({
-      clientName: client?.name ?? 'Client',
-      phone: client?.phone ?? '',
-      amountOwed: balance,
-      appointmentDate: a.starts_at as string,
-    })
-  }
-  results.sort((a, b) => b.amountOwed - a.amountOwed)
-  return results.slice(0, 3)
+  const all = await getOutstandingBalances(salonId)
+  return all.map(b => ({
+    clientName: b.client_name,
+    phone: b.client_phone ?? '',
+    amountOwed: b.amount,
+    appointmentDate: b.starts_at,
+  }))
 }
 
 async function fetchBriefTopClient(salonId: string): Promise<BriefTopClient | null> {
@@ -961,7 +934,7 @@ function MorningBrief({
           backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 200,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, maxWidth: 420, width: '90%', padding: 24 }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, maxWidth: 420, width: '90%', padding: 24, maxHeight: '60vh', overflowY: 'auto' }}>
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
