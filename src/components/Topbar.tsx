@@ -37,6 +37,7 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
   const location = useLocation()
   const { signOut, staffRecord, salonName, setSalonName } = useAuthStore()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
 
   useEffect(() => {
     const salonId = staffRecord?.salon_id
@@ -63,6 +64,7 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
   }
 
   return (
+    <>
     <header style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
       height: 52, backgroundColor: '#034325',
@@ -98,7 +100,7 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
                 display: 'flex', flexDirection: 'column', overflow: 'hidden',
               }}
             >
-              <MenuItem label="About Noorie"       onClick={() => setMenuOpen(false)} />
+              <MenuItem label="About Noorie"       onClick={() => { setMenuOpen(false); setShowAbout(true) }} />
               <MenuItem label="Privacy Disclaimer" onClick={() => setMenuOpen(false)} />
               <div style={{ height: 0.5, background: '#e0e0e0', margin: '4px 0' }} />
               <MenuItem
@@ -142,5 +144,49 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
         />
       </div>
     </header>
+
+    {showAbout && (
+      <div
+        onClick={() => setShowAbout(false)}
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 300,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            backgroundColor: '#ffffff', borderRadius: 12,
+            maxWidth: 420, width: '90%', padding: 24,
+            maxHeight: '60vh', overflowY: 'auto',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <p style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#034325' }}>About Noorie</p>
+            <button
+              onClick={() => setShowAbout(false)}
+              style={{
+                background: 'none', border: '0.5px solid #034325',
+                color: '#034325', borderRadius: 6,
+                padding: '4px 12px', fontSize: 13, cursor: 'pointer',
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <p style={{ margin: '0 0 12px', fontSize: 14, color: '#133257', lineHeight: 1.5 }}>
+            Noorie is an AI powered salon operating system built for Salon owners. It runs your full operation: appointments, clients, staff, payments, payroll, expenses, and layers an intelligence brain on top that reads your data every day to tell you what is happening in your business and what to do next.
+          </p>
+          <p style={{ margin: '0 0 12px', fontSize: 14, color: '#133257', lineHeight: 1.5 }}>
+            Staff has their appointments on their phones. A client booking app, where clients can book directly with their preferred technician, is coming soon.
+          </p>
+          <p style={{ margin: 0, fontSize: 14, color: '#133257', lineHeight: 1.5 }}>
+            Built by Blue Flute Consulting LLC-FZ, Dubai.
+          </p>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
