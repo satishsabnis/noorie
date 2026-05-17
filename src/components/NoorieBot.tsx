@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../stores/authStore'
 import { supabase } from '../lib/supabase'
+import { getOutstandingBalances } from '../lib/balances'
 import newlookLogo from '../assets/newlook-logo.jpg'
 
 interface Message {
@@ -588,34 +589,16 @@ export default function NoorieBot() {
       // ── get_outstanding_balances ──────────────────────────────────────────
       if (toolName === 'get_outstanding_balances') {
         const limit = input.limit ?? 10
-        const { data: appts, error } = await supabase
-          .from('appointments')
-          .select('id, starts_at, clients(name), appointment_services(price), payments(amount, status)')
-          .eq('salon_id', salonId).eq('status', 'completed')
-          .order('starts_at', { ascending: false }).limit(100)
-        if (error) return `Error fetching data: ${error.message}`
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const items: { client: string; date: string; amount: number; ts: number }[] = []
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const a of (appts ?? []) as any[]) {
-          const due  = (a.appointment_services ?? []).reduce((s: number, sv: { price?: number | null }) => s + (sv.price ?? 0), 0)
-          const paid = (a.payments ?? []).filter((p: { status?: string }) => p.status === 'completed').reduce((s: number, p: { amount?: number | null }) => s + (p.amount ?? 0), 0)
-          const owed = due - paid
-          if (owed > 0) {
-            items.push({
-              client: a.clients?.name ?? 'Unknown',
-              date: new Date(a.starts_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Dubai' }),
-              amount: owed,
-              ts: new Date(a.starts_at).getTime(),
-            })
-          }
-        }
-        if (items.length === 0) return `No outstanding balances.`
         const sortBy = input.sort_by === 'date' ? 'date' : 'amount'
-        items.sort((a, b) => sortBy === 'date' ? b.ts - a.ts : b.amount - a.amount)
-        const top = items.slice(0, limit)
-        const total = items.reduce((s, i) => s + i.amount, 0)
-        return `Outstanding balances:\n${top.map(i => `- ${i.client}: AED ${i.amount.toFixed(2)} (${i.date})`).join('\n')}\nTotal outstanding: AED ${total.toFixed(2)} across ${items.length} appointments.`
+        const all = await getOutstandingBalances(salonId, { sortBy })
+        if (all.length === 0) return `No outstanding balances.`
+        const top = all.slice(0, limit)
+        const total = all.reduce((s, i) => s + i.amount, 0)
+        const lines = top.map(b => {
+          const date = new Date(b.starts_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Dubai' })
+          return `- ${b.client_name}: AED ${b.amount.toFixed(2)} (${date})`
+        }).join('\n')
+        return `Outstanding balances:\n${lines}\nTotal outstanding: AED ${total.toFixed(2)} across ${all.length} appointments.`
       }
 
       // ── get_client_retention ──────────────────────────────────────────────
