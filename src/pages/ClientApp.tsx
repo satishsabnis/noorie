@@ -245,7 +245,7 @@ export default function ClientApp() {
     const fullPhone = `${countryCode}${phone.replace(/^0+/, '')}`
     setLoading(true)
     try {
-      const { data: clientData, error: fetchError } = await supabase
+      let { data: clientData, error: fetchError } = await supabase
         .from('clients')
         .select('id, name, phone, pin_changed')
         .eq('salon_id', salon!.id)
@@ -253,9 +253,21 @@ export default function ClientApp() {
         .maybeSingle()
 
       if (fetchError) throw fetchError
+
+      if (!clientData) {
+        const { data: clientData2, error: fetchError2 } = await supabase
+          .from('clients')
+          .select('id, name, phone, pin_changed')
+          .eq('salon_id', salon!.id)
+          .eq('phone', '+' + fullPhone)
+          .maybeSingle()
+        if (fetchError2) throw fetchError2
+        clientData = clientData2
+      }
+
       if (!clientData) { setError('Phone number not registered. Please ask the salon to add you.'); return }
 
-      const email = `${fullPhone.replace(/\s+/g, '')}@noorie-client.internal`
+      const email = `${(clientData.phone as string).replace(/\s+/g, '')}@noorie-client.internal`
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: enteredPin })
       if (signInError) { setError('Incorrect PIN'); return }
 
