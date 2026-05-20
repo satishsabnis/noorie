@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
@@ -117,10 +117,13 @@ export default function ClientProfile() {
 
   const [form, setForm] = useState<FormState>({ name: '', phone: '', email: '', dob: '', allergies: '', notes: '' })
   const [original, setOriginal] = useState<FormState>({ name: '', phone: '', email: '', dob: '', allergies: '', notes: '' })
+  const [pin, setPin] = useState<string[]>(['', '', '', '', ''])
+  const [originalPin, setOriginalPin] = useState('')
+  const pinRefs = useRef<(HTMLInputElement | null)[]>([])
   const [saving, setSaving] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
 
-  const isDirty = JSON.stringify(form) !== JSON.stringify(original)
+  const isDirty = JSON.stringify(form) !== JSON.stringify(original) || pin.join('') !== originalPin
 
   useEffect(() => {
     if (!id) return
@@ -129,7 +132,7 @@ export default function ClientProfile() {
     async function fetchData() {
       const { data: cd, error: ce } = await supabase
         .from('clients')
-        .select('id, name, phone, email, dob, allergies, notes, loyalty_points')
+        .select('id, name, phone, email, dob, allergies, notes, loyalty_points, pin')
         .eq('id', id)
         .single()
 
@@ -224,10 +227,16 @@ export default function ClientProfile() {
         }
       })
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const storedPin: string = (cd as any).pin ?? ''
+      const pinDigits = storedPin ? storedPin.split('') : ['', '', '', '', '']
+
       if (!cancelled) {
         setClient(c)
         setForm(fv)
         setOriginal(fv)
+        setPin(pinDigits)
+        setOriginalPin(storedPin)
         setVisits(mappedVisits)
         setLoading(false)
       }
@@ -241,6 +250,7 @@ export default function ClientProfile() {
     if (!client) return
     setSaving(true)
     setSaveErr(null)
+    const newPin = pin.join('')
     const { error } = await supabase
       .from('clients')
       .update({
@@ -250,10 +260,12 @@ export default function ClientProfile() {
         dob: form.dob || null,
         allergies: form.allergies.trim() || null,
         notes: form.notes.trim() || null,
+        pin: newPin || null,
       })
       .eq('id', client.id)
     if (error) { setSaveErr(error.message); setSaving(false); return }
     setOriginal({ ...form })
+    setOriginalPin(newPin)
     setClient(prev => prev ? { ...prev, ...form } : prev)
     setSaving(false)
   }
@@ -382,6 +394,38 @@ export default function ClientProfile() {
                     placeholder="Any notes…"
                   />
                 </div>
+                <div>
+                  <label style={labelStyle}>Client PIN</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {pin.map((digit, i) => (
+                      <input
+                        key={i}
+                        ref={el => { pinRefs.current[i] = el }}
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={e => {
+                          const val = e.target.value.replace(/\D/g, '')
+                          const newPin = [...pin]
+                          newPin[i] = val
+                          setPin(newPin)
+                          if (val && i < 4) pinRefs.current[i + 1]?.focus()
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Backspace' && !pin[i] && i > 0) {
+                            pinRefs.current[i - 1]?.focus()
+                          }
+                        }}
+                        style={{
+                          width: 40, height: 40, textAlign: 'center', fontSize: 18, fontWeight: 700,
+                          border: '0.5px solid #e0e0e0', borderRadius: 6, outline: 'none',
+                          backgroundColor: '#ffffff', color: '#034325', boxSizing: 'border-box',
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
                 {saveErr && <p style={{ fontSize: 11, color: '#991b1b', margin: 0 }}>{saveErr}</p>}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
@@ -399,7 +443,7 @@ export default function ClientProfile() {
                     {saving ? 'Saving…' : 'Save'}
                   </button>
                   <button
-                    onClick={() => { setForm({ ...original }); setSaveErr(null) }}
+                    onClick={() => { setForm({ ...original }); setPin(originalPin ? originalPin.split('') : ['', '', '', '', '']); setSaveErr(null) }}
                     disabled={!isDirty}
                     style={{
                       flex: 1, backgroundColor: 'transparent',
