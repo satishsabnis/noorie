@@ -74,7 +74,6 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
       height: 52, backgroundColor: '#034325',
       display: 'flex', alignItems: 'center',
       padding: '0 16px', gap: 16,
-      overflow: 'hidden',
     }}>
       {salonName && (
         <div style={{ position: 'relative', flexShrink: 0, ...(isMobile ? { maxWidth: 150 } : {}) }}>
@@ -188,8 +187,8 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
           }}
         />
         <div style={{
-          position: 'fixed', top: 52, left: 0, right: 0, zIndex: 100,
-          backgroundColor: '#ffffff', borderBottom: '0.5px solid #e0e0e0',
+          position: 'fixed', top: 52, right: 0, width: 200, zIndex: 100,
+          backgroundColor: '#ffffff', borderLeft: '0.5px solid #e0e0e0', borderBottom: '0.5px solid #e0e0e0',
         }}>
           {NAV_LINKS.map((link, i) => {
             const isActive = location.pathname === link.to
