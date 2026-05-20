@@ -53,7 +53,7 @@ interface TimeSlot {
   time: string
 }
 
-type Screen = 'login' | 'home' | 'book-service' | 'book-datetime' | 'book-confirm'
+type Screen = 'login' | 'home' | 'set-pin' | 'book-service' | 'book-datetime' | 'book-confirm'
 
 function getTomorrow(): string {
   const d = new Date()
@@ -117,6 +117,13 @@ export default function ClientApp() {
   const [bookingError, setBookingError]       = useState('')
   const [menuOpen, setMenuOpen]               = useState(false)
 
+  const [newPin, setNewPin]         = useState(['', '', '', '', ''])
+  const [confirmPin, setConfirmPin] = useState(['', '', '', '', ''])
+  const newPinRefs     = useRef<(HTMLInputElement | null)[]>([])
+  const confirmPinRefs = useRef<(HTMLInputElement | null)[]>([])
+  const [setPinError, setSetPinError]       = useState('')
+  const [setPinLoading, setSetPinLoading]   = useState(false)
+
   useEffect(() => {
     if (!slug) return
     fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/get-salon-by-slug', {
@@ -151,6 +158,64 @@ export default function ClientApp() {
     if (e.key === 'Backspace' && !pin[index] && index > 0) pinRefs.current[index - 1]?.focus()
   }
 
+  const handleNewPinChange = (index: number, value: string) => {
+    if (!/^\d?$/.test(value)) return
+    const updated = [...newPin]
+    updated[index] = value
+    setNewPin(updated)
+    if (value && index < 4) newPinRefs.current[index + 1]?.focus()
+  }
+
+  const handleNewPinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !newPin[index] && index > 0) newPinRefs.current[index - 1]?.focus()
+  }
+
+  const handleConfirmPinChange = (index: number, value: string) => {
+    if (!/^\d?$/.test(value)) return
+    const updated = [...confirmPin]
+    updated[index] = value
+    setConfirmPin(updated)
+    if (value && index < 4) confirmPinRefs.current[index + 1]?.focus()
+  }
+
+  const handleConfirmPinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !confirmPin[index] && index > 0) confirmPinRefs.current[index - 1]?.focus()
+  }
+
+  const handleSetPin = async () => {
+    const np = newPin.join('')
+    const cp = confirmPin.join('')
+    if (np.length < 5) { setSetPinError('Please enter a 5-digit PIN'); return }
+    if (np !== cp) { setSetPinError('PINs do not match'); return }
+    if (!client) return
+    setSetPinLoading(true)
+    setSetPinError('')
+    try {
+      const { error: updateErr } = await supabase
+        .from('clients')
+        .update({ pin: np, pin_changed: true })
+        .eq('id', client.id)
+      if (updateErr) throw updateErr
+
+      supabase.auth.getSession().then(({ data }) => {
+        fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-client-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${data.session?.access_token}`
+          },
+          body: JSON.stringify({ clientId: client.id, phone: client.phone, pin: np })
+        }).catch(err => console.error('create-client-user failed:', err))
+      })
+
+      setCurrentScreen('home')
+    } catch (err: unknown) {
+      setSetPinError(err instanceof Error ? err.message : 'Failed to set PIN')
+    } finally {
+      setSetPinLoading(false)
+    }
+  }
+
   const doSignOut = () => {
     setClient(null)
     setPin(['', '', '', '', ''])
@@ -163,6 +228,9 @@ export default function ClientApp() {
     setSelectedStaff(null)
     setBookingRef('')
     setMenuOpen(false)
+    setNewPin(['', '', '', '', ''])
+    setConfirmPin(['', '', '', '', ''])
+    setSetPinError('')
     setCurrentScreen('login')
   }
 
@@ -179,7 +247,7 @@ export default function ClientApp() {
     try {
       const { data: clientData, error: fetchError } = await supabase
         .from('clients')
-        .select('id, name, phone')
+        .select('id, name, phone, pin_changed')
         .eq('salon_id', salon!.id)
         .eq('phone', fullPhone)
         .maybeSingle()
@@ -210,7 +278,9 @@ export default function ClientApp() {
       setStaff((staffData as StaffMember[]) ?? [])
 
       setSelectedDate(getTomorrow())
-      setCurrentScreen('home')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pinChanged = (clientData as any).pin_changed
+      setCurrentScreen(pinChanged ? 'home' : 'set-pin')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
@@ -614,6 +684,79 @@ export default function ClientApp() {
         >
           Back to home
         </button>
+      </div>
+    )
+  }
+
+  // ── Set PIN screen ─────────────────────────────────────────────────────────
+
+  if (currentScreen === 'set-pin') {
+    const pinBoxStyle: React.CSSProperties = {
+      width: 48, height: 52, textAlign: 'center', fontSize: 20, fontWeight: 700,
+      border: '1px solid #1D558F', borderRadius: 8, outline: 'none',
+      backgroundColor: '#ffffff', color: '#034325', boxSizing: 'border-box',
+    }
+    return (
+      <div style={{ ...screenWrap, backgroundColor: '#ffffff' }}>
+        <div style={headerStyle}>
+          <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, margin: 0 }}>{salon?.name}</p>
+          <div style={{ width: 60 }} />
+        </div>
+
+        <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: 28 }}>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: 17, fontWeight: 700, color: '#034325', margin: '0 0 6px' }}>Set your own PIN</p>
+            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>Choose a 5-digit PIN you will use to sign in</p>
+          </div>
+
+          <div>
+            <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: '0 0 10px', textAlign: 'center' }}>New PIN</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              {newPin.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={el => { newPinRefs.current[i] = el }}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={e => handleNewPinChange(i, e.target.value)}
+                  onKeyDown={e => handleNewPinKeyDown(i, e)}
+                  style={pinBoxStyle}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: '0 0 10px', textAlign: 'center' }}>Confirm PIN</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              {confirmPin.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={el => { confirmPinRefs.current[i] = el }}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={e => handleConfirmPinChange(i, e.target.value)}
+                  onKeyDown={e => handleConfirmPinKeyDown(i, e)}
+                  style={pinBoxStyle}
+                />
+              ))}
+            </div>
+          </div>
+
+          {setPinError && <p style={{ fontSize: 13, color: '#991b1b', margin: 0, textAlign: 'center' }}>{setPinError}</p>}
+
+          <button
+            onClick={handleSetPin}
+            disabled={setPinLoading}
+            style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 15, fontWeight: 700, cursor: setPinLoading ? 'not-allowed' : 'pointer', opacity: setPinLoading ? 0.7 : 1, width: '100%' }}
+          >
+            {setPinLoading ? 'Saving...' : 'Set PIN & continue'}
+          </button>
+        </div>
       </div>
     )
   }
