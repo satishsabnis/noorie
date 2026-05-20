@@ -144,18 +144,20 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
 
       {isMobile && <div style={{ flex: 1 }} />}
 
-      <div style={{
-        backgroundColor: '#ffffff', borderRadius: 6,
-        padding: '4px 8px', height: 36,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0,
-      }}>
-        <img
-          src={blueFlutelogo}
-          alt="Blue Flute"
-          style={{ height: 28, width: 'auto', objectFit: 'contain' }}
-        />
-      </div>
+      {!isMobile && (
+        <div style={{
+          backgroundColor: '#ffffff', borderRadius: 6,
+          padding: '4px 8px', height: 36,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <img
+            src={blueFlutelogo}
+            alt="Blue Flute"
+            style={{ height: 28, width: 'auto', objectFit: 'contain' }}
+          />
+        </div>
+      )}
 
       {isMobile && (
         <button
