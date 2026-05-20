@@ -58,6 +58,7 @@ interface ConfigData {
   payroll_mode: string; payroll_mode_cycle: string
   fy_start_month: number | null
   supervisor_view_financials: boolean
+  timezone: string
 }
 
 interface ServiceRow { id: string; name: string; duration_minutes: number; active: boolean; price: number; category: string }
@@ -98,6 +99,7 @@ const defaultConfig: ConfigData = {
   payroll_mode: 'commission', payroll_mode_cycle: 'monthly',
   fy_start_month: null,
   supervisor_view_financials: false,
+  timezone: 'Asia/Dubai',
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -218,10 +220,10 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
 }) {
   const [s, setS] = useState(salon)
   const [hours, setHours] = useState<OperatingHours>(config.operating_hours ?? defaultHours)
-  const [c, setC] = useState({ payroll_mode: config.payroll_mode, payroll_mode_cycle: config.payroll_mode_cycle })
+  const [c, setC] = useState({ payroll_mode: config.payroll_mode, payroll_mode_cycle: config.payroll_mode_cycle, timezone: config.timezone ?? 'Asia/Dubai' })
   const [committed, setCommitted] = useState(salon)
   const [committedH, setCommittedH] = useState<OperatingHours>(config.operating_hours ?? defaultHours)
-  const [committedC, setCommittedC] = useState({ payroll_mode: config.payroll_mode, payroll_mode_cycle: config.payroll_mode_cycle })
+  const [committedC, setCommittedC] = useState({ payroll_mode: config.payroll_mode, payroll_mode_cycle: config.payroll_mode_cycle, timezone: config.timezone ?? 'Asia/Dubai' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
@@ -235,7 +237,7 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
   useEffect(() => {
     setS(salon); setCommitted(salon)
     setHours(config.operating_hours ?? defaultHours); setCommittedH(config.operating_hours ?? defaultHours)
-    const p = { payroll_mode: config.payroll_mode, payroll_mode_cycle: config.payroll_mode_cycle }
+    const p = { payroll_mode: config.payroll_mode, payroll_mode_cycle: config.payroll_mode_cycle, timezone: config.timezone ?? 'Asia/Dubai' }
     setC(p); setCommittedC(p)
     setFyStartMonth(config.fy_start_month ?? null)
     setCommittedFyStartMonth(config.fy_start_month ?? null)
@@ -265,7 +267,7 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
       if (e1) { setError(e1.message); setSaving(false); return }
       const { data: d2, error: e2 } = await supabase.from('salon_config').update({
         payroll_mode: c.payroll_mode, payroll_mode_cycle: c.payroll_mode_cycle, operating_hours: hours,
-        fy_start_month: fyStartMonth,
+        fy_start_month: fyStartMonth, timezone: c.timezone,
       }).eq('salon_id', salonId).select()
       console.log('[Admin] Salon salon_config update:', { data: d2, error: e2 })
       if (e2) { setError(e2.message); setSaving(false); return }
@@ -339,6 +341,18 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
               <select value={s.service_pricing_mode} onChange={e => upS('service_pricing_mode', e.target.value)} style={{ ...fieldStyle, appearance: 'none', cursor: 'pointer' }}>
                 <option value="manual">Manual</option>
                 <option value="catalogue">Catalogue</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Timezone</label>
+              <select value={c.timezone} onChange={e => upC('timezone', e.target.value)} style={{ ...fieldStyle, appearance: 'none', cursor: 'pointer' }}>
+                <option value="Asia/Dubai">United Arab Emirates</option>
+                <option value="Asia/Muscat">Oman</option>
+                <option value="Asia/Qatar">Qatar</option>
+                <option value="Asia/Kuwait">Kuwait</option>
+                <option value="Asia/Bahrain">Bahrain</option>
+                <option value="Asia/Riyadh">Saudi Arabia</option>
               </select>
             </div>
 
