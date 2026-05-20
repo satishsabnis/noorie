@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 
@@ -16,13 +16,41 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [slug, setSlug] = useState('')
+  const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+  const slugTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const checkSlug = (value: string) => {
+    if (!value) { setSlugStatus('idle'); return }
+    setSlugStatus('checking')
+    if (slugTimerRef.current) clearTimeout(slugTimerRef.current)
+    slugTimerRef.current = setTimeout(async () => {
+      const res = await fetch(
+        `https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/register-salon?slug=${value}`
+      )
+      const data = await res.json()
+      setSlugStatus(data.available ? 'available' : 'taken')
+    }, 500)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
+    if (!slug.trim()) {
+      setError('Please enter a booking URL')
+      return
+    }
+    if (slugStatus === 'taken') {
+      setError('This booking URL is already taken. Please choose another.')
+      return
+    }
+    if (slugStatus === 'checking') {
+      setError('Please wait while we check your URL availability')
+      return
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match.')
       return
@@ -41,7 +69,7 @@ export default function Signup() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ authEmail, password, salonName, ownerName, countryCode, mobile, email }),
+          body: JSON.stringify({ authEmail, password, salonName, ownerName, countryCode, mobile, email, slug }),
         }
       )
       const data = await res.json()
@@ -81,7 +109,17 @@ export default function Signup() {
             type="text"
             placeholder="Salon name"
             value={salonName}
-            onChange={e => setSalonName(e.target.value)}
+            onChange={e => {
+              setSalonName(e.target.value)
+              const auto = e.target.value
+                .toLowerCase()
+                .trim()
+                .replace(/[^a-z0-9\s-]/g, '')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-')
+              setSlug(auto)
+              checkSlug(auto)
+            }}
             required
             style={{
               backgroundColor: '#ffffff', color: '#000000',
@@ -90,6 +128,33 @@ export default function Signup() {
               boxSizing: 'border-box',
             }}
           />
+
+          {/* Booking URL / slug */}
+          <div>
+            <label style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, marginBottom: 4, display: 'block' }}>
+              Your booking URL <span style={{ color: '#991b1b' }}>*</span>
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', border: `0.5px solid ${slugStatus === 'taken' ? '#991b1b' : '#1D558F'}`, borderRadius: 6, overflow: 'hidden' }}>
+              <span style={{ padding: '0 10px', fontSize: 12, color: '#6b7280', backgroundColor: '#f9f9f9', borderRight: '0.5px solid #1D558F', whiteSpace: 'nowrap', lineHeight: '36px' }}>
+                noorie-salon.vercel.app/
+              </span>
+              <input
+                value={slug}
+                onChange={e => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')
+                  setSlug(val)
+                  checkSlug(val)
+                }}
+                style={{ flex: 1, border: 'none', outline: 'none', padding: '0 10px', fontSize: 13, height: 36, backgroundColor: '#ffffff' }}
+                placeholder="your-salon-name"
+                required
+              />
+            </div>
+            {slugStatus === 'checking'   && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>Checking availability...</div>}
+            {slugStatus === 'available'  && <div style={{ fontSize: 11, color: '#15803d', marginTop: 4 }}>Available</div>}
+            {slugStatus === 'taken'      && <div style={{ fontSize: 11, color: '#991b1b', marginTop: 4 }}>This URL is already taken. Please choose another.</div>}
+            {slugStatus === 'idle'       && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>This is the link your clients will use to book appointments</div>}
+          </div>
 
           {/* Owner full name */}
           <input

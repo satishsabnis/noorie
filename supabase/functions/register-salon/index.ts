@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
 
 interface RegisterSalonBody {
@@ -27,6 +27,24 @@ function jsonResponse(body: Record<string, unknown>, status: number): Response {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders })
+  }
+
+  if (req.method === 'GET') {
+    const url = new URL(req.url)
+    const slugToCheck = url.searchParams.get('slug')
+    if (!slugToCheck) {
+      return new Response(JSON.stringify({ available: false }), { status: 400 })
+    }
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    )
+    const { data } = await supabaseAdmin
+      .from('salons')
+      .select('id')
+      .eq('slug', slugToCheck)
+      .maybeSingle()
+    return new Response(JSON.stringify({ available: !data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   }
 
   if (req.method !== 'POST') {
