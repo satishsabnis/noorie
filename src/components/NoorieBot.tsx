@@ -696,7 +696,7 @@ export default function NoorieBot() {
 
     const systemPrompt = `You are Noorie, the AI business assistant for ${salonName ?? 'this salon'} in Dubai, UAE. You have access to real-time salon data through tools. When asked a question, use the appropriate tool to fetch the data you need, then answer clearly and specifically with real numbers. Be friendly, direct, and concise. Always use AED for currency. Always use Dubai timezone. Today's date is ${new Date(Date.now() + 4 * 60 * 60 * 1000).toLocaleDateString('en-AE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}. Never invent data — if a tool returns no data, say so honestly. You can call multiple tools in sequence if needed to answer a question fully.
 
-FORMATTING: Never use markdown, bold, bullets, headers, or emojis. Plain conversational sentences only. Maximum 3 sentences unless asked for detail. For ranked data use '1. Name: AED X' format, no bullets.`
+FORMATTING: Default to plain conversational sentences, maximum 3 sentences unless asked for detail. No markdown, no bold, no bullets, no headers, no emojis. For ranked data, comparisons, or any tabular data (revenue by staff, revenue by service, multi-row breakdowns), output an HTML <table> using inline style attributes only — there is no stylesheet. Table style: border-collapse:collapse;font-size:12px. Each th and td: padding:6px 8px;border:0.5px solid #e0e0e0;text-align:left. Header row: background-color:#f9fafb. Keep tables compact — only the columns needed. Use "AED X" for currency. For a single number or a one-line answer, do NOT use a table — plain sentence only.`
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const anthropicMessages: any[] = updatedMessages.map(m => ({
@@ -892,6 +892,7 @@ FORMATTING: Never use markdown, bold, bullets, headers, or emojis. Plain convers
                     color: '#1a1a1a',
                     borderRadius: '0 12px 12px 12px',
                     alignSelf: 'flex-start',
+                    overflowX: 'auto',
                   }
                 : {
                     backgroundColor: '#034325',
@@ -902,7 +903,9 @@ FORMATTING: Never use markdown, bold, bullets, headers, or emojis. Plain convers
                   }),
             }}
           >
-            {m.text}
+            {m.role === 'noorie'
+              ? <span dangerouslySetInnerHTML={{ __html: m.text }} />
+              : m.text}
           </div>
         ))}
         {loading && (
