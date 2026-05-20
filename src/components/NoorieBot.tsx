@@ -93,6 +93,16 @@ function getDubaiDateRange(period: string, start_date?: string, end_date?: strin
   if (period === 'year')        return wrap(`${ty}-01-01`, `${ty}-12-31`)
   if (period === 'last_year')   return wrap(`${ty - 1}-01-01`, `${ty - 1}-12-31`)
   if (period === 'custom' && start_date && end_date) return wrap(start_date, end_date)
+  // Named month: 'january' … 'december'
+  const MONTH_NAMES_LC = ['january','february','march','april','may','june','july','august','september','october','november','december']
+  const mIdx = MONTH_NAMES_LC.indexOf(period.toLowerCase())
+  if (mIdx !== -1) {
+    // Use current year if that month has fully ended (we are past it); otherwise last year
+    const year = tm > mIdx ? ty : ty - 1
+    const first = new Date(Date.UTC(year, mIdx, 1))
+    const last  = new Date(Date.UTC(year, mIdx + 1, 0))
+    return wrap(ymd(first), ymd(last))
+  }
   // Default: today
   return wrap(ymd(now), ymd(now))
 }
@@ -106,7 +116,7 @@ const TOOLS_ARRAY = [
     input_schema: {
       type: 'object',
       properties: {
-        period: { type: 'string', description: 'today | yesterday | week | last_week | month | last_month | quarter | last_quarter | year | last_year | custom' },
+        period: { type: 'string', description: 'today | yesterday | week | last_week | month | last_month | quarter | last_quarter | year | last_year | custom | january | february | march | april | may | june | july | august | september | october | november | december (month name resolves to most recent completed occurrence of that month)' },
         start_date: { type: 'string', description: 'YYYY-MM-DD for custom period' },
         end_date: { type: 'string', description: 'YYYY-MM-DD for custom period' },
         group_by: { type: 'string', description: 'day | week | month | quarter | year' },
@@ -120,7 +130,7 @@ const TOOLS_ARRAY = [
     input_schema: {
       type: 'object',
       properties: {
-        period: { type: 'string', description: 'today | yesterday | week | last_week | month | last_month | quarter | last_quarter | year | last_year | custom' },
+        period: { type: 'string', description: 'today | yesterday | week | last_week | month | last_month | quarter | last_quarter | year | last_year | custom | january … december (month name resolves to most recent completed occurrence)' },
         start_date: { type: 'string' },
         end_date: { type: 'string' },
         category: { type: 'string', description: 'fixed | variable | one_time' },
@@ -134,7 +144,7 @@ const TOOLS_ARRAY = [
     input_schema: {
       type: 'object',
       properties: {
-        period: { type: 'string' },
+        period: { type: 'string', description: 'today | yesterday | week | last_week | month | last_month | quarter | last_quarter | year | last_year | custom | january … december (month name resolves to most recent completed occurrence)' },
         start_date: { type: 'string' },
         end_date: { type: 'string' },
         group_by: { type: 'string' },
@@ -149,7 +159,7 @@ const TOOLS_ARRAY = [
       type: 'object',
       properties: {
         mode: { type: 'string', description: 'top_spenders | lapsed | new | at_risk | single_visit | retention' },
-        period: { type: 'string', description: 'Used by top_spenders, new, retention' },
+        period: { type: 'string', description: 'Used by top_spenders, new, retention. today | yesterday | week | last_week | month | last_month | quarter | last_quarter | year | last_year | custom | january … december (month name resolves to most recent completed occurrence)' },
         start_date: { type: 'string' },
         end_date: { type: 'string' },
         limit: { type: 'number', description: 'Result cap; default 10' },
@@ -164,7 +174,7 @@ const TOOLS_ARRAY = [
     input_schema: {
       type: 'object',
       properties: {
-        period: { type: 'string' },
+        period: { type: 'string', description: 'today | yesterday | week | last_week | month | last_month | quarter | last_quarter | year | last_year | custom | january … december (month name resolves to most recent completed occurrence)' },
         start_date: { type: 'string' },
         end_date: { type: 'string' },
         staff_name: { type: 'string', description: 'Filter to a single staff member' },
@@ -179,7 +189,7 @@ const TOOLS_ARRAY = [
     input_schema: {
       type: 'object',
       properties: {
-        period: { type: 'string' },
+        period: { type: 'string', description: 'today | yesterday | week | last_week | month | last_month | quarter | last_quarter | year | last_year | custom | january … december (month name resolves to most recent completed occurrence)' },
         start_date: { type: 'string' },
         end_date: { type: 'string' },
         sort_by: { type: 'string', description: 'revenue | count' },
@@ -215,7 +225,7 @@ const TOOLS_ARRAY = [
     input_schema: {
       type: 'object',
       properties: {
-        period: { type: 'string', description: 'Current period; default month' },
+        period: { type: 'string', description: 'Current period; default month. today | yesterday | week | last_week | month | last_month | quarter | last_quarter | year | last_year | custom | january … december (month name resolves to most recent completed occurrence)' },
       },
     },
   },
@@ -247,6 +257,7 @@ export default function NoorieBot() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [isListening, setIsListening] = useState(false)
+  const [tz, setTz] = useState('Asia/Dubai')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -258,6 +269,14 @@ export default function NoorieBot() {
       text: `Hi ${ownerName}! I am Noorie, your AI salon assistant. Ask me anything about your business.`,
     }])
   }, [ownerName])
+
+  useEffect(() => {
+    const salonId = staffRecord?.salon_id
+    if (!salonId) return
+    supabase.from('salon_config').select('timezone').eq('salon_id', salonId).single().then(({ data }) => {
+      if (data?.timezone) setTz(data.timezone as string)
+    }).catch(() => {})
+  }, [staffRecord?.salon_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -694,7 +713,7 @@ export default function NoorieBot() {
       return
     }
 
-    const systemPrompt = `You are Noorie, the AI business assistant for ${salonName ?? 'this salon'} in Dubai, UAE. You have access to real-time salon data through tools. When asked a question, use the appropriate tool to fetch the data you need, then answer clearly and specifically with real numbers. Be friendly, direct, and concise. Always use AED for currency. Always use Dubai timezone. Today's date is ${new Date(Date.now() + 4 * 60 * 60 * 1000).toLocaleDateString('en-AE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}. Never invent data — if a tool returns no data, say so honestly. You can call multiple tools in sequence if needed to answer a question fully.
+    const systemPrompt = `You are Noorie, the AI business assistant for ${salonName ?? 'this salon'} in Dubai, UAE. You have access to real-time salon data through tools. When asked a question, use the appropriate tool to fetch the data you need, then answer clearly and specifically with real numbers. Be friendly, direct, and concise. Always use AED for currency. Always use Dubai timezone. Today's date is ${new Date(Date.now() + 4 * 60 * 60 * 1000).toLocaleDateString('en-AE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}. Never invent data — if a tool returns no data, say so honestly. You can call multiple tools in sequence if needed to answer a question fully. If the user asks about a specific named month (e.g. "April", "last March"), pass that month name in lowercase as the period value — the system will resolve it to the most recent completed occurrence of that month.
 
 FORMATTING: Default to plain conversational sentences, maximum 3 sentences unless asked for detail. No markdown, no bold, no bullets, no headers, no emojis. For ranked data, comparisons, or any tabular data (revenue by staff, revenue by service, multi-row breakdowns), output an HTML <table> using inline style attributes only — there is no stylesheet. Table style: border-collapse:collapse;font-size:12px. Each th and td: padding:6px 8px;border:0.5px solid #e0e0e0;text-align:left. Header row: background-color:#f9fafb. Keep tables compact — only the columns needed. Use "AED X" for currency. For a single number or a one-line answer, do NOT use a table — plain sentence only.`
 
