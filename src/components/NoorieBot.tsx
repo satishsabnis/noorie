@@ -9,6 +9,39 @@ interface Message {
   text: string
 }
 
+const STORAGE_KEY = 'noorie_bot_messages'
+
+function saveMessages(messages: Message[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+  } catch (e) {
+    console.error('Failed to save messages:', e)
+  }
+}
+
+function loadMessages(): Message[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch (e) {
+    console.error('Failed to load messages:', e)
+    return []
+  }
+}
+
+function clearMessages() {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch (e) {
+    console.error('Failed to clear messages:', e)
+  }
+}
+
+function trimConversation(msgs: Message[], maxTurns: number = 10): Message[] {
+  if (msgs.length <= maxTurns * 2) return msgs
+  return msgs.slice(-(maxTurns * 2))
+}
+
 interface ToolInput {
   start_date?: string
   end_date?: string
@@ -263,6 +296,21 @@ const TOOLS_ARRAY = [
       },
     },
   },
+  {
+    name: 'get_appointments',
+    description: 'Completed appointments grouped by date. Shows which days had activity.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', description: 'today | yesterday | week | last_week | month | last_month | quarter | last_quarter | year | last_year | custom | january … december' },
+        start_date: { type: 'string', description: 'YYYY-MM-DD for custom' },
+        end_date: { type: 'string', description: 'YYYY-MM-DD for custom' },
+        staff_name: { type: 'string', description: 'Optional staff filter' },
+        limit: { type: 'number', description: 'Max days; default 30' },
+      },
+      required: ['period'],
+    },
+  },
 ]
 
 export default function NoorieBot() {
@@ -272,7 +320,7 @@ export default function NoorieBot() {
   const ownerName = staffRecord?.name ?? 'there'
 
   const [isOpen, setIsOpen] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>(() => loadMessages())
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [isListening, setIsListening] = useState(false)
@@ -707,6 +755,59 @@ export default function NoorieBot() {
         return `Forecast (basis: last ${basis} days, avg AED ${dailyAvg.toFixed(2)}/day): projected revenue next month AED ${projRev.toFixed(2)}, fixed expenses AED ${fixedExp.toFixed(2)}, projected net AED ${projNet.toFixed(2)}.`
       }
 
+      // ── get_appointments ──────────────────────────────────────────────────
+      if (toolName === 'get_appointments') {
+        const period = input.period ?? 'month'
+        const limit = input.limit ?? 30
+        const range = getDubaiDateRange(period, tz, input.start_date, input.end_date)
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let query: any = supabase
+          .from('appointments')
+          .select('id, starts_at, status, clients(name), staff(name), appointment_services(service_id)')
+          .eq('salon_id', salonId)
+          .eq('status', 'completed')
+          .gte('starts_at', range.start)
+          .lte('starts_at', range.end)
+
+        if (input.staff_name) {
+          const { data: staffRec } = await supabase
+            .from('staff')
+            .select('id')
+            .eq('salon_id', salonId)
+            .ilike('name', `%${input.staff_name}%`)
+            .maybeSingle()
+          if (staffRec?.id) query = query.eq('staff_id', staffRec.id)
+        }
+
+        const { data, error } = await query.order('starts_at', { ascending: false })
+        if (error || !data) return 'No completed appointments found.'
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const byDate: Record<string, any[]> = {}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(data as any[]).forEach((apt: any) => {
+          const { year, month, day } = getDatePartsInTz(new Date(apt.starts_at), tz)
+          const key = `${year}-${pad2(month + 1)}-${pad2(day)}`
+          if (!byDate[key]) byDate[key] = []
+          byDate[key].push(apt)
+        })
+
+        const dates = Object.keys(byDate).sort().reverse().slice(0, limit)
+        if (dates.length === 0) return 'No completed appointments in this period.'
+
+        let html = '<table style="width:100%; border-collapse:collapse; font-size:12px;"><thead><tr style="border-bottom:1px solid #e0e0e0;"><th style="text-align:left; padding:6px 0;">Date</th><th style="text-align:left; padding:6px 0;">Count</th><th style="text-align:left; padding:6px 0;">Staff</th></tr></thead><tbody>'
+        dates.forEach(date => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const apts = byDate[date]
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const staffNames = [...new Set(apts.map((a: any) => a.staff?.name || '—'))].join(', ')
+          html += `<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:6px 0;">${date}</td><td style="padding:6px 0;">${apts.length}</td><td style="padding:6px 0;">${staffNames}</td></tr>`
+        })
+        html += '</tbody></table>'
+        return html
+      }
+
       return `Unknown tool: ${toolName}`
     } catch (err) {
       console.error('[NoorieBot] executeTool error:', err)
@@ -723,6 +824,7 @@ export default function NoorieBot() {
     const userMsg: Message = { role: 'user', text: trimmed }
     const updatedMessages = [...messages, userMsg]
     setMessages(updatedMessages)
+    saveMessages(updatedMessages)
     setInput('')
     setLoading(true)
 
@@ -746,8 +848,9 @@ export default function NoorieBot() {
 
 FORMATTING: Default to plain conversational sentences, maximum 3 sentences unless asked for detail. No markdown, no bold, no bullets, no headers, no emojis. For ranked data, comparisons, or any tabular data (revenue by staff, revenue by service, multi-row breakdowns), output an HTML <table> using inline style attributes only — there is no stylesheet. Table style: border-collapse:collapse;font-size:12px. Each th and td: padding:6px 8px;border:0.5px solid #e0e0e0;text-align:left. Header row: background-color:#f9fafb. Keep tables compact — only the columns needed. Use "AED X" for currency. For a single number or a one-line answer, do NOT use a table — plain sentence only.`
 
+    const trimmedForAI = trimConversation(updatedMessages)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const anthropicMessages: any[] = updatedMessages.map(m => ({
+    const anthropicMessages: any[] = trimmedForAI.map(m => ({
       role: m.role === 'noorie' ? 'assistant' : 'user',
       content: m.text,
     }))
@@ -783,7 +886,12 @@ FORMATTING: Default to plain conversational sentences, maximum 3 sentences unles
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const textBlock = (data.content as any[]).find((b: any) => b.type === 'text')
           const responseText = textBlock?.text ?? '(no response)'
-          setMessages(m => [...m, { role: 'noorie', text: responseText }])
+          const responseMsg = { role: 'noorie' as const, text: responseText }
+          setMessages(prev => {
+            const updated = [...prev, responseMsg]
+            saveMessages(updated)
+            return updated
+          })
           break
         }
 
