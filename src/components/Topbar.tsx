@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase'
 import blueFlutelogo from '../assets/logo.png'
 import { useIsMobile } from '../hooks/useIsMobile'
 
+const NOORIE_VERSION = 'v2.05.20'
+
 const NAV_LINKS = [
   { label: 'Dashboard',    to: '/dashboard' },
   { label: 'Appointments', to: '/appointments' },
@@ -233,7 +235,7 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <p style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#034325' }}>About Noorie</p>
+            <p style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#034325' }}>About Noorie <span style={{ fontSize: 12, fontWeight: 400, color: '#034325' }}>({NOORIE_VERSION})</span></p>
             <button
               onClick={() => setShowAbout(false)}
               style={{
