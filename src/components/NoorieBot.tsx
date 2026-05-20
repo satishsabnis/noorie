@@ -32,23 +32,42 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0')
 }
 
-function dubaiNowDate(): Date {
-  return new Date(Date.now() + 4 * 60 * 60 * 1000)
+function getDatePartsInTz(date: Date, tz: string): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date)
+  const get = (type: string) => Number(parts.find(p => p.type === type)?.value ?? '0')
+  return { year: get('year'), month: get('month') - 1, day: get('day') }
+}
+
+function tzOffset(tz: string): string {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: tz, timeZoneName: 'longOffset',
+  }).formatToParts(new Date())
+  const name = parts.find(p => p.type === 'timeZoneName')?.value ?? ''
+  const offset = name.replace('GMT', '')
+  return offset || '+00:00'
+}
+
+function dubaiNowDate(tz: string): Date {
+  const { year, month, day } = getDatePartsInTz(new Date(), tz)
+  return new Date(Date.UTC(year, month, day))
 }
 
 function ymd(d: Date): string {
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`
 }
 
-function getDubaiDateRange(period: string, start_date?: string, end_date?: string): { start: string; end: string } {
-  const now = dubaiNowDate()
+function getDubaiDateRange(period: string, tz: string, start_date?: string, end_date?: string): { start: string; end: string } {
+  const now = dubaiNowDate(tz)
   const ty = now.getUTCFullYear()
   const tm = now.getUTCMonth()
   const td = now.getUTCDate()
 
+  const offset = tzOffset(tz)
   const wrap = (sYmd: string, eYmd: string) => ({
-    start: `${sYmd}T00:00:00+04:00`,
-    end:   `${eYmd}T23:59:59+04:00`,
+    start: `${sYmd}T00:00:00${offset}`,
+    end:   `${eYmd}T23:59:59${offset}`,
   })
 
   if (period === 'today')   return wrap(ymd(now), ymd(now))
@@ -290,12 +309,12 @@ export default function NoorieBot() {
 
   // ── Tool executor ─────────────────────────────────────────────────────────
 
-  async function executeTool(toolName: string, input: ToolInput, salonId: string): Promise<string> {
+  async function executeTool(toolName: string, input: ToolInput, salonId: string, tz: string): Promise<string> {
     try {
       // ── get_revenue ───────────────────────────────────────────────────────
       if (toolName === 'get_revenue') {
         const period = input.period ?? 'today'
-        const { start, end } = getDubaiDateRange(period, input.start_date, input.end_date)
+        const { start, end } = getDubaiDateRange(period, tz, input.start_date, input.end_date)
         const [{ data: pays, error: payErr }, { data: appts, error: apptErr }] = await Promise.all([
           supabase.from('payments').select('amount, created_at').eq('salon_id', salonId).eq('status', 'completed').gte('created_at', start).lte('created_at', end),
           supabase.from('appointments').select('id, starts_at').eq('salon_id', salonId).gte('starts_at', start).lte('starts_at', end),
@@ -309,13 +328,13 @@ export default function NoorieBot() {
         // group_by buckets
         const buckets: Record<string, { rev: number; appts: number }> = {}
         const bucketKey = (iso: string) => {
-          const d = new Date(new Date(iso).getTime() + 4 * 60 * 60 * 1000)
-          if (input.group_by === 'day')     return ymd(d)
-          if (input.group_by === 'week')    return `Wk ${pad2(Math.ceil((d.getUTCDate()) / 7))} ${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`
-          if (input.group_by === 'month')   return `${d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })} ${d.getUTCFullYear()}`
-          if (input.group_by === 'quarter') return `Q${Math.floor(d.getUTCMonth() / 3) + 1} ${d.getUTCFullYear()}`
-          if (input.group_by === 'year')    return `${d.getUTCFullYear()}`
-          return ymd(d)
+          const { year, month, day } = getDatePartsInTz(new Date(iso), tz)
+          if (input.group_by === 'day')     return `${year}-${pad2(month + 1)}-${pad2(day)}`
+          if (input.group_by === 'week')    return `Wk ${pad2(Math.ceil(day / 7))} ${year}-${pad2(month + 1)}`
+          if (input.group_by === 'month')   return `${new Date(Date.UTC(year, month, 1)).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })} ${year}`
+          if (input.group_by === 'quarter') return `Q${Math.floor(month / 3) + 1} ${year}`
+          if (input.group_by === 'year')    return `${year}`
+          return `${year}-${pad2(month + 1)}-${pad2(day)}`
         }
         for (const p of pays ?? []) {
           const k = bucketKey(p.created_at as string)
@@ -334,7 +353,7 @@ export default function NoorieBot() {
       // ── get_expenses ──────────────────────────────────────────────────────
       if (toolName === 'get_expenses') {
         const period = input.period ?? 'month'
-        const { start, end } = getDubaiDateRange(period, input.start_date, input.end_date)
+        const { start, end } = getDubaiDateRange(period, tz, input.start_date, input.end_date)
         // Convert range into month+year filter. salon_expenses are keyed by month/year ints.
         const startD = new Date(start)
         const endD = new Date(end)
@@ -364,7 +383,7 @@ export default function NoorieBot() {
       // ── get_profit ────────────────────────────────────────────────────────
       if (toolName === 'get_profit') {
         const period = input.period ?? 'month'
-        const { start, end } = getDubaiDateRange(period, input.start_date, input.end_date)
+        const { start, end } = getDubaiDateRange(period, tz, input.start_date, input.end_date)
         const { data: pays } = await supabase.from('payments').select('amount').eq('salon_id', salonId).eq('status', 'completed').gte('created_at', start).lte('created_at', end)
         const startD = new Date(start), endD = new Date(end)
         const { data: exps } = await supabase.from('salon_expenses').select('amount, month, year').eq('salon_id', salonId)
@@ -387,7 +406,7 @@ export default function NoorieBot() {
 
         if (mode === 'top_spenders') {
           const period = input.period ?? 'month'
-          const { start, end } = getDubaiDateRange(period, input.start_date, input.end_date)
+          const { start, end } = getDubaiDateRange(period, tz, input.start_date, input.end_date)
           const { data, error } = await supabase
             .from('appointments')
             .select('client_id, clients(name), payments(amount, status)')
@@ -425,7 +444,7 @@ export default function NoorieBot() {
 
         if (mode === 'new') {
           const period = input.period ?? 'month'
-          const { start, end } = getDubaiDateRange(period, input.start_date, input.end_date)
+          const { start, end } = getDubaiDateRange(period, tz, input.start_date, input.end_date)
           const { data, error } = await supabase.from('clients').select('id, name').eq('salon_id', salonId).gte('created_at', start).lte('created_at', end)
           if (error) return `Error fetching data: ${error.message}`
           if (!data || data.length === 0) return `No new clients in ${period}.`
@@ -464,7 +483,7 @@ export default function NoorieBot() {
 
         if (mode === 'retention') {
           // Delegated to get_client_retention computation
-          return await executeTool('get_client_retention', { period: input.period }, salonId)
+          return await executeTool('get_client_retention', { period: input.period }, salonId, tz)
         }
 
         return `Unknown client mode: ${mode}`
@@ -473,7 +492,7 @@ export default function NoorieBot() {
       // ── get_staff_performance ─────────────────────────────────────────────
       if (toolName === 'get_staff_performance') {
         const period = input.period ?? 'month'
-        const { start, end } = getDubaiDateRange(period, input.start_date, input.end_date)
+        const { start, end } = getDubaiDateRange(period, tz, input.start_date, input.end_date)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const fetchByRange = async (s: string, e: string): Promise<Record<string, { rev: number; appts: Set<string> }>> => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -507,7 +526,7 @@ export default function NoorieBot() {
           else if (period === 'month') prevPeriod = 'last_month'
           else if (period === 'quarter') prevPeriod = 'last_quarter'
           else if (period === 'year') prevPeriod = 'last_year'
-          const prevRange = getDubaiDateRange(prevPeriod)
+          const prevRange = getDubaiDateRange(prevPeriod, tz)
           const previous = await fetchByRange(prevRange.start, prevRange.end)
           const lines = sorted.map(([n, v], i) => {
             const prev = previous[n]?.rev ?? 0
@@ -524,7 +543,7 @@ export default function NoorieBot() {
       // ── get_service_analysis ──────────────────────────────────────────────
       if (toolName === 'get_service_analysis') {
         const period = input.period ?? 'month'
-        const { start, end } = getDubaiDateRange(period, input.start_date, input.end_date)
+        const { start, end } = getDubaiDateRange(period, tz, input.start_date, input.end_date)
         const { data, error } = await supabase
           .from('appointment_services')
           .select('price, services!inner(name), appointments!inner(salon_id, status, starts_at)')
@@ -553,18 +572,20 @@ export default function NoorieBot() {
       if (toolName === 'get_schedule') {
         let start: string, end: string
         if (input.date) {
-          start = `${input.date}T00:00:00+04:00`
-          end   = `${input.date}T23:59:59+04:00`
+          const off = tzOffset(tz)
+          start = `${input.date}T00:00:00${off}`
+          end   = `${input.date}T23:59:59${off}`
         } else if (input.range === 'tomorrow') {
-          const now = dubaiNowDate()
+          const off = tzOffset(tz)
+          const now = dubaiNowDate(tz)
           const t = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
-          start = `${ymd(t)}T00:00:00+04:00`
-          end   = `${ymd(t)}T23:59:59+04:00`
+          start = `${ymd(t)}T00:00:00${off}`
+          end   = `${ymd(t)}T23:59:59${off}`
         } else if (input.range === 'week') {
-          const r = getDubaiDateRange('week')
+          const r = getDubaiDateRange('week', tz)
           start = r.start; end = r.end
         } else {
-          const r = getDubaiDateRange('today')
+          const r = getDubaiDateRange('today', tz)
           start = r.start; end = r.end
         }
         const { data, error } = await supabase
@@ -578,7 +599,7 @@ export default function NoorieBot() {
         if (!data || data.length === 0) return `No appointments for this range.`
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const lines = (data as any[]).map(a => {
-          const time = new Date(a.starts_at).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })
+          const time = new Date(a.starts_at).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', timeZone: tz })
           const client = a.clients?.name ?? 'Walk-in'
           const staff = a.staff?.name ?? 'Unassigned'
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -593,8 +614,8 @@ export default function NoorieBot() {
           const sName = a.staff?.name ?? 'Unassigned'
           const s = new Date(a.starts_at)
           const e = new Date(a.ends_at)
-          const sM = parseInt(s.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai', hour12: false }).split(':').reduce((acc: number, x: string, i: number) => i === 0 ? Number(x) * 60 : acc + Number(x), 0).toString())
-          const eM = parseInt(e.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai', hour12: false }).split(':').reduce((acc: number, x: string, i: number) => i === 0 ? Number(x) * 60 : acc + Number(x), 0).toString())
+          const sM = parseInt(s.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz, hour12: false }).split(':').reduce((acc: number, x: string, i: number) => i === 0 ? Number(x) * 60 : acc + Number(x), 0).toString())
+          const eM = parseInt(e.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz, hour12: false }).split(':').reduce((acc: number, x: string, i: number) => i === 0 ? Number(x) * 60 : acc + Number(x), 0).toString())
           if (!byStaff[sName]) byStaff[sName] = []
           byStaff[sName].push({ start: sM, end: eM })
         }
@@ -620,7 +641,7 @@ export default function NoorieBot() {
         const top = all.slice(0, limit)
         const total = all.reduce((s, i) => s + i.amount, 0)
         const lines = top.map(b => {
-          const date = new Date(b.starts_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Dubai' })
+          const date = new Date(b.starts_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz })
           return `- ${b.client_name}: AED ${b.amount.toFixed(2)} (${date})`
         }).join('\n')
         return `Outstanding balances:\n${lines}\nTotal outstanding: AED ${total.toFixed(2)} across ${all.length} appointments.`
@@ -629,12 +650,12 @@ export default function NoorieBot() {
       // ── get_client_retention ──────────────────────────────────────────────
       if (toolName === 'get_client_retention') {
         const period = input.period ?? 'month'
-        const curr = getDubaiDateRange(period)
+        const curr = getDubaiDateRange(period, tz)
         let prevPeriod = 'last_month'
         if (period === 'week') prevPeriod = 'last_week'
         else if (period === 'quarter') prevPeriod = 'last_quarter'
         else if (period === 'year') prevPeriod = 'last_year'
-        const prev = getDubaiDateRange(prevPeriod)
+        const prev = getDubaiDateRange(prevPeriod, tz)
 
         const [{ data: currAppts }, { data: prevAppts }] = await Promise.all([
           supabase.from('appointments').select('client_id').eq('salon_id', salonId).eq('status', 'completed').gte('starts_at', curr.start).lte('starts_at', curr.end),
@@ -673,7 +694,7 @@ export default function NoorieBot() {
         const { data: pays } = await supabase.from('payments').select('amount, created_at').eq('salon_id', salonId).eq('status', 'completed').gte('created_at', since)
         const totalRev = (pays ?? []).reduce((s, p) => s + ((p.amount as number) ?? 0), 0)
         const dailyAvg = totalRev / basis
-        const now = dubaiNowDate()
+        const now = dubaiNowDate(tz)
         const nextMonth = now.getUTCMonth() + 1
         const nextMonthYear = nextMonth > 11 ? now.getUTCFullYear() + 1 : now.getUTCFullYear()
         const nextMonthIdx = nextMonth % 12
@@ -719,7 +740,9 @@ export default function NoorieBot() {
       return
     }
 
-    const systemPrompt = `You are Noorie, the AI business assistant for ${salonName ?? 'this salon'} in Dubai, UAE. You have access to real-time salon data through tools. When asked a question, use the appropriate tool to fetch the data you need, then answer clearly and specifically with real numbers. Be friendly, direct, and concise. Always use AED for currency. Always use Dubai timezone. Today's date is ${new Date(Date.now() + 4 * 60 * 60 * 1000).toLocaleDateString('en-AE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}. Never invent data — if a tool returns no data, say so honestly. You can call multiple tools in sequence if needed to answer a question fully. If the user asks about a specific named month (e.g. "April", "last March"), pass that month name in lowercase as the period value — the system will resolve it to the most recent completed occurrence of that month.
+    const { year: tdY, month: tdM, day: tdD } = getDatePartsInTz(new Date(), tz)
+    const todayStr = new Date(Date.UTC(tdY, tdM, tdD)).toLocaleDateString('en-AE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    const systemPrompt = `You are Noorie, the AI business assistant for ${salonName ?? 'this salon'}. You have access to real-time salon data through tools. When asked a question, use the appropriate tool to fetch the data you need, then answer clearly and specifically with real numbers. Be friendly, direct, and concise. Always use AED for currency. Always use the salon timezone (${tz}). Today's date is ${todayStr}. Never invent data — if a tool returns no data, say so honestly. You can call multiple tools in sequence if needed to answer a question fully. If the user asks about a specific named month (e.g. "April", "last March"), pass that month name in lowercase as the period value — the system will resolve it to the most recent completed occurrence of that month.
 
 FORMATTING: Default to plain conversational sentences, maximum 3 sentences unless asked for detail. No markdown, no bold, no bullets, no headers, no emojis. For ranked data, comparisons, or any tabular data (revenue by staff, revenue by service, multi-row breakdowns), output an HTML <table> using inline style attributes only — there is no stylesheet. Table style: border-collapse:collapse;font-size:12px. Each th and td: padding:6px 8px;border:0.5px solid #e0e0e0;text-align:left. Header row: background-color:#f9fafb. Keep tables compact — only the columns needed. Use "AED X" for currency. For a single number or a one-line answer, do NOT use a table — plain sentence only.`
 
@@ -773,7 +796,7 @@ FORMATTING: Default to plain conversational sentences, maximum 3 sentences unles
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const toolResults: any[] = []
           for (const toolCall of toolUseBlocks) {
-            const toolResult = await executeTool(toolCall.name, toolCall.input as ToolInput, salonId)
+            const toolResult = await executeTool(toolCall.name, toolCall.input as ToolInput, salonId, tz)
             toolResults.push({
               type: 'tool_result',
               tool_use_id: toolCall.id,
