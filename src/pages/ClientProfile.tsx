@@ -268,6 +268,23 @@ export default function ClientProfile() {
     setOriginalPin(newPin)
     setClient(prev => prev ? { ...prev, ...form } : prev)
     setSaving(false)
+
+    if (newPin.length === 5 && newPin !== originalPin) {
+      supabase.auth.getSession().then(({ data }) => {
+        fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-client-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${data.session?.access_token}`
+          },
+          body: JSON.stringify({
+            clientId: client.id,
+            phone: form.phone.trim(),
+            pin: newPin
+          })
+        }).catch(err => console.error('create-client-user failed:', err))
+      })
+    }
   }
 
   const completedVisits = visits.filter(v => v.status === 'completed')

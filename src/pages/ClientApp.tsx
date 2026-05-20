@@ -177,24 +177,21 @@ export default function ClientApp() {
     const fullPhone = `${countryCode}${phone.replace(/^0+/, '')}`
     setLoading(true)
     try {
-      const { data, error: fetchError } = await supabase
+      const { data: clientData, error: fetchError } = await supabase
         .from('clients')
-        .select('id, name, phone, pin')
+        .select('id, name, phone')
         .eq('salon_id', salon!.id)
         .eq('phone', fullPhone)
         .maybeSingle()
 
       if (fetchError) throw fetchError
-      if (!data) { setError('Phone number not registered. Please ask the salon to add you.'); return }
+      if (!clientData) { setError('Phone number not registered. Please ask the salon to add you.'); return }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const storedPin = (data as any).pin
-      if (storedPin === null || storedPin === undefined || storedPin !== enteredPin) {
-        setError('Incorrect PIN')
-        return
-      }
+      const email = `${fullPhone.replace(/\s+/g, '')}@noorie-client.internal`
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: enteredPin })
+      if (signInError) { setError('Incorrect PIN'); return }
 
-      setClient({ id: data.id as string, name: data.name as string, phone: data.phone as string })
+      setClient({ id: clientData.id as string, name: clientData.name as string, phone: clientData.phone as string })
 
       const { data: svcData } = await supabase
         .from('services')
