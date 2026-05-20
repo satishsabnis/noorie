@@ -14,6 +14,7 @@ interface RegisterSalonBody {
   countryCode: string
   mobile: string
   email: string
+  slug: string
 }
 
 function jsonResponse(body: Record<string, unknown>, status: number): Response {
@@ -39,9 +40,20 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ success: false, error: 'Invalid JSON body' }, 400)
   }
 
-  const { authEmail, password, salonName, ownerName, countryCode, mobile, email } = body
+  const { authEmail, password, salonName, ownerName, countryCode, mobile, email, slug } = body
   const mobileStripped = mobile.replace(/^0+/, '')
   const phone = `${countryCode}${mobileStripped}`
+
+  const cleanSlug = slug
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+
+  if (!cleanSlug) {
+    return new Response(JSON.stringify({ error: 'Invalid salon slug' }), { status: 400 })
+  }
 
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -61,10 +73,13 @@ Deno.serve(async (req: Request) => {
 
   const { data: salonData, error: salonError } = await supabaseAdmin
     .from('salons')
-    .insert({ name: salonName })
+    .insert({ name: salonName, slug: cleanSlug })
     .select('id')
     .single()
   if (salonError || !salonData) {
+    if (salonError?.code === '23505') {
+      return new Response(JSON.stringify({ error: 'This salon URL is already taken. Please choose another.' }), { status: 409 })
+    }
     return jsonResponse({ success: false, error: salonError?.message ?? 'Failed to create salon' }, 400)
   }
 
