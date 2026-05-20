@@ -3,6 +3,7 @@ import { useNavigate, useLocation, NavLink } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { supabase } from '../lib/supabase'
 import blueFlutelogo from '../assets/logo.png'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 const NAV_LINKS = [
   { label: 'Dashboard',    to: '/dashboard' },
@@ -36,7 +37,9 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
   const navigate = useNavigate()
   const location = useLocation()
   const { signOut, staffRecord, salonName, setSalonName } = useAuthStore()
+  const isMobile = useIsMobile()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [navOpen, setNavOpen] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
   const [showPrivacy, setShowPrivacy] = useState(false)
 
@@ -80,10 +83,14 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
               background: 'none', border: 'none', cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 6,
               color: '#ffffff', fontSize: 18, fontWeight: 700,
-              padding: 0, whiteSpace: 'nowrap',
+              padding: 0, minWidth: 0,
             }}
           >
-            {salonName}
+            <span style={isMobile ? {
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160,
+            } : { whiteSpace: 'nowrap' }}>
+              {salonName}
+            </span>
             <svg
               width="12" height="12" viewBox="0 0 12 12"
               style={{ transform: menuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
@@ -113,25 +120,30 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
           )}
         </div>
       )}
-      <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, overflowX: 'auto' }}>
-        {NAV_LINKS.map(link => {
-          const isActive = location.pathname === link.to
-          return (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              onClick={link.to === '/dashboard' ? onDashboardClick : undefined}
-              style={{
-                color: isActive ? '#00BF00' : 'rgba(255,255,255,0.6)',
-                fontSize: 12, textDecoration: 'none', whiteSpace: 'nowrap',
-                fontWeight: isActive ? 600 : 400,
-              }}
-            >
-              {link.label}
-            </NavLink>
-          )
-        })}
-      </nav>
+      {!isMobile && (
+        <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, overflowX: 'auto' }}>
+          {NAV_LINKS.map(link => {
+            const isActive = location.pathname === link.to
+            return (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                onClick={link.to === '/dashboard' ? onDashboardClick : undefined}
+                style={{
+                  color: isActive ? '#00BF00' : 'rgba(255,255,255,0.6)',
+                  fontSize: 12, textDecoration: 'none', whiteSpace: 'nowrap',
+                  fontWeight: isActive ? 600 : 400,
+                }}
+              >
+                {link.label}
+              </NavLink>
+            )
+          })}
+        </nav>
+      )}
+
+      {isMobile && <div style={{ flex: 1 }} />}
+
       <div style={{
         backgroundColor: '#ffffff', borderRadius: 6,
         padding: '4px 8px', height: 36,
@@ -144,7 +156,64 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
           style={{ height: 28, width: 'auto', objectFit: 'contain' }}
         />
       </div>
+
+      {isMobile && (
+        <button
+          onClick={() => setNavOpen(prev => !prev)}
+          aria-label="Open navigation"
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            width: 44, height: 44, flexShrink: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 4, padding: 0,
+          }}
+        >
+          <svg width="18" height="14" viewBox="0 0 18 14" fill="none" aria-hidden="true">
+            <rect x="0" y="0"  width="18" height="2" rx="1" fill="#ffffff" />
+            <rect x="0" y="6"  width="18" height="2" rx="1" fill="#ffffff" />
+            <rect x="0" y="12" width="18" height="2" rx="1" fill="#ffffff" />
+          </svg>
+        </button>
+      )}
     </header>
+
+    {isMobile && navOpen && (
+      <>
+        <div
+          onClick={() => setNavOpen(false)}
+          style={{
+            position: 'fixed', top: 52, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 90,
+          }}
+        />
+        <div style={{
+          position: 'fixed', top: 52, left: 0, right: 0, zIndex: 100,
+          backgroundColor: '#ffffff', borderBottom: '0.5px solid #e0e0e0',
+        }}>
+          {NAV_LINKS.map((link, i) => {
+            const isActive = location.pathname === link.to
+            return (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                onClick={() => { setNavOpen(false); if (link.to === '/dashboard') onDashboardClick?.() }}
+                style={{
+                  display: 'block', width: '100%', boxSizing: 'border-box',
+                  padding: '14px 16px', minHeight: 44,
+                  fontSize: 15, textDecoration: 'none',
+                  color: isActive ? '#00BF00' : '#034325',
+                  fontWeight: isActive ? 600 : 400,
+                  borderBottom: i < NAV_LINKS.length - 1 ? '0.5px solid #e0e0e0' : 'none',
+                  backgroundColor: '#ffffff',
+                }}
+              >
+                {link.label}
+              </NavLink>
+            )
+          })}
+        </div>
+      </>
+    )}
 
     {showAbout && (
       <div
