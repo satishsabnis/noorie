@@ -119,16 +119,24 @@ export default function ClientApp() {
 
   useEffect(() => {
     if (!slug) return
-    supabase
-      .from('salons')
-      .select('id, name, city, country')
-      .eq('slug', slug)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setSalon(data as Salon)
-        else setSalonNotFound(true)
-        setSalonLoading(false)
-      })
+    fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/get-salon-by-slug', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data && data.id) {
+        setSalon(data as Salon)
+      } else {
+        setSalonNotFound(true)
+      }
+      setSalonLoading(false)
+    })
+    .catch(() => {
+      setSalonNotFound(true)
+      setSalonLoading(false)
+    })
   }, [slug])
 
   const handlePinChange = (index: number, value: string) => {
