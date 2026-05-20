@@ -15,6 +15,7 @@ import StaffForm from './pages/StaffForm'
 import Reports from './pages/Reports'
 import Admin from './pages/Admin'
 import StaffApp from './pages/StaffApp'
+import ClientApp from './pages/ClientApp'
 import NoorieBot from './components/NoorieBot'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -108,6 +109,7 @@ function AppRoutes() {
           <Reports />
         </OwnerRoute>
       } />
+      <Route path="/:slug/*" element={<ClientApp />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
     {isAuthenticated && <NoorieBot />}
