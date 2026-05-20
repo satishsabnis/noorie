@@ -29,6 +29,18 @@ const COUNTRIES = [
   { label: 'United States', hasCities: false },
 ]
 
+const COUNTRY_PHONE: Record<string, { flag: string; code: string }> = {
+  'United Arab Emirates': { flag: '🇦🇪', code: '+971' },
+  'Saudi Arabia':         { flag: '🇸🇦', code: '+966' },
+  'Kuwait':               { flag: '🇰🇼', code: '+965' },
+  'Qatar':                { flag: '🇶🇦', code: '+974' },
+  'Bahrain':              { flag: '🇧🇭', code: '+973' },
+  'Oman':                 { flag: '🇴🇲', code: '+968' },
+  'India':                { flag: '🇮🇳', code: '+91'  },
+  'United Kingdom':       { flag: '🇬🇧', code: '+44'  },
+  'United States':        { flag: '🇺🇸', code: '+1'   },
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface DayConfig { open: boolean; from: string; to: string }
@@ -310,7 +322,7 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
 
             <div>
               <label style={labelStyle}>Country<Req /></label>
-              <select value={s.country} onChange={e => { upS('country', e.target.value); upS('city', '') }} style={{ ...fieldStyle, appearance: 'none', cursor: 'pointer' }}>
+              <select value={s.country} onChange={e => { upS('country', e.target.value); upS('city', ''); upS('phone', '') }} style={{ ...fieldStyle, appearance: 'none', cursor: 'pointer' }}>
                 {COUNTRIES.map(c => <option key={c.label} value={c.label}>{c.label}</option>)}
               </select>
             </div>
@@ -328,7 +340,29 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={labelStyle}>Phone<Req /></label>
-                <input value={s.phone} onChange={e => upS('phone', e.target.value)} style={fieldStyle} type="tel" placeholder="+971 50 000 0000" />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    height: 36, padding: '0 10px',
+                    border: '0.5px solid #e0e0e0', borderRadius: 6,
+                    backgroundColor: '#f9f9f9',
+                    fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0,
+                  }}>
+                    <span style={{ fontSize: 18, lineHeight: 1 }}>
+                      {COUNTRY_PHONE[s.country]?.flag ?? '🌐'}
+                    </span>
+                    <span style={{ color: '#333' }}>
+                      {COUNTRY_PHONE[s.country]?.code ?? ''}
+                    </span>
+                  </div>
+                  <input
+                    value={s.phone}
+                    onChange={e => upS('phone', e.target.value)}
+                    style={{ ...fieldStyle, flex: 1 }}
+                    type="tel"
+                    placeholder="50 123 4567"
+                  />
+                </div>
               </div>
               <div>
                 <label style={labelStyle}>Email</label>
