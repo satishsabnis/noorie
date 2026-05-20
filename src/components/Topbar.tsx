@@ -74,9 +74,10 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
       height: 52, backgroundColor: '#034325',
       display: 'flex', alignItems: 'center',
       padding: '0 16px', gap: 16,
+      overflow: 'hidden',
     }}>
       {salonName && (
-        <div style={{ position: 'relative', flexShrink: 0 }}>
+        <div style={{ position: 'relative', flexShrink: 0, ...(isMobile ? { maxWidth: 150 } : {}) }}>
           <button
             onClick={() => setMenuOpen(prev => !prev)}
             style={{
@@ -87,7 +88,7 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
             }}
           >
             <span style={isMobile ? {
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
             } : { whiteSpace: 'nowrap' }}>
               {salonName}
             </span>
@@ -144,20 +145,18 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
 
       {isMobile && <div style={{ flex: 1 }} />}
 
-      {!isMobile && (
-        <div style={{
-          backgroundColor: '#ffffff', borderRadius: 6,
-          padding: '4px 8px', height: 36,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          <img
-            src={blueFlutelogo}
-            alt="Blue Flute"
-            style={{ height: 28, width: 'auto', objectFit: 'contain' }}
-          />
-        </div>
-      )}
+      <div style={{
+        backgroundColor: '#ffffff', borderRadius: 6,
+        padding: '4px 8px', height: 36,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        <img
+          src={blueFlutelogo}
+          alt="Blue Flute"
+          style={{ height: 28, width: 'auto', objectFit: 'contain' }}
+        />
+      </div>
 
       {isMobile && (
         <button
