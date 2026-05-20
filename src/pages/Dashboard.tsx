@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Topbar from '../components/Topbar'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { supabase } from '../lib/supabase'
 import { getOutstandingBalances } from '../lib/balances'
 import { useAuthStore } from '../stores/authStore'
@@ -242,7 +243,7 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
 
       {/* Revenue period chips */}
       {drilldown === 'revenue-today' && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           {(['revenue-week', 'revenue-month', 'revenue-year'] as const).map((key, i) => (
             <span
               key={key}
@@ -896,6 +897,7 @@ function MorningBrief({
   loading: boolean
   errors: { slots: boolean; lapsed: boolean; unpaid: boolean; topClient: boolean }
 }) {
+  const isMobile = useIsMobile()
   const [dtLabel, setDtLabel] = useState(dubaiDateTimeLabel())
   const [activeModal, setActiveModal] = useState<'slots' | 'lapsed' | 'unpaid' | 'topClient' | null>(null)
 
@@ -1059,7 +1061,7 @@ function MorningBrief({
         </div>
 
         {/* Four tappable tiles */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10 }}>
           <div onClick={() => setActiveModal('slots')} style={tileStyle}>
             <p style={{ fontSize: 13, fontWeight: 500, color: '#ffffff', margin: 0 }}>Today's appointment gaps</p>
           </div>
@@ -1082,6 +1084,7 @@ function MorningBrief({
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const staffRecord = useAuthStore(s => s.staffRecord)
   const [drilldownStack, setDrilldownStack] = useState<Exclude<DrillDown, null>[]>([])
   const drilldown: DrillDown = drilldownStack.length > 0 ? drilldownStack[drilldownStack.length - 1] : null
@@ -1494,7 +1497,7 @@ export default function Dashboard() {
   })
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
 
       <Topbar onDashboardClick={resetDrilldown} />
 
@@ -1511,7 +1514,7 @@ export default function Dashboard() {
         />
 
         {/* ── Summary strip ── */}
-        <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 12 }}>
           <SummaryCard
             label="Revenue today"
             value={<Clickable onClick={() => pushDrilldown('revenue-today')}>AED {summaryRevenue.total.toLocaleString()}</Clickable>}
