@@ -273,9 +273,15 @@ export default function NoorieBot() {
   useEffect(() => {
     const salonId = staffRecord?.salon_id
     if (!salonId) return
-    supabase.from('salon_config').select('timezone').eq('salon_id', salonId).single().then(({ data }) => {
-      if (data?.timezone) setTz(data.timezone as string)
-    }).catch(() => {})
+    const fetchTz = async () => {
+      try {
+        const { data } = await supabase.from('salon_config').select('timezone').eq('salon_id', salonId).single()
+        if (data?.timezone) setTz(data.timezone as string)
+      } catch {
+        // leave tz as default
+      }
+    }
+    fetchTz()
   }, [staffRecord?.salon_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
