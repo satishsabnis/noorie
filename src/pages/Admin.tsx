@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -229,6 +230,7 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
   const [openPayroll, setOpenPayroll] = useState(false)
   const [fyStartMonth, setFyStartMonth] = useState<number | null>(config.fy_start_month ?? null)
   const [committedFyStartMonth, setCommittedFyStartMonth] = useState<number | null>(config.fy_start_month ?? null)
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     setS(salon); setCommitted(salon)
@@ -365,7 +367,7 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
               {DAYS.map(day => {
                 const d = hours[day] ?? { open: true, from: '09:00', to: '21:00' }
                 return (
-                  <div key={day} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div key={day} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
                     <span style={{ fontSize: 12, color: '#374151', width: 90, textTransform: 'capitalize', flexShrink: 0 }}>{day}</span>
                     <input
                       type="checkbox" checked={d.open}
@@ -373,13 +375,13 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
                       style={{ accentColor: '#034325', width: 15, height: 15, flexShrink: 0, cursor: 'pointer' }}
                     />
                     {d.open ? (
-                      <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, ...(isMobile ? { flexBasis: '100%' } : {}) }}>
                         <input type="time" value={d.from} onChange={e => upH(day, 'from', e.target.value)}
                           style={{ ...fieldStyle, width: 110 }} />
                         <span style={{ fontSize: 12, color: '#6b7280', flexShrink: 0 }}>to</span>
                         <input type="time" value={d.to} onChange={e => upH(day, 'to', e.target.value)}
                           style={{ ...fieldStyle, width: 110 }} />
-                      </>
+                      </div>
                     ) : (
                       <span style={{ fontSize: 12, color: '#9ca3af' }}>Closed</span>
                     )}
@@ -396,7 +398,7 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
         <AccordionHeader label="Payroll settings" open={openPayroll} onToggle={() => setOpenPayroll(p => !p)} />
         {openPayroll && (
           <div style={{ border: '0.5px solid #e0e0e0', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: 16, backgroundColor: '#ffffff' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
               {/* Left — Payroll mode */}
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Payroll mode</label>
@@ -412,7 +414,7 @@ function SectionSalon({ salon, config, salonId, onRefresh, onNameSaved }: {
                 </div>
               </div>
               {/* Right — Payroll cycle */}
-              <div style={{ borderLeft: '0.5px solid #e0e0e0', paddingLeft: 32, flexShrink: 0 }}>
+              <div style={isMobile ? { paddingTop: 12 } : { borderLeft: '0.5px solid #e0e0e0', paddingLeft: 32, flexShrink: 0 }}>
                 <label style={labelStyle}>Payroll cycle</label>
                 <select value={c.payroll_mode_cycle} onChange={e => upC('payroll_mode_cycle', e.target.value)}
                   style={{ ...fieldStyle, appearance: 'none', cursor: 'pointer', width: 130 }}>
@@ -554,7 +556,7 @@ function SectionServices({ salonId }: { salonId: string }) {
         </div>
       </div>
 
-      <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
+      <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, overflowX: 'auto', marginBottom: 14 }}>
         {loading ? <p style={{ padding: 24, textAlign: 'center', fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={TH}>Service</th><th style={TH}>Category</th><th style={TH}>Duration</th><th style={TH}>Price (AED)</th><th style={TH}>Status</th><th style={TH}>Actions</th></tr></thead>
@@ -677,6 +679,7 @@ function SectionWhatsApp({ config, salonId, onRefresh }: { config: ConfigData; s
   const [c, setC] = useState(config)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const isMobile = useIsMobile()
   useEffect(() => { setC(config); setDirty(false) }, [config])
   function up<K extends keyof ConfigData>(k: K, v: ConfigData[K]) { setC(p => ({ ...p, [k]: v })); setDirty(true) }
 
@@ -705,15 +708,15 @@ function SectionWhatsApp({ config, salonId, onRefresh }: { config: ConfigData; s
         <ToggleRow label="WhatsApp notifications" sub="Master on/off for all WhatsApp messages" on={c.whatsapp_enabled} onChange={v => up('whatsapp_enabled', v)} />
         <div style={{ borderTop: '0.5px solid #e0e0e0', margin: '10px 0', paddingTop: 10, opacity: off ? 0.5 : 1, pointerEvents: off ? 'none' : 'auto' }}>
           <ToggleRow label="Appointment confirmation" on={c.whatsapp_confirmation} onChange={v => up('whatsapp_confirmation', v)} />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: isMobile ? undefined : 'space-between', padding: '8px 0' }}>
             <ToggleRow label="Appointment reminder" on={c.whatsapp_reminder} onChange={v => up('whatsapp_reminder', v)} />
-            <select value={c.whatsapp_reminder_hours} onChange={e => up('whatsapp_reminder_hours', e.target.value)} style={{ ...inputStyle, width: 80, marginLeft: 12 }}>
+            <select value={c.whatsapp_reminder_hours} onChange={e => up('whatsapp_reminder_hours', e.target.value)} style={{ ...inputStyle, width: 80, marginLeft: isMobile ? 0 : 12 }}>
               <option value="24">24h</option><option value="12">12h</option><option value="2">2h</option>
             </select>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: isMobile ? undefined : 'space-between', padding: '8px 0' }}>
             <ToggleRow label="Birthday greeting" on={c.whatsapp_birthday} onChange={v => up('whatsapp_birthday', v)} />
-            <select value={c.whatsapp_birthday_timing} onChange={e => up('whatsapp_birthday_timing', e.target.value)} style={{ ...inputStyle, width: 130, marginLeft: 12 }}>
+            <select value={c.whatsapp_birthday_timing} onChange={e => up('whatsapp_birthday_timing', e.target.value)} style={{ ...inputStyle, width: 130, marginLeft: isMobile ? 0 : 12 }}>
               <option value="on_the_day">On the day</option>
               <option value="1_day_before">1 day before</option>
               <option value="3_days_before">3 days before</option>
@@ -736,6 +739,7 @@ function SectionLoyalty({ config, salonId, onRefresh }: { config: ConfigData; sa
   const [c, setC] = useState(config)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const isMobile = useIsMobile()
   useEffect(() => { setC(config); setDirty(false) }, [config])
   function up<K extends keyof ConfigData>(k: K, v: ConfigData[K]) { setC(p => ({ ...p, [k]: v })); setDirty(true) }
 
@@ -763,7 +767,7 @@ function SectionLoyalty({ config, salonId, onRefresh }: { config: ConfigData; sa
         <div style={{ borderTop: '0.5px solid #e0e0e0', margin: '10px 0', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label style={labelStyle}>Earning rate</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
               <span style={{ color: '#6b7280' }}>Client earns</span>
               <input type="number" value={c.loyalty_earning_rate} onChange={e => up('loyalty_earning_rate', parseFloat(e.target.value) || 0)} style={{ ...inputStyle, width: 70 }} />
               <span style={{ color: '#6b7280' }}>point per</span>
@@ -773,7 +777,7 @@ function SectionLoyalty({ config, salonId, onRefresh }: { config: ConfigData; sa
           </div>
           <div>
             <label style={labelStyle}>Redemption rate</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
               <input type="number" value={c.loyalty_redemption_rate} onChange={e => up('loyalty_redemption_rate', parseFloat(e.target.value) || 0)} style={{ ...inputStyle, width: 70 }} />
               <span style={{ color: '#6b7280' }}>points =</span>
               <input type="number" value={c.loyalty_earning_rate} onChange={e => up('loyalty_earning_rate', parseFloat(e.target.value) || 0)} style={{ ...inputStyle, width: 70 }} />
@@ -1542,6 +1546,7 @@ export default function Admin() {
   const staffRecord = useAuthStore(s => s.staffRecord)
   const setSalonName = useAuthStore(s => s.setSalonName)
   const salonId = staffRecord?.salon_id ?? ''
+  const isMobile = useIsMobile()
 
   const [activeSection, setActiveSection] = useState<Section>('Salon details')
   const [salon,    setSalon]    = useState<SalonData>(defaultSalon)
@@ -1582,32 +1587,55 @@ export default function Admin() {
   )
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
       <Topbar />
-      <div style={{ marginTop: 52, flex: 1, display: 'flex' }}>
+      <div style={{ marginTop: 52, flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row' }}>
+
+        {/* Mobile tab strip */}
+        {isMobile && (
+          <div style={{ display: 'flex', overflowX: 'auto', whiteSpace: 'nowrap', borderBottom: '0.5px solid #e0e0e0', backgroundColor: '#ffffff', flexShrink: 0 }}>
+            {SECTIONS.map(s => {
+              const active = s === activeSection
+              return (
+                <div
+                  key={s}
+                  onClick={() => setActiveSection(s)}
+                  style={{
+                    padding: '11px 14px', fontSize: 12, whiteSpace: 'nowrap', cursor: 'pointer',
+                    color: active ? '#034325' : '#888888',
+                    fontWeight: active ? 500 : 400,
+                    borderBottom: active ? '2px solid #034325' : '2px solid transparent',
+                  }}
+                >{s}</div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Sidebar */}
-        <div style={{ width: 200, flexShrink: 0, backgroundColor: '#ffffff', borderRight: '0.5px solid #e0e0e0', paddingTop: 12 }}>
-          {SECTIONS.map(s => {
-            const active = s === activeSection
-            return (
-              <div
-                key={s}
-                onClick={() => setActiveSection(s)}
-                style={{
-                  padding: '10px 16px', cursor: 'pointer', fontSize: 13,
-                  borderLeft: active ? '3px solid #034325' : '3px solid transparent',
-                  backgroundColor: active ? '#f0fdf4' : 'transparent',
-                  color: active ? '#034325' : '#6b7280',
-                  fontWeight: active ? 500 : 400,
-                }}
-              >{s}</div>
-            )
-          })}
-        </div>
+        {!isMobile && (
+          <div style={{ width: 200, flexShrink: 0, backgroundColor: '#ffffff', borderRight: '0.5px solid #e0e0e0', paddingTop: 12 }}>
+            {SECTIONS.map(s => {
+              const active = s === activeSection
+              return (
+                <div
+                  key={s}
+                  onClick={() => setActiveSection(s)}
+                  style={{
+                    padding: '10px 16px', cursor: 'pointer', fontSize: 13,
+                    borderLeft: active ? '3px solid #034325' : '3px solid transparent',
+                    backgroundColor: active ? '#f0fdf4' : 'transparent',
+                    color: active ? '#034325' : '#6b7280',
+                    fontWeight: active ? 500 : 400,
+                  }}
+                >{s}</div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Content */}
-        <div style={{ flex: 1, padding: '24px 28px', overflowY: 'auto' }}>
+        <div style={{ flex: 1, padding: isMobile ? '16px 14px' : '24px 28px', overflowY: 'auto' }}>
           {activeSection === 'Salon details'   && <SectionSalon salon={salon} config={config} salonId={salonId} onRefresh={fetchAll} onNameSaved={setSalonName} />}
           {activeSection === 'Services'        && <SectionServices salonId={salonId} />}
           {activeSection === 'Payments'        && <SectionPayments config={config} salonId={salonId} onRefresh={fetchAll} />}
