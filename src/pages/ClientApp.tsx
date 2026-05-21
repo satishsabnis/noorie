@@ -377,52 +377,58 @@ export default function ClientApp() {
   // ── Hamburger menu overlay ─────────────────────────────────────────────────
 
   const menuOverlay = menuOpen && (
-    <div style={{ position: 'fixed', inset: 0, backgroundColor: '#ffffff', zIndex: 100, display: 'flex', flexDirection: 'column', maxWidth: 480, margin: '0 auto' }}>
-      <div style={headerStyle}>
-        <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, margin: 0 }}>{salon?.name}</p>
-        <button
-          onClick={() => setMenuOpen(false)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ffffff', fontSize: 20, lineHeight: 1, padding: 4 }}
-        >
-          ✕
-        </button>
-      </div>
-
-      <div style={{ padding: '20px 16px', borderBottom: '0.5px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: '#034325', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <span style={{ color: '#ffffff', fontSize: 16, fontWeight: 700 }}>{client ? initials(client.name) : '?'}</span>
-        </div>
-        <div>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#111' }}>{client?.name}</p>
-          <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6b7280' }}>{client?.phone}</p>
-        </div>
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        {[
-          'My profile', 'Upcoming', 'History', 'Loyalty', 'Reviews', 'Contact salon', 'About Noorie',
-        ].map(label => (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={() => setMenuOpen(false)}>
+      <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)' }} />
+      <div
+        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 280, backgroundColor: '#ffffff', display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 16px rgba(0,0,0,0.15)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ ...headerStyle, padding: '14px 16px' }}>
+          <p style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, margin: 0 }}>{salon?.name}</p>
           <button
-            key={label}
-            onClick={() => alert('Coming soon')}
+            onClick={() => setMenuOpen(false)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ffffff', fontSize: 20, lineHeight: 1, padding: 4 }}
+          >
+            X
+          </button>
+        </div>
+
+        <div style={{ padding: '16px', borderBottom: '0.5px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: '#034325', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <span style={{ color: '#ffffff', fontSize: 16, fontWeight: 700 }}>{client ? initials(client.name) : '?'}</span>
+          </div>
+          <div>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#111' }}>{client?.name}</p>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6b7280' }}>{client?.phone}</p>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {[
+            'My profile', 'Upcoming', 'History', 'Loyalty', 'Reviews', 'Contact salon', 'About Noorie',
+          ].map(label => (
+            <button
+              key={label}
+              onClick={() => alert('Coming soon')}
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            >
+              {label}
+            </button>
+          ))}
+          <div style={{ height: 1, backgroundColor: '#e0e0e0', margin: '8px 0' }} />
+          <button
+            onClick={doSignOut}
             style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
           >
-            {label}
+            Sign out
           </button>
-        ))}
-        <div style={{ height: 1, backgroundColor: '#e0e0e0', margin: '8px 0' }} />
-        <button
-          onClick={doSignOut}
-          style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-        >
-          Sign out
-        </button>
-        <button
-          onClick={() => alert('Coming soon')}
-          style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '0 16px', height: 44, fontSize: 13, color: '#991b1b', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-        >
-          Delete account
-        </button>
+          <button
+            onClick={() => alert('Coming soon')}
+            style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '0 16px', height: 44, fontSize: 13, color: '#991b1b', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+          >
+            Delete account
+          </button>
+        </div>
       </div>
     </div>
   )
