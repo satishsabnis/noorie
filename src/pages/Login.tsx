@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { signInWithMobile, getStaffByUserId } from '../lib/auth'
 import { useAuthStore } from '../stores/authStore'
+import { supabase } from '../lib/supabase'
 
 const COUNTRY_CODES = ['+971', '+91', '+1', '+44']
 
@@ -34,8 +35,19 @@ export default function Login() {
         return
       }
 
+      // Fetch salon slug for multi-tenant routing
+      const { data: salon, error: salonErr } = await supabase
+        .from('salons')
+        .select('slug')
+        .eq('id', staff.salon_id)
+        .maybeSingle()
+
+      if (salonErr || !salon) {
+        throw new Error('Salon not found')
+      }
+
       signIn(user, staff)
-      navigate(staff.role === 'technician' ? '/staff-app' : '/dashboard')
+      navigate(staff.role === 'technician' ? `/${salon.slug}/staff` : `/${salon.slug}/dashboard`)
     } catch (err: any) {
       const msg = err?.message ?? ''
       if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials')) {
