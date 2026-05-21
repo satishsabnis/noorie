@@ -301,9 +301,10 @@ export default function ClientApp() {
         if (sessionError) throw sessionError
         setClient({ id: result.client.id, name: result.client.name, phone: result.client.phone })
 
-        console.log('before staff handling, staffList:', result.staffList)
-        setStaff((result.staffList as StaffMember[]) ?? [])
-        console.log('after staff handling')
+        const { data: staffData } = await supabase.rpc('get_staff_for_salon', {
+          p_salon_id: result.salonId,
+        })
+        setStaff((staffData as StaffMember[]) ?? [])
 
         const { data: svcData } = await supabase
           .from('services')
