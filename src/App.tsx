@@ -52,7 +52,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-      <Route path="/staff-app/*" element={<StaffApp />} />
+      <Route path="/:slug/staff/*" element={<StaffApp />} />
       <Route path="/set-password" element={<SetPassword />} />
       <Route path="/dashboard" element={
         <ProtectedRoute>
