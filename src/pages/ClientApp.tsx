@@ -345,6 +345,13 @@ export default function ClientApp() {
     }
   }
 
+  const blueFooter = (
+    <div style={{ textAlign: 'center', padding: '24px 0 32px' }}>
+      <img src="/assets/logo-WyJseHTl.png" alt="Blue Flute" style={{ width: 60, display: 'block', margin: '0 auto 6px' }} />
+      <p style={{ fontSize: 10, color: '#9ca3af', margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
+    </div>
+  )
+
   // ── Loading / not found ────────────────────────────────────────────────────
 
   if (salonLoading) {
@@ -480,6 +487,7 @@ export default function ClientApp() {
             </button>
           </div>
         </div>
+        {blueFooter}
       </div>
     )
   }
@@ -535,6 +543,7 @@ export default function ClientApp() {
               })}
             </div>
           ))}
+          {blueFooter}
         </div>
 
         <div style={{ position: 'sticky', bottom: 0, padding: '12px 16px', backgroundColor: '#f9fafb', borderTop: '0.5px solid #e0e0e0' }}>
@@ -636,6 +645,7 @@ export default function ClientApp() {
           </div>
 
           {bookingError && <p style={{ fontSize: 13, color: '#991b1b', margin: 0 }}>{bookingError}</p>}
+          {blueFooter}
         </div>
 
         <div style={{ position: 'sticky', bottom: 0, padding: '12px 16px', backgroundColor: '#f9fafb', borderTop: '0.5px solid #e0e0e0' }}>
@@ -697,6 +707,7 @@ export default function ClientApp() {
         >
           Back to home
         </button>
+        {blueFooter}
       </div>
     )
   }
@@ -771,6 +782,7 @@ export default function ClientApp() {
             {changePinLoading ? 'Saving...' : 'Save PIN'}
           </button>
         </div>
+        {blueFooter}
       </div>
     )
   }
@@ -859,6 +871,8 @@ export default function ClientApp() {
 
         </form>
       </div>
+
+      {blueFooter}
     </div>
   )
 }
