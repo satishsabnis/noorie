@@ -53,7 +53,7 @@ interface TimeSlot {
   time: string
 }
 
-type Screen = 'login' | 'home' | 'change-pin' | 'book-service' | 'book-datetime' | 'book-confirm'
+type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm'
 
 function getTomorrow(): string {
   const d = new Date()
@@ -115,6 +115,7 @@ export default function ClientApp() {
   const [bookingLoading, setBookingLoading]   = useState(false)
   const [bookingError, setBookingError]       = useState('')
   const [menuOpen, setMenuOpen]               = useState(false)
+  const [showBookingModal, setShowBookingModal] = useState(false)
 
   const [changePinNew, setChangePinNew]         = useState(['', '', '', '', ''])
   const [changePinConfirm, setChangePinConfirm] = useState(['', '', '', '', ''])
@@ -433,6 +434,41 @@ export default function ClientApp() {
     </div>
   )
 
+  // ── Booking type modal ─────────────────────────────────────────────────────
+
+  const bookingModal = showBookingModal && (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 20px' }}
+      onClick={() => setShowBookingModal(false)}
+    >
+      <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)' }} />
+      <div
+        style={{ position: 'relative', backgroundColor: '#ffffff', borderRadius: 12, padding: '24px 20px 20px', width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 12 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <p style={{ fontSize: 16, fontWeight: 700, color: '#111', margin: '0 0 4px', textAlign: 'center' }}>How would you like to book?</p>
+        <button
+          onClick={() => { setShowBookingModal(false); setCurrentScreen('book-datetime') }}
+          style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}
+        >
+          By date and time
+        </button>
+        <button
+          onClick={() => { setShowBookingModal(false); setCurrentScreen('book-staff') }}
+          style={{ backgroundColor: 'transparent', color: '#034325', border: '1.5px solid #034325', borderRadius: 8, padding: 13, fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}
+        >
+          By technician
+        </button>
+        <button
+          onClick={() => setShowBookingModal(false)}
+          style={{ background: 'none', border: 'none', fontSize: 14, color: '#6b7280', cursor: 'pointer', padding: '4px 0', textAlign: 'center' }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+
   // ── Home screen ────────────────────────────────────────────────────────────
 
   if (currentScreen === 'home') {
@@ -440,6 +476,7 @@ export default function ClientApp() {
     return (
       <div style={{ ...screenWrap, height: '100vh', overflow: 'hidden' }}>
         {menuOverlay}
+        {bookingModal}
         <div style={headerStyle}>
           <div>
             <p style={{ color: '#ffffff', fontSize: 16, fontWeight: 700, margin: 0 }}>Hi {client?.name}</p>
@@ -472,7 +509,7 @@ export default function ClientApp() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button
-              onClick={() => setCurrentScreen('book-service')}
+              onClick={() => setShowBookingModal(true)}
               style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}
             >
               Book an appointment
