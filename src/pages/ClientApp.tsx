@@ -249,7 +249,7 @@ export default function ClientApp() {
         .from('clients')
         .select('id, name, phone, pin_changed')
         .eq('salon_id', salon!.id)
-        .eq('phone', fullPhone)
+        .eq('phone', '+' + fullPhone)
         .maybeSingle()
 
       if (fetchError) throw fetchError
@@ -259,7 +259,7 @@ export default function ClientApp() {
           .from('clients')
           .select('id, name, phone, pin_changed')
           .eq('salon_id', salon!.id)
-          .eq('phone', '+' + fullPhone)
+          .eq('phone', fullPhone)
           .maybeSingle()
         if (fetchError2) throw fetchError2
         clientData = clientData2
