@@ -455,7 +455,7 @@ export default function ClientApp() {
           </button>
         </div>
 
-        <div style={{ flex: 1, padding: '16px', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ flex: 1, padding: '16px 16px 96px', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {offerServices.length > 0 && (
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Special offers</p>
@@ -485,7 +485,10 @@ export default function ClientApp() {
             </button>
           </div>
         </div>
-        {blueFooter}
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, textAlign: 'center', padding: '8px 0', backgroundColor: '#f9fafb' }}>
+          <img src="/assets/logo-WyJseHTl.png" alt="Blue Flute" style={{ width: 60, display: 'block', margin: '0 auto 6px' }} />
+          <p style={{ fontSize: 10, color: '#9ca3af', margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
+        </div>
       </div>
     )
   }
