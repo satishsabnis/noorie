@@ -140,6 +140,13 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Incorrect PIN' }, 401)
   }
 
+  const { data: staffList } = await supabaseAdmin
+    .from('staff')
+    .select('id, name')
+    .eq('salon_id', salon.id)
+    .eq('is_active', true)
+    .neq('role', 'owner')
+
   return jsonResponse({
     client: {
       id: clientData.id,
@@ -148,5 +155,6 @@ Deno.serve(async (req: Request) => {
       pin_changed: clientData.pin_changed,
     },
     session: authData.session,
+    staffList: staffList ?? [],
   }, 200)
 })

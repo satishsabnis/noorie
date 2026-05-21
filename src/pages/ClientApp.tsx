@@ -297,14 +297,7 @@ export default function ClientApp() {
       if (sessionError) throw sessionError
       setClient({ id: result.client.id, name: result.client.name, phone: result.client.phone })
 
-      const { data: staffData } = await supabase
-        .from('staff')
-        .select('id, name, role')
-        .eq('salon_id', salon!.id)
-        .eq('is_active', true)
-        .neq('role', 'owner')
-      console.log('staff records returned:', staffData?.length ?? 0)
-      setStaff((staffData as StaffMember[]) ?? [])
+      setStaff((result.staffList as StaffMember[]) ?? [])
 
       const { data: svcData } = await supabase
         .from('services')
