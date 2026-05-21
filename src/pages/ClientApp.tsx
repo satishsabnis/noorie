@@ -236,7 +236,6 @@ export default function ClientApp() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    setShowOtpMessage(false)
 
     const enteredPin = pin.join('')
     if (enteredPin.length < 5) { setError('Please enter your 5-digit PIN'); return }
