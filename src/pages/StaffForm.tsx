@@ -104,12 +104,23 @@ export default function StaffForm() {
   const [error,             setError]             = useState<string | null>(null)
   const [changed,           setChanged]           = useState(!isEdit)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [salonSlug,         setSalonSlug]         = useState<string | null>(slug ?? null)
 
   // ── Fetch on mount ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     async function fetchData() {
       if (!salonId) { setLoading(false); return }
+
+      // Fetch salon slug if not in URL
+      if (!slug) {
+        const { data: salonData } = await supabase
+          .from('salons')
+          .select('slug')
+          .eq('id', salonId)
+          .maybeSingle()
+        if (salonData) setSalonSlug(salonData.slug)
+      }
 
       // Always fetch salon's full service catalogue
       const { data: svcData } = await supabase
@@ -168,7 +179,7 @@ export default function StaffForm() {
   }
 
   const handleCopyLink = () => {
-    const url = `noorie-salon.vercel.app/${slug}/staff`
+    const url = `noorie-salon.vercel.app/${salonSlug}/staff`
     navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -423,12 +434,12 @@ export default function StaffForm() {
                   </div>
                 </div>
 
-                {slug && (
+                {salonSlug && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <label style={labelStyle}>Shareable staff app URL:</label>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <div style={{ flex: 1, backgroundColor: '#f9fafb', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '10px 12px', fontSize: 12, color: '#111111', wordBreak: 'break-all' }}>
-                        noorie-salon.vercel.app/{slug}/staff
+                        noorie-salon.vercel.app/{salonSlug}/staff
                       </div>
                       <button
                         onClick={handleCopyLink}
