@@ -250,11 +250,17 @@ export default function ClientApp() {
         body: JSON.stringify({ slug, countryCode, phone, pin: enteredPin }),
       })
       const result = await res.json()
+      console.log('client-login status:', res.status)
+      console.log('client-login result:', result)
 
       if (!res.ok) {
         if (res.status === 401) { setError('Incorrect PIN'); return }
         if (res.status === 404) { setError('Phone number not registered. Please ask the salon to add you.'); return }
         throw new Error(result.error ?? 'Sign in failed')
+      }
+
+      if (!result.session) {
+        throw new Error('Login succeeded but no session returned. Please try again.')
       }
 
       await supabase.auth.setSession(result.session)
