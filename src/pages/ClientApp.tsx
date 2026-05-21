@@ -242,36 +242,23 @@ export default function ClientApp() {
     const enteredPin = pin.join('')
     if (enteredPin.length < 5) { setError('Please enter your 5-digit PIN'); return }
 
-    const fullPhone = `${countryCode}${phone.replace(/^0+/, '')}`
     setLoading(true)
     try {
-      let { data: clientData, error: fetchError } = await supabase
-        .from('clients')
-        .select('id, name, phone, pin_changed')
-        .eq('salon_id', salon!.id)
-        .eq('phone', '+' + fullPhone)
-        .maybeSingle()
+      const res = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/client-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, countryCode, phone, pin: enteredPin }),
+      })
+      const result = await res.json()
 
-      if (fetchError) throw fetchError
-
-      if (!clientData) {
-        const { data: clientData2, error: fetchError2 } = await supabase
-          .from('clients')
-          .select('id, name, phone, pin_changed')
-          .eq('salon_id', salon!.id)
-          .eq('phone', fullPhone)
-          .maybeSingle()
-        if (fetchError2) throw fetchError2
-        clientData = clientData2
+      if (!res.ok) {
+        if (res.status === 401) { setError('Incorrect PIN'); return }
+        if (res.status === 404) { setError('Phone number not registered. Please ask the salon to add you.'); return }
+        throw new Error(result.error ?? 'Sign in failed')
       }
 
-      if (!clientData) { setError('Phone number not registered. Please ask the salon to add you.'); return }
-
-      const email = `${(clientData.phone as string).replace(/\s+/g, '')}@noorie-client.internal`
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: enteredPin + 'x' })
-      if (signInError) { setError('Incorrect PIN'); return }
-
-      setClient({ id: clientData.id as string, name: clientData.name as string, phone: clientData.phone as string })
+      await supabase.auth.setSession(result.session)
+      setClient({ id: result.client.id, name: result.client.name, phone: result.client.phone })
 
       const { data: svcData } = await supabase
         .from('services')
@@ -290,9 +277,7 @@ export default function ClientApp() {
       setStaff((staffData as StaffMember[]) ?? [])
 
       setSelectedDate(getTomorrow())
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pinChanged = (clientData as any).pin_changed
-      setCurrentScreen(pinChanged ? 'home' : 'set-pin')
+      setCurrentScreen(result.client.pin_changed ? 'home' : 'set-pin')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
