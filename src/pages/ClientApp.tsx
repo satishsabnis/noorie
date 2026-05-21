@@ -297,6 +297,7 @@ export default function ClientApp() {
       if (sessionError) throw sessionError
       setClient({ id: result.client.id, name: result.client.name, phone: result.client.phone })
 
+      console.log('staffList from edge function:', result.staffList)
       setStaff((result.staffList as StaffMember[]) ?? [])
 
       const { data: svcData } = await supabase
