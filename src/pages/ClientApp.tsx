@@ -263,7 +263,9 @@ export default function ClientApp() {
         throw new Error('Login succeeded but no session returned. Please try again.')
       }
 
-      await supabase.auth.setSession(result.session)
+      const { error: sessionError } = await supabase.auth.setSession(result.session)
+      console.log('setSession error:', sessionError)
+      if (sessionError) throw sessionError
       setClient({ id: result.client.id, name: result.client.name, phone: result.client.phone })
 
       const { data: svcData } = await supabase
