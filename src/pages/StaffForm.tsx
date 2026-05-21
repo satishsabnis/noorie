@@ -272,7 +272,7 @@ export default function StaffForm() {
           },
           body: JSON.stringify({
             email,
-            password: enteredPin + 'x',
+            pin: enteredPin,
             salon_id: salonId,
             name: name.trim(),
             phone,
