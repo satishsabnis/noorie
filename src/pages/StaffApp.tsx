@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Routes, Route } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
+import { Toast } from '../components/Toast'
+import { useAppointmentSubscription } from '../hooks/useAppointmentSubscription'
 
 // -- Types --
 interface Appointment {
@@ -78,11 +80,19 @@ function StaffSchedule() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [earnings, setEarnings] = useState(0)
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; appointmentId: string; timestamp: number }>>([])
 
   useEffect(() => {
     if (!staffRecord?.id) return
     fetchSchedule()
   }, [staffRecord?.id])
+
+  useAppointmentSubscription(
+    (toast) => {
+      setToasts(prev => [...prev, toast])
+    },
+    true
+  )
 
   async function fetchSchedule() {
     const today = todayStr()
@@ -152,6 +162,10 @@ function StaffSchedule() {
     setLoading(false)
   }
 
+  const dismissToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }
+
   const firstName = staffRecord?.name?.split(' ')[0] ?? 'Staff'
 
   return (
@@ -215,6 +229,15 @@ function StaffSchedule() {
           ))
         )}
       </div>
+
+      {toasts.map(toast => (
+        <Toast
+          key={toast.id}
+          id={toast.id}
+          message={toast.message}
+          onDismiss={() => dismissToast(toast.id)}
+        />
+      ))}
 
       <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
         <p style={{ color: '#9ca3af', fontSize: 10, margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
