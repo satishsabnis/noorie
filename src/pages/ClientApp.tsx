@@ -440,7 +440,7 @@ export default function ClientApp() {
   if (currentScreen === 'home') {
     const offerServices = services.filter(s => s.price > 0).slice(0, 2)
     return (
-      <div style={screenWrap}>
+      <div style={{ ...screenWrap, minHeight: 0, height: '100vh', overflow: 'hidden' }}>
         {menuOverlay}
         <div style={headerStyle}>
           <div>
@@ -457,7 +457,7 @@ export default function ClientApp() {
           </button>
         </div>
 
-        <div style={{ flex: 1, padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ flex: 1, padding: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {offerServices.length > 0 && (
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Special offers</p>
