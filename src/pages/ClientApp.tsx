@@ -286,7 +286,6 @@ export default function ClientApp() {
         body: JSON.stringify({ slug, countryCode, phone, pin: enteredPin }),
       })
       const result = await res.json()
-      console.log('client-login result:', result)
       if (!res.ok) {
         if (res.status === 401) { setError('Incorrect PIN'); return }
         if (res.status === 404) { setError('Phone number not registered. Please ask the salon to add you.'); return }
@@ -295,9 +294,7 @@ export default function ClientApp() {
       if (!result.session) throw new Error('Login succeeded but no session returned. Please try again.')
 
       try {
-        console.log('before setSession')
         const { error: sessionError } = await supabase.auth.setSession(result.session)
-        console.log('after setSession, sessionError:', sessionError)
         if (sessionError) throw sessionError
         setClient({ id: result.client.id, name: result.client.name, phone: result.client.phone })
 
@@ -324,7 +321,6 @@ export default function ClientApp() {
         setSelectedDate(getTomorrow())
         setCurrentScreen('home')
       } catch (postLoginErr: unknown) {
-        console.error('post-login error:', postLoginErr)
         setError(postLoginErr instanceof Error ? postLoginErr.message : 'Post-login setup failed. Please try again.')
       }
     } catch (err: unknown) {
