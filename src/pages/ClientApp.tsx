@@ -268,7 +268,7 @@ export default function ClientApp() {
       if (!clientData) { setError('Phone number not registered. Please ask the salon to add you.'); return }
 
       const email = `${(clientData.phone as string).replace(/\s+/g, '')}@noorie-client.internal`
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: enteredPin })
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: enteredPin + 'x' })
       if (signInError) { setError('Incorrect PIN'); return }
 
       setClient({ id: clientData.id as string, name: clientData.name as string, phone: clientData.phone as string })
