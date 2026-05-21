@@ -101,7 +101,6 @@ export default function ClientApp() {
 
   const [error, setError]               = useState('')
   const [loading, setLoading]           = useState(false)
-  const [showOtpMessage, setShowOtpMessage] = useState(false)
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('login')
   const [client, setClient]               = useState<Client | null>(null)
@@ -855,19 +854,6 @@ export default function ClientApp() {
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
-
-          <div style={{ textAlign: 'center' }}>
-            <button
-              type="button"
-              onClick={() => setShowOtpMessage(p => !p)}
-              style={{ background: 'none', border: 'none', color: '#034325', fontSize: 13, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-            >
-              First time? Request OTP
-            </button>
-            {showOtpMessage && (
-              <p style={{ fontSize: 12, color: '#6b7280', margin: '8px 0 0' }}>Please ask your salon to send you an OTP</p>
-            )}
-          </div>
 
         </form>
       </div>
