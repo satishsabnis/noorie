@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
@@ -62,7 +62,7 @@ const cardStyle: React.CSSProperties = {
 
 export default function StaffForm() {
   const navigate    = useNavigate()
-  const { id }      = useParams<{ id: string }>()
+  const { id, slug } = useParams<{ id?: string; slug?: string }>()
   const isEdit      = !!id
   const staffRecord = useAuthStore(s => s.staffRecord)
   const salonId     = staffRecord?.salon_id ?? null
@@ -72,7 +72,9 @@ export default function StaffForm() {
   const [countryCode, setCountryCode] = useState('+971')
   const [mobile,      setMobile]      = useState('')
   const [role,        setRole]        = useState<'supervisor' | 'technician'>('technician')
-  const [password,    setPassword]    = useState('')
+  const [pin,         setPin]         = useState(['', '', '', '', ''])
+  const pinRefs = useRef<(HTMLInputElement | null)[]>([])
+  const [copied,      setCopied]      = useState(false)
   const [status,      setStatus]      = useState<'active' | 'suspended'>('active')
 
   // Pay details
@@ -151,6 +153,26 @@ export default function StaffForm() {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function mark() { setChanged(true) }
+
+  const handlePinChange = (index: number, value: string) => {
+    if (!/^\d?$/.test(value)) return
+    const newPin = [...pin]
+    newPin[index] = value
+    setPin(newPin)
+    mark()
+    if (value && index < 4) pinRefs.current[index + 1]?.focus()
+  }
+
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) pinRefs.current[index - 1]?.focus()
+  }
+
+  const handleCopyLink = () => {
+    const url = `noorie-salon.vercel.app/${slug}/staff`
+    navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   function toggleService(svcId: string) {
     setCheckedServices(prev => {
@@ -238,7 +260,8 @@ export default function StaffForm() {
     try {
       if (!isEdit) {
         // Add: delegate auth user + staff + staff_services creation to the Edge Function
-        if (!password.trim()) { setError('Temporary password is required'); setSaving(false); return }
+        const enteredPin = pin.join('')
+        if (enteredPin.length !== 5) { setError('PIN must be exactly 5 digits'); setSaving(false); return }
         const email = `${phone.replace(/\D/g, '')}@noorie.internal`
         const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
         const res = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-staff-user', {
@@ -249,7 +272,7 @@ export default function StaffForm() {
           },
           body: JSON.stringify({
             email,
-            password: password.trim(),
+            password: enteredPin + 'x',
             salon_id: salonId,
             name: name.trim(),
             phone,
@@ -378,18 +401,56 @@ export default function StaffForm() {
                 </div>
 
                 <div>
-                  <label style={labelStyle}>{isEdit ? 'Reset password' : 'Temporary password'}</label>
-                  <input
-                    value={password} onChange={e => { setPassword(e.target.value); mark() }}
-                    style={inputStyle} type="password"
-                    placeholder={isEdit ? 'Leave blank to keep current password' : 'Temporary password'}
-                  />
-                  {isEdit && (
-                    <p style={{ fontSize: 11, color: '#6b7280', margin: '4px 0 0' }}>
-                      Password reset requires admin action via the Supabase dashboard.
-                    </p>
-                  )}
+                  <label style={labelStyle}>5-digit PIN</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {pin.map((digit, i) => (
+                      <input
+                        key={i}
+                        ref={el => { pinRefs.current[i] = el }}
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={e => handlePinChange(i, e.target.value)}
+                        onKeyDown={e => handlePinKeyDown(i, e)}
+                        style={{
+                          width: 40, height: 40, textAlign: 'center', fontSize: 18, fontWeight: 700,
+                          border: '0.5px solid #e0e0e0', borderRadius: 6, outline: 'none',
+                          backgroundColor: '#ffffff', color: '#034325', boxSizing: 'border-box',
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
+
+                {slug && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={labelStyle}>Shareable staff app URL:</label>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <div style={{ flex: 1, backgroundColor: '#f9fafb', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '10px 12px', fontSize: 12, color: '#111111', wordBreak: 'break-all' }}>
+                        noorie-salon.vercel.app/{slug}/staff
+                      </div>
+                      <button
+                        onClick={handleCopyLink}
+                        type="button"
+                        style={{
+                          backgroundColor: '#034325',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: 6,
+                          padding: '10px 14px',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {copied ? '✓' : '📋'}
+                      </button>
+                    </div>
+                    {copied && <p style={{ fontSize: 11, color: '#059669', margin: 0 }}>Copied!</p>}
+                  </div>
+                )}
 
               </div>
             </div>
