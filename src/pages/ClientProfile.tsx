@@ -127,7 +127,7 @@ export default function ClientProfile() {
   const isDirty = JSON.stringify(form) !== JSON.stringify(original) || pin.join('') !== originalPin
 
   const handleCopyLink = () => {
-    const url = `noorie-salon.vercel.app/${slug}`
+    const url = `noorie-salon.vercel.app/${slug}/client`
     navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -488,7 +488,7 @@ export default function ClientProfile() {
                   <label style={labelStyle}>Share with client:</label>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <div style={{ flex: 1, backgroundColor: '#f9fafb', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '10px 12px', fontSize: 13, color: '#111111', wordBreak: 'break-all' }}>
-                      noorie-salon.vercel.app/{slug}
+                      noorie-salon.vercel.app/{slug}/client
                     </div>
                     <button
                       onClick={handleCopyLink}

@@ -53,6 +53,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/:slug/staff/*" element={<StaffApp />} />
+      <Route path="/:slug/client/*" element={<ClientApp />} />
       <Route path="/set-password" element={<SetPassword />} />
       <Route path="/dashboard" element={
         <ProtectedRoute>
@@ -109,7 +110,6 @@ function AppRoutes() {
           <Reports />
         </OwnerRoute>
       } />
-      <Route path="/:slug/*" element={<ClientApp />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
     {isAuthenticated && <NoorieBot />}

@@ -116,7 +116,7 @@ export default function ClientApp() {
   const [copied, setCopied] = useState(false)
 
   const handleCopyLink = () => {
-    const url = `noorie-salon.vercel.app/${slug}`
+    const url = `noorie-salon.vercel.app/${slug}/client`
     navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -837,7 +837,7 @@ export default function ClientApp() {
             <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: 0 }}>Booking link:</p>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <div style={{ flex: 1, backgroundColor: '#f9fafb', border: '1px solid #1D558F', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#111111', wordBreak: 'break-all' }}>
-                noorie-salon.vercel.app/{slug}
+                noorie-salon.vercel.app/{slug}/client
               </div>
               <button
                 onClick={handleCopyLink}
