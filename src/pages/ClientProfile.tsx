@@ -107,7 +107,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function ClientProfile() {
-  const { id } = useParams<{ id: string }>()
+  const { id, slug } = useParams<{ id: string; slug?: string }>()
   const navigate = useNavigate()
 
   const [client, setClient] = useState<ClientDetail | null>(null)
@@ -122,8 +122,16 @@ export default function ClientProfile() {
   const pinRefs = useRef<(HTMLInputElement | null)[]>([])
   const [saving, setSaving] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(original) || pin.join('') !== originalPin
+
+  const handleCopyLink = () => {
+    const url = `noorie-salon.vercel.app/${slug}`
+    navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   useEffect(() => {
     if (!id) return
@@ -474,6 +482,34 @@ export default function ClientProfile() {
                   </button>
                 </div>
               </div>
+
+              {slug && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+                  <label style={labelStyle}>Share with client:</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <div style={{ flex: 1, backgroundColor: '#f9fafb', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '10px 12px', fontSize: 13, color: '#111111', wordBreak: 'break-all' }}>
+                      noorie-salon.vercel.app/{slug}
+                    </div>
+                    <button
+                      onClick={handleCopyLink}
+                      style={{
+                        backgroundColor: '#034325',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '10px 14px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {copied ? '✓' : '📋'}
+                    </button>
+                  </div>
+                  {copied && <p style={{ fontSize: 11, color: '#059669', margin: 0 }}>Copied!</p>}
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[

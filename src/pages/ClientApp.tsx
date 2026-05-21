@@ -113,6 +113,14 @@ export default function ClientApp() {
 
   const [error, setError]   = useState('')
   const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyLink = () => {
+    const url = `noorie-salon.vercel.app/${slug}`
+    navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('login')
   const [client, setClient]               = useState<Client | null>(null)
@@ -824,6 +832,32 @@ export default function ClientApp() {
                 <input key={i} ref={el => { pinRefs.current[i] = el }} type="password" inputMode="numeric" maxLength={1} value={digit} onChange={e => handlePinChange(i, e.target.value)} onKeyDown={e => handlePinKeyDown(i, e)} style={{ width: 48, height: 52, textAlign: 'center', fontSize: 20, fontWeight: 700, border: '1px solid #1D558F', borderRadius: 8, outline: 'none', backgroundColor: '#ffffff', color: '#034325', boxSizing: 'border-box' }} />
               ))}
             </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: 0 }}>Booking link:</p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ flex: 1, backgroundColor: '#f9fafb', border: '1px solid #1D558F', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#111111', wordBreak: 'break-all' }}>
+                noorie-salon.vercel.app/{slug}
+              </div>
+              <button
+                onClick={handleCopyLink}
+                type="button"
+                style={{
+                  backgroundColor: '#034325',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {copied ? '✓' : '📋'}
+              </button>
+            </div>
+            {copied && <p style={{ fontSize: 11, color: '#059669', margin: 0 }}>Copied!</p>}
           </div>
           {error && <p style={{ fontSize: 13, color: '#991b1b', margin: 0 }}>{error}</p>}
           <button type="submit" disabled={loading} style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 15, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, width: '100%' }}>
