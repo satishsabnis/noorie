@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, Routes, Route } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
@@ -18,6 +18,13 @@ interface Appointment {
   balance: number
 }
 
+const STAFF_COUNTRY_CODES = [
+  { flag: '🇦🇪', code: '+971' },
+  { flag: '🇮🇳', code: '+91' },
+  { flag: '🇬🇧', code: '+44' },
+  { flag: '🇺🇸', code: '+1' },
+]
+
 // -- Helpers --
 function dubaiTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-GB', {
@@ -27,6 +34,189 @@ function dubaiTime(iso: string) {
 
 function todayStr() {
   return new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
+// =============================================
+// SCREEN 0: Staff Login
+// =============================================
+function StaffLogin({ salonId, salonName }: { salonId: string; salonName?: string }) {
+  const navigate = useNavigate()
+  const { slug } = useParams<{ slug: string }>()
+  const { signIn } = useAuthStore()
+  const [countryCode, setCountryCode] = useState('+971')
+  const [phone, setPhone] = useState('')
+  const [pin, setPin] = useState(['', '', '', '', ''])
+  const pinRefs = useRef<(HTMLInputElement | null)[]>([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handlePinChange = (index: number, value: string) => {
+    if (!/^\d?$/.test(value)) return
+    const next = [...pin]
+    next[index] = value
+    setPin(next)
+    if (value && index < 4) pinRefs.current[index + 1]?.focus()
+  }
+
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) pinRefs.current[index - 1]?.focus()
+  }
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    const enteredPin = pin.join('')
+    if (enteredPin.length < 5) {
+      setError('Please enter your 5-digit PIN')
+      return
+    }
+    if (!phone.trim()) {
+      setError('Please enter your phone number')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const res = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/staff-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, pin: enteredPin, salon_id: salonId }),
+      })
+      const result = await res.json()
+
+      if (!res.ok) {
+        if (res.status === 400) setError('PIN must be 5 digits')
+        else if (res.status === 401) {
+          if (result.error?.includes('not found')) setError('No staff found for this salon')
+          else setError('Invalid phone or PIN')
+        } else setError(result.error ?? 'Sign in failed')
+        return
+      }
+
+      if (!result.session) throw new Error('Login succeeded but no session returned')
+
+      try {
+        const { error: sessionError } = await supabase.auth.setSession(result.session)
+        if (sessionError) throw sessionError
+
+        signIn(result.session.user, result.staff)
+        navigate(`/${slug}/staff`)
+      } catch (postLoginErr: unknown) {
+        setError(postLoginErr instanceof Error ? postLoginErr.message : 'Post-login setup failed')
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Connection error, please try again')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const headerStyle: React.CSSProperties = {
+    backgroundColor: '#034325',
+    padding: '14px 16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  }
+
+  const pageStyle: React.CSSProperties = {
+    minHeight: '100vh',
+    backgroundColor: '#f9fafb',
+    display: 'flex',
+    flexDirection: 'column',
+    maxWidth: 480,
+    margin: '0 auto',
+    width: '100%',
+  }
+
+  const pinBoxStyle: React.CSSProperties = {
+    width: 48,
+    height: 52,
+    textAlign: 'center',
+    fontSize: 20,
+    fontWeight: 700,
+    border: '1px solid #1D558F',
+    borderRadius: 8,
+    outline: 'none',
+    backgroundColor: '#ffffff',
+    color: '#034325',
+    boxSizing: 'border-box',
+  }
+
+  return (
+    <div style={{ ...pageStyle, backgroundColor: '#ffffff' }}>
+      <div style={headerStyle}>
+        <p style={{ color: '#ffffff', fontSize: 16, fontWeight: 600, margin: 0 }}>Staff Login</p>
+        <div style={{ width: 60 }} />
+      </div>
+
+      {salonName && (
+        <div style={{ backgroundColor: '#034325', padding: '16px', textAlign: 'center', borderBottom: '1px solid #f0f0f0' }}>
+          <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 600, margin: 0 }}>{salonName}</p>
+        </div>
+      )}
+
+      <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
+        <form onSubmit={handleSignIn} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div>
+            <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: '0 0 6px' }}>Mobile number</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select
+                value={countryCode}
+                onChange={e => setCountryCode(e.target.value)}
+                style={{ border: '1px solid #1D558F', borderRadius: 8, outline: 'none', backgroundColor: '#f9f9f9', fontSize: 13, padding: '0 8px', height: 44, cursor: 'pointer', flexShrink: 0 }}
+              >
+                {STAFF_COUNTRY_CODES.map(c => (
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {c.code}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="tel"
+                placeholder="50 123 4567"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                required
+                style={{ flex: 1, backgroundColor: '#ffffff', color: '#000000', border: '1px solid #1D558F', borderRadius: 8, padding: '11px 14px', fontSize: 14, outline: 'none' }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: '0 0 10px' }}>5-digit PIN</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              {pin.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={el => {
+                    pinRefs.current[i] = el
+                  }}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={e => handlePinChange(i, e.target.value)}
+                  onKeyDown={e => handlePinKeyDown(i, e)}
+                  style={pinBoxStyle}
+                />
+              ))}
+            </div>
+          </div>
+
+          {error && <p style={{ fontSize: 13, color: '#991b1b', margin: 0 }}>{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 15, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, width: '100%' }}
+          >
+            {loading ? 'Signing in...' : 'Sign in'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 // -- Shared styles --
@@ -578,9 +768,46 @@ function StaffCollectPayment() {
 }
 
 // =============================================
-// Router wrapper
+// Router wrapper with auth check
 // =============================================
 export default function StaffApp() {
+  const { slug } = useParams<{ slug: string }>()
+  const navigate = useNavigate()
+  const { isAuthenticated, staffRecord, isLoading } = useAuthStore()
+  const [salon, setSalon] = useState<{ id: string; name: string } | null>(null)
+  const [salonLoading, setSalonLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchSalon = async () => {
+      if (!slug) return
+      const { data } = await supabase
+        .from('salons')
+        .select('id, name')
+        .eq('slug', slug)
+        .maybeSingle()
+      setSalon(data)
+      setSalonLoading(false)
+    }
+    fetchSalon()
+  }, [slug])
+
+  if (isLoading || salonLoading) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', alignItems: 'center', justifyContent: 'center', maxWidth: 480, margin: '0 auto' }}>
+        <p style={{ fontSize: 13, color: '#9ca3af' }}>Loading...</p>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated || !staffRecord) {
+    return <StaffLogin salonId={salon?.id ?? ''} salonName={salon?.name} />
+  }
+
+  if (staffRecord.salon_id !== salon?.id) {
+    navigate(`/${slug}/staff`)
+    return <StaffLogin salonId={salon?.id ?? ''} salonName={salon?.name} />
+  }
+
   return (
     <Routes>
       <Route path="/" element={<StaffSchedule />} />
