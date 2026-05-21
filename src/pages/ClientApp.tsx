@@ -346,7 +346,7 @@ export default function ClientApp() {
   }
 
   const blueFooter = (
-    <div style={{ textAlign: 'center', padding: '24px 0 32px' }}>
+    <div style={{ textAlign: 'center', padding: '8px 0' }}>
       <img src="/assets/logo-WyJseHTl.png" alt="Blue Flute" style={{ width: 60, display: 'block', margin: '0 auto 6px' }} />
       <p style={{ fontSize: 10, color: '#9ca3af', margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
     </div>
@@ -440,7 +440,7 @@ export default function ClientApp() {
   if (currentScreen === 'home') {
     const offerServices = services.filter(s => s.price > 0).slice(0, 2)
     return (
-      <div style={{ ...screenWrap, minHeight: 0, height: '100vh', overflow: 'hidden' }}>
+      <div style={{ ...screenWrap, height: '100vh', overflow: 'hidden' }}>
         {menuOverlay}
         <div style={headerStyle}>
           <div>
@@ -457,7 +457,7 @@ export default function ClientApp() {
           </button>
         </div>
 
-        <div style={{ flex: 1, padding: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ flex: 1, padding: '16px', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {offerServices.length > 0 && (
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Special offers</p>
