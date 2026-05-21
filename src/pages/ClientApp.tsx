@@ -53,7 +53,7 @@ interface TimeSlot {
   time: string
 }
 
-type Screen = 'login' | 'home' | 'set-pin' | 'book-service' | 'book-datetime' | 'book-confirm'
+type Screen = 'login' | 'home' | 'change-pin' | 'book-service' | 'book-datetime' | 'book-confirm'
 
 function getTomorrow(): string {
   const d = new Date()
@@ -117,12 +117,12 @@ export default function ClientApp() {
   const [bookingError, setBookingError]       = useState('')
   const [menuOpen, setMenuOpen]               = useState(false)
 
-  const [newPin, setNewPin]         = useState(['', '', '', '', ''])
-  const [confirmPin, setConfirmPin] = useState(['', '', '', '', ''])
-  const newPinRefs     = useRef<(HTMLInputElement | null)[]>([])
-  const confirmPinRefs = useRef<(HTMLInputElement | null)[]>([])
-  const [setPinError, setSetPinError]       = useState('')
-  const [setPinLoading, setSetPinLoading]   = useState(false)
+  const [changePinNew, setChangePinNew]         = useState(['', '', '', '', ''])
+  const [changePinConfirm, setChangePinConfirm] = useState(['', '', '', '', ''])
+  const changePinNewRefs     = useRef<(HTMLInputElement | null)[]>([])
+  const changePinConfirmRefs = useRef<(HTMLInputElement | null)[]>([])
+  const [changePinError, setChangePinError]     = useState('')
+  const [changePinLoading, setChangePinLoading] = useState(false)
 
   useEffect(() => {
     if (!slug) return
@@ -158,61 +158,61 @@ export default function ClientApp() {
     if (e.key === 'Backspace' && !pin[index] && index > 0) pinRefs.current[index - 1]?.focus()
   }
 
-  const handleNewPinChange = (index: number, value: string) => {
+  const handleChangePinNewChange = (index: number, value: string) => {
     if (!/^\d?$/.test(value)) return
-    const updated = [...newPin]
+    const updated = [...changePinNew]
     updated[index] = value
-    setNewPin(updated)
-    if (value && index < 4) newPinRefs.current[index + 1]?.focus()
+    setChangePinNew(updated)
+    if (value && index < 4) changePinNewRefs.current[index + 1]?.focus()
   }
 
-  const handleNewPinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !newPin[index] && index > 0) newPinRefs.current[index - 1]?.focus()
+  const handleChangePinNewKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !changePinNew[index] && index > 0) changePinNewRefs.current[index - 1]?.focus()
   }
 
-  const handleConfirmPinChange = (index: number, value: string) => {
+  const handleChangePinConfirmChange = (index: number, value: string) => {
     if (!/^\d?$/.test(value)) return
-    const updated = [...confirmPin]
+    const updated = [...changePinConfirm]
     updated[index] = value
-    setConfirmPin(updated)
-    if (value && index < 4) confirmPinRefs.current[index + 1]?.focus()
+    setChangePinConfirm(updated)
+    if (value && index < 4) changePinConfirmRefs.current[index + 1]?.focus()
   }
 
-  const handleConfirmPinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !confirmPin[index] && index > 0) confirmPinRefs.current[index - 1]?.focus()
+  const handleChangePinConfirmKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !changePinConfirm[index] && index > 0) changePinConfirmRefs.current[index - 1]?.focus()
   }
 
-  const handleSetPin = async () => {
-    const np = newPin.join('')
-    const cp = confirmPin.join('')
-    if (np.length < 5) { setSetPinError('Please enter a 5-digit PIN'); return }
-    if (np !== cp) { setSetPinError('PINs do not match'); return }
+  const handleChangePin = async () => {
+    const np = changePinNew.join('')
+    const cp = changePinConfirm.join('')
+    if (np.length < 5) { setChangePinError('Please enter a 5-digit PIN'); return }
+    if (np !== cp) { setChangePinError('PINs do not match'); return }
     if (!client) return
-    setSetPinLoading(true)
-    setSetPinError('')
+    setChangePinLoading(true)
+    setChangePinError('')
     try {
-      const { error: updateErr } = await supabase
-        .from('clients')
-        .update({ pin: np, pin_changed: true })
-        .eq('id', client.id)
-      if (updateErr) throw updateErr
-
-      supabase.auth.getSession().then(({ data }) => {
-        fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-client-user', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${data.session?.access_token}`
-          },
-          body: JSON.stringify({ clientId: client.id, phone: client.phone, pin: np })
-        }).catch(err => console.error('create-client-user failed:', err))
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/client-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPin: np, access_token: session?.access_token }),
       })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error ?? 'Failed to change PIN')
 
+      fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-client-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ clientId: client.id, phone: client.phone, pin: np })
+      }).catch(() => {})
+
+      setChangePinNew(['', '', '', '', ''])
+      setChangePinConfirm(['', '', '', '', ''])
       setCurrentScreen('home')
     } catch (err: unknown) {
-      setSetPinError(err instanceof Error ? err.message : 'Failed to set PIN')
+      setChangePinError(err instanceof Error ? err.message : 'Failed to change PIN')
     } finally {
-      setSetPinLoading(false)
+      setChangePinLoading(false)
     }
   }
 
@@ -228,9 +228,9 @@ export default function ClientApp() {
     setSelectedStaff(null)
     setBookingRef('')
     setMenuOpen(false)
-    setNewPin(['', '', '', '', ''])
-    setConfirmPin(['', '', '', '', ''])
-    setSetPinError('')
+    setChangePinNew(['', '', '', '', ''])
+    setChangePinConfirm(['', '', '', '', ''])
+    setChangePinError('')
     setCurrentScreen('login')
   }
 
@@ -250,9 +250,6 @@ export default function ClientApp() {
         body: JSON.stringify({ slug, countryCode, phone, pin: enteredPin }),
       })
       const result = await res.json()
-      console.log('client-login status:', res.status)
-      console.log('client-login result:', result)
-
       if (!res.ok) {
         if (res.status === 401) { setError('Incorrect PIN'); return }
         if (res.status === 404) { setError('Phone number not registered. Please ask the salon to add you.'); return }
@@ -264,7 +261,6 @@ export default function ClientApp() {
       }
 
       const { error: sessionError } = await supabase.auth.setSession(result.session)
-      console.log('setSession error:', sessionError)
       if (sessionError) throw sessionError
       setClient({ id: result.client.id, name: result.client.name, phone: result.client.phone })
 
@@ -285,7 +281,7 @@ export default function ClientApp() {
       setStaff((staffData as StaffMember[]) ?? [])
 
       setSelectedDate(getTomorrow())
-      setCurrentScreen(result.client.pin_changed ? 'home' : 'set-pin')
+      setCurrentScreen('home')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
@@ -408,6 +404,12 @@ export default function ClientApp() {
               {label}
             </button>
           ))}
+          <button
+            onClick={() => { setMenuOpen(false); setCurrentScreen('change-pin') }}
+            style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+          >
+            Change PIN
+          </button>
           <div style={{ height: 1, backgroundColor: '#e0e0e0', margin: '8px 0' }} />
           <button
             onClick={doSignOut}
@@ -699,9 +701,9 @@ export default function ClientApp() {
     )
   }
 
-  // ── Set PIN screen ─────────────────────────────────────────────────────────
+  // ── Change PIN screen ──────────────────────────────────────────────────────
 
-  if (currentScreen === 'set-pin') {
+  if (currentScreen === 'change-pin') {
     const pinBoxStyle: React.CSSProperties = {
       width: 48, height: 52, textAlign: 'center', fontSize: 20, fontWeight: 700,
       border: '1px solid #1D558F', borderRadius: 8, outline: 'none',
@@ -710,29 +712,30 @@ export default function ClientApp() {
     return (
       <div style={{ ...screenWrap, backgroundColor: '#ffffff' }}>
         <div style={headerStyle}>
-          <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, margin: 0 }}>{salon?.name}</p>
+          <button
+            onClick={() => setCurrentScreen('home')}
+            style={{ background: 'none', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 6, color: '#ffffff', fontSize: 12, padding: '4px 12px', cursor: 'pointer' }}
+          >
+            Back
+          </button>
+          <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 600, margin: 0 }}>Change PIN</p>
           <div style={{ width: 60 }} />
         </div>
 
         <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: 28 }}>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: 17, fontWeight: 700, color: '#034325', margin: '0 0 6px' }}>Set your own PIN</p>
-            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>Choose a 5-digit PIN you will use to sign in</p>
-          </div>
-
           <div>
             <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: '0 0 10px', textAlign: 'center' }}>New PIN</p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              {newPin.map((digit, i) => (
+              {changePinNew.map((digit, i) => (
                 <input
                   key={i}
-                  ref={el => { newPinRefs.current[i] = el }}
+                  ref={el => { changePinNewRefs.current[i] = el }}
                   type="password"
                   inputMode="numeric"
                   maxLength={1}
                   value={digit}
-                  onChange={e => handleNewPinChange(i, e.target.value)}
-                  onKeyDown={e => handleNewPinKeyDown(i, e)}
+                  onChange={e => handleChangePinNewChange(i, e.target.value)}
+                  onKeyDown={e => handleChangePinNewKeyDown(i, e)}
                   style={pinBoxStyle}
                 />
               ))}
@@ -742,30 +745,30 @@ export default function ClientApp() {
           <div>
             <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: '0 0 10px', textAlign: 'center' }}>Confirm PIN</p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              {confirmPin.map((digit, i) => (
+              {changePinConfirm.map((digit, i) => (
                 <input
                   key={i}
-                  ref={el => { confirmPinRefs.current[i] = el }}
+                  ref={el => { changePinConfirmRefs.current[i] = el }}
                   type="password"
                   inputMode="numeric"
                   maxLength={1}
                   value={digit}
-                  onChange={e => handleConfirmPinChange(i, e.target.value)}
-                  onKeyDown={e => handleConfirmPinKeyDown(i, e)}
+                  onChange={e => handleChangePinConfirmChange(i, e.target.value)}
+                  onKeyDown={e => handleChangePinConfirmKeyDown(i, e)}
                   style={pinBoxStyle}
                 />
               ))}
             </div>
           </div>
 
-          {setPinError && <p style={{ fontSize: 13, color: '#991b1b', margin: 0, textAlign: 'center' }}>{setPinError}</p>}
+          {changePinError && <p style={{ fontSize: 13, color: '#991b1b', margin: 0, textAlign: 'center' }}>{changePinError}</p>}
 
           <button
-            onClick={handleSetPin}
-            disabled={setPinLoading}
-            style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 15, fontWeight: 700, cursor: setPinLoading ? 'not-allowed' : 'pointer', opacity: setPinLoading ? 0.7 : 1, width: '100%' }}
+            onClick={handleChangePin}
+            disabled={changePinLoading}
+            style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 15, fontWeight: 700, cursor: changePinLoading ? 'not-allowed' : 'pointer', opacity: changePinLoading ? 0.7 : 1, width: '100%' }}
           >
-            {setPinLoading ? 'Saving...' : 'Set PIN & continue'}
+            {changePinLoading ? 'Saving...' : 'Save PIN'}
           </button>
         </div>
       </div>

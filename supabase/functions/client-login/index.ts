@@ -7,10 +7,14 @@ const corsHeaders = {
 }
 
 interface ClientLoginBody {
-  slug: string
-  countryCode: string
-  phone: string
-  pin: string
+  action?: string
+  slug?: string
+  countryCode?: string
+  phone?: string
+  pin?: string
+  newPin?: string
+  clientId?: string
+  access_token?: string
 }
 
 function jsonResponse(body: Record<string, unknown>, status: number): Response {
@@ -36,15 +40,58 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Invalid JSON body' }, 400)
   }
 
-  const { slug, countryCode, phone, pin } = body
-  if (!slug || !countryCode || !phone || !pin) {
-    return jsonResponse({ error: 'slug, countryCode, phone and pin are required' }, 400)
-  }
+  const { action, slug, countryCode, phone, pin, newPin, clientId, access_token } = body
 
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
+
+  // ── Change PIN by clientId ───────────────────────────────────────────────────
+  if (action === 'change-pin') {
+    if (!newPin || !clientId) {
+      return jsonResponse({ error: 'newPin and clientId are required' }, 400)
+    }
+
+    const { error: updateErr } = await supabaseAdmin
+      .from('clients')
+      .update({ pin: newPin, pin_changed: true })
+      .eq('id', clientId)
+
+    if (updateErr) {
+      return jsonResponse({ error: updateErr.message }, 400)
+    }
+
+    return jsonResponse({ success: true }, 200)
+  }
+
+  // ── PIN update endpoint ──────────────────────────────────────────────────────
+  if (newPin) {
+    if (!access_token) {
+      return jsonResponse({ error: 'access_token is required to update PIN' }, 400)
+    }
+
+    const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(access_token)
+    if (userErr || !user) {
+      return jsonResponse({ error: 'Invalid or expired session' }, 401)
+    }
+
+    const { error: updateErr } = await supabaseAdmin
+      .from('clients')
+      .update({ pin: newPin, pin_changed: true })
+      .eq('auth_user_id', user.id)
+
+    if (updateErr) {
+      return jsonResponse({ error: updateErr.message }, 500)
+    }
+
+    return jsonResponse({ success: true }, 200)
+  }
+
+  // ── Login endpoint ───────────────────────────────────────────────────────────
+  if (!slug || !countryCode || !phone || !pin) {
+    return jsonResponse({ error: 'slug, countryCode, phone and pin are required' }, 400)
+  }
 
   const { data: salon } = await supabaseAdmin
     .from('salons')
