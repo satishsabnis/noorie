@@ -14,7 +14,7 @@ const corsHeaders = {
 
 interface CreateStaffUserBody {
   email: string
-  password: string
+  pin: string
   salon_id: string
   name: string
   phone: string
@@ -48,18 +48,26 @@ Deno.serve(async (req: Request) => {
   }
 
   const {
-    email, password, salon_id, name, phone, role,
+    email, pin, salon_id, name, phone, role,
     monthly_salary, commission_pct, service_ids,
   } = body
+
+  // Validate PIN format (5 digits)
+  if (!/^\d{5}$/.test(pin)) {
+    return jsonResponse({ success: false, error: 'PIN must be exactly 5 digits' }, 400)
+  }
 
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
+  // Create auth password: PIN + 'x' (6 characters minimum)
+  const authPassword = pin + 'x'
+
   const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
     email,
-    password,
+    password: authPassword,
     email_confirm: true,
   })
   if (authErr || !authData.user) {
