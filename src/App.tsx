@@ -52,9 +52,22 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-      <Route path="/:slug/staff/*" element={<StaffApp />} />
-      <Route path="/:slug/client/*" element={<ClientApp />} />
       <Route path="/set-password" element={<SetPassword />} />
+      <Route path="/staff" element={
+        <ProtectedRoute>
+          <Staff />
+        </ProtectedRoute>
+      } />
+      <Route path="/staff/new" element={
+        <OwnerRoute>
+          <StaffForm />
+        </OwnerRoute>
+      } />
+      <Route path="/staff/:id" element={
+        <OwnerRoute>
+          <StaffForm />
+        </OwnerRoute>
+      } />
       <Route path="/dashboard" element={
         <ProtectedRoute>
           <Dashboard />
@@ -85,24 +98,9 @@ function AppRoutes() {
           <ClientProfile />
         </ProtectedRoute>
       } />
-      <Route path="/staff" element={
-        <ProtectedRoute>
-          <Staff />
-        </ProtectedRoute>
-      } />
       <Route path="/admin" element={
         <OwnerRoute>
           <Admin />
-        </OwnerRoute>
-      } />
-      <Route path="/staff/new" element={
-        <OwnerRoute>
-          <StaffForm />
-        </OwnerRoute>
-      } />
-      <Route path="/staff/:id" element={
-        <OwnerRoute>
-          <StaffForm />
         </OwnerRoute>
       } />
       <Route path="/reports" element={
@@ -110,6 +108,8 @@ function AppRoutes() {
           <Reports />
         </OwnerRoute>
       } />
+      <Route path="/:slug/staff/*" element={<StaffApp />} />
+      <Route path="/:slug/client/*" element={<ClientApp />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
     {isAuthenticated && <NoorieBot />}
