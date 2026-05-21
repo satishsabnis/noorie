@@ -76,6 +76,7 @@ function Badge({ status }: { status: string }) {
 // =============================================
 function StaffSchedule() {
   const navigate = useNavigate()
+  const { slug } = useParams<{ slug: string }>()
   const { staffRecord, signOut } = useAuthStore()
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
@@ -87,11 +88,29 @@ function StaffSchedule() {
     fetchSchedule()
   }, [staffRecord?.id])
 
+  useEffect(() => {
+    if (!staffRecord?.id || !slug) return
+
+    const verifySalon = async () => {
+      const { data: salon } = await supabase
+        .from('salons')
+        .select('id')
+        .eq('slug', slug)
+        .single()
+
+      if (!salon || salon.id !== staffRecord.salon_id) {
+        navigate('/')
+      }
+    }
+
+    verifySalon()
+  }, [staffRecord?.id, slug, staffRecord?.salon_id, navigate])
+
   useAppointmentSubscription(
     (toast) => {
       setToasts(prev => [...prev, toast])
     },
-    true
+    !!slug
   )
 
   async function fetchSchedule() {
@@ -201,7 +220,7 @@ function StaffSchedule() {
           appointments.map(appt => (
             <div
               key={appt.id}
-              onClick={() => navigate(`/staff-app/appointment/${appt.id}`)}
+              onClick={() => navigate(`/${slug}/staff/appointment/${appt.id}`)}
               style={{ ...cardStyle, cursor: 'pointer' }}
             >
               {/* Time + status row */}
@@ -250,7 +269,7 @@ function StaffSchedule() {
 // SCREEN 2: Appointment Detail
 // =============================================
 function StaffAppointmentDetail() {
-  const { id } = useParams<{ id: string }>()
+  const { id, slug } = useParams<{ id: string; slug: string }>()
   const navigate = useNavigate()
   const [appt, setAppt] = useState<Appointment | null>(null)
   const [loading, setLoading] = useState(true)
@@ -318,7 +337,7 @@ function StaffAppointmentDetail() {
   if (!appt) return (
     <div style={pageStyle}>
       <div style={headerStyle}>
-        <button onClick={() => navigate('/staff-app')} style={backBtn}>Back</button>
+        <button onClick={() => navigate(`/${slug}/staff`)} style={backBtn}>Back</button>
         <p style={{ color: '#ffffff', fontSize: 16, fontWeight: 600, margin: 0 }}>Appointment</p>
         <div style={{ width: 60 }} />
       </div>
@@ -334,7 +353,7 @@ function StaffAppointmentDetail() {
     <div style={pageStyle}>
       {/* Header */}
       <div style={headerStyle}>
-        <button onClick={() => navigate('/staff-app')} style={backBtn}>Back</button>
+        <button onClick={() => navigate(`/${slug}/staff`)} style={backBtn}>Back</button>
         <p style={{ color: '#ffffff', fontSize: 16, fontWeight: 600, margin: 0 }}>Appointment</p>
         <Badge status={appt.status} />
       </div>
@@ -404,7 +423,7 @@ function StaffAppointmentDetail() {
         )}
         {canCollect && (
           <button
-            onClick={() => navigate(`/staff-app/appointment/${id}/payment`)}
+            onClick={() => navigate(`/${slug}/staff/appointment/${id}/payment`)}
             style={{ backgroundColor: '#C9A227', color: '#1A1A1A', border: 'none', borderRadius: 10, padding: '14px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
           >
             Collect payment — AED {appt.balance.toFixed(2)}
@@ -424,7 +443,7 @@ function StaffAppointmentDetail() {
 // SCREEN 3: Collect Payment
 // =============================================
 function StaffCollectPayment() {
-  const { id } = useParams<{ id: string }>()
+  const { id, slug } = useParams<{ id: string; slug: string }>()
   const navigate = useNavigate()
   const salonId = useAuthStore(s => s.staffRecord?.salon_id ?? null)
   const [balance, setBalance] = useState(0)
@@ -477,7 +496,7 @@ function StaffCollectPayment() {
 
     if (err) { setError(err.message); setSaving(false); return }
 
-    navigate(`/staff-app/appointment/${id}`)
+    navigate(`/${slug}/staff/appointment/${id}`)
   }
 
   if (loading) return (
@@ -493,7 +512,7 @@ function StaffCollectPayment() {
     <div style={pageStyle}>
       {/* Header */}
       <div style={headerStyle}>
-        <button onClick={() => navigate(`/staff-app/appointment/${id}`)} style={backBtn}>Back</button>
+        <button onClick={() => navigate(`/${slug}/staff/appointment/${id}`)} style={backBtn}>Back</button>
         <p style={{ color: '#ffffff', fontSize: 16, fontWeight: 600, margin: 0 }}>Collect Payment</p>
         <div style={{ width: 60 }} />
       </div>
