@@ -286,6 +286,7 @@ export default function ClientApp() {
         body: JSON.stringify({ slug, countryCode, phone, pin: enteredPin }),
       })
       const result = await res.json()
+      console.log('client-login result:', result)
       if (!res.ok) {
         if (res.status === 401) { setError('Incorrect PIN'); return }
         if (res.status === 404) { setError('Phone number not registered. Please ask the salon to add you.'); return }
@@ -293,30 +294,38 @@ export default function ClientApp() {
       }
       if (!result.session) throw new Error('Login succeeded but no session returned. Please try again.')
 
-      const { error: sessionError } = await supabase.auth.setSession(result.session)
-      if (sessionError) throw sessionError
-      setClient({ id: result.client.id, name: result.client.name, phone: result.client.phone })
+      try {
+        console.log('before setSession')
+        const { error: sessionError } = await supabase.auth.setSession(result.session)
+        console.log('after setSession, sessionError:', sessionError)
+        if (sessionError) throw sessionError
+        setClient({ id: result.client.id, name: result.client.name, phone: result.client.phone })
 
-      console.log('staffList from edge function:', result.staffList)
-      setStaff((result.staffList as StaffMember[]) ?? [])
+        console.log('before staff handling, staffList:', result.staffList)
+        setStaff((result.staffList as StaffMember[]) ?? [])
+        console.log('after staff handling')
 
-      const { data: svcData } = await supabase
-        .from('services')
-        .select('id, name, category, duration_minutes, price, is_active')
-        .eq('salon_id', salon!.id)
-        .eq('is_active', true)
-        .order('category')
-      setServices((svcData as Service[]) ?? [])
+        const { data: svcData } = await supabase
+          .from('services')
+          .select('id, name, category, duration_minutes, price, is_active')
+          .eq('salon_id', salon!.id)
+          .eq('is_active', true)
+          .order('category')
+        setServices((svcData as Service[]) ?? [])
 
-      const { data: configData } = await supabase
-        .from('salon_config')
-        .select('operating_hours')
-        .eq('salon_id', salon!.id)
-        .maybeSingle()
-      setOperatingHours((configData?.operating_hours as Record<string, DayConfig>) ?? null)
+        const { data: configData } = await supabase
+          .from('salon_config')
+          .select('operating_hours')
+          .eq('salon_id', salon!.id)
+          .maybeSingle()
+        setOperatingHours((configData?.operating_hours as Record<string, DayConfig>) ?? null)
 
-      setSelectedDate(getTomorrow())
-      setCurrentScreen('home')
+        setSelectedDate(getTomorrow())
+        setCurrentScreen('home')
+      } catch (postLoginErr: unknown) {
+        console.error('post-login error:', postLoginErr)
+        setError(postLoginErr instanceof Error ? postLoginErr.message : 'Post-login setup failed. Please try again.')
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
