@@ -204,6 +204,8 @@ export default function ClientApp() {
   const [upcomingAppts, setUpcomingAppts]     = useState<UpcomingAppt[]>([])
   const [upcomingLoading, setUpcomingLoading] = useState(false)
 
+  const [inventoryProducts, setInventoryProducts] = useState<{ id: string; name: string; price: number | null; stock: number }[]>([])
+
   const [historyAppts, setHistoryAppts]       = useState<HistoryAppt[]>([])
   const [historyLoading, setHistoryLoading]   = useState(false)
 
@@ -556,6 +558,15 @@ export default function ClientApp() {
           .maybeSingle()
         setOperatingHours((configData?.operating_hours as Record<string, DayConfig>) ?? null)
 
+        const { data: invData } = await supabase
+          .from('inventory_items')
+          .select('id, name, price, stock')
+          .eq('salon_id', salon!.id)
+          .eq('type', 'product')
+          .eq('is_active', true)
+          .order('name')
+        setInventoryProducts((invData ?? []) as { id: string; name: string; price: number | null; stock: number }[])
+
         setSelectedDate(getTomorrow())
         setCurrentScreen('home')
       } catch (postLoginErr: unknown) {
@@ -710,7 +721,6 @@ export default function ClientApp() {
 
   if (currentScreen === 'home') {
     const packages = services.filter(s => s.category === 'Package')
-    const products = services.filter(s => s.category === 'Product')
     const hScrollWrap: React.CSSProperties = { display: 'flex', overflowX: 'auto', gap: 10, paddingBottom: 4 }
     const hCard: React.CSSProperties = { flexShrink: 0, width: 160, backgroundColor: '#ffffff', border: '1px solid #034325', borderRadius: 8, padding: '10px 12px' }
     return (
@@ -744,14 +754,17 @@ export default function ClientApp() {
               </div>
             </div>
           )}
-          {products.length > 0 && (
+          {inventoryProducts.length > 0 && (
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Products</p>
               <div style={hScrollWrap}>
-                {products.map(s => (
-                  <div key={s.id} style={hCard}>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>{s.name}</p>
-                    <p style={{ fontSize: 12, color: '#034325', fontWeight: 600, margin: 0 }}>AED {s.price}</p>
+                {inventoryProducts.map(p => (
+                  <div key={p.id} style={hCard}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>{p.name}</p>
+                    <p style={{ fontSize: 12, color: '#034325', fontWeight: 600, margin: '0 0 2px' }}>AED {p.price ?? 0}</p>
+                    {p.stock === 0
+                      ? <p style={{ fontSize: 11, color: '#991b1b', fontWeight: 600, margin: 0 }}>Out of stock</p>
+                      : <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>{p.stock} in stock</p>}
                   </div>
                 ))}
               </div>

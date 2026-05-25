@@ -624,7 +624,7 @@ function SectionServices({ salonId }: { salonId: string }) {
       </div>
 
       {!loading && (() => {
-        const cats = ['All', ...Array.from(new Set(services.map(s => s.category).filter(Boolean))).sort()]
+        const cats = ['All', ...Array.from(new Set(services.map(s => s.category).filter(c => Boolean(c) && c !== 'Product'))).sort()]
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <label style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, flexShrink: 0 }}>Filter by category</label>
