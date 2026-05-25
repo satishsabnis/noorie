@@ -339,24 +339,19 @@ export default function StaffForm() {
 
             if (staffData.error || !staffData.data) throw new Error('Could not fetch staff details to create login')
 
-            const { name, phone, salon_id } = staffData.data
-
-            const rawPhone = phone?.replace(/\D/g, '') ?? ''
+            const rawPhone = staffData.data.phone?.replace(/\D/g, '') ?? ''
             const authEmail = `${rawPhone}@noorie.internal`
 
-            const createRes = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-staff-user', {
+            const createRes = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-staff-auth', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
               },
               body: JSON.stringify({
-                name,
-                phone,
-                email: authEmail,
-                salon_id,
-                pin: enteredPin,
                 staff_id: id!,
+                email: authEmail,
+                pin: enteredPin,
               }),
             })
 
