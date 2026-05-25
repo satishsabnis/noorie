@@ -341,6 +341,9 @@ export default function StaffForm() {
 
             const { name, phone, salon_id } = staffData.data
 
+            const rawPhone = phone?.replace(/\D/g, '') ?? ''
+            const authEmail = `${rawPhone}@noorie.internal`
+
             const createRes = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-staff-user', {
               method: 'POST',
               headers: {
@@ -350,6 +353,7 @@ export default function StaffForm() {
               body: JSON.stringify({
                 name,
                 phone,
+                email: authEmail,
                 salon_id,
                 pin: enteredPin,
                 staff_id: id!,
