@@ -44,7 +44,7 @@ interface StaffMember {
 }
 
 type DayConfig = { open: boolean; from: string; to: string }
-type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm' | 'my-profile' | 'upcoming'
+type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm' | 'my-profile' | 'upcoming' | 'history'
 
 interface UpcomingAppt {
   id: string
@@ -53,6 +53,16 @@ interface UpcomingAppt {
   status: string
   staffName: string | null
   services: string[]
+}
+
+interface HistoryAppt {
+  id: string
+  reference_number: number | null
+  starts_at: string
+  status: string
+  staffName: string | null
+  services: string[]
+  amountPaid: number
 }
 type BookingFlow = 'by-time' | 'by-staff' | null
 
@@ -175,6 +185,9 @@ export default function ClientApp() {
   const [upcomingAppts, setUpcomingAppts]     = useState<UpcomingAppt[]>([])
   const [upcomingLoading, setUpcomingLoading] = useState(false)
 
+  const [historyAppts, setHistoryAppts]       = useState<HistoryAppt[]>([])
+  const [historyLoading, setHistoryLoading]   = useState(false)
+
   useEffect(() => {
     if (!slug) return
     fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/get-salon-by-slug', {
@@ -281,6 +294,34 @@ export default function ClientApp() {
         }))
         setUpcomingAppts(appts)
         setUpcomingLoading(false)
+      })
+  }, [currentScreen, client?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (currentScreen !== 'history' || !client) return
+    setHistoryLoading(true)
+    supabase
+      .from('appointments')
+      .select('id, reference_number, starts_at, status, staff:staff_id(name), appointment_services(services(name)), payments(amount)')
+      .eq('client_id', client.id)
+      .in('status', ['completed', 'cancelled', 'no_show'])
+      .order('starts_at', { ascending: false })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then(({ data }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const appts: HistoryAppt[] = (data ?? []).map((a: any) => ({
+          id: a.id,
+          reference_number: a.reference_number,
+          starts_at: a.starts_at,
+          status: a.status,
+          staffName: a.staff?.name ?? null,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          services: (a.appointment_services ?? []).map((s: any) => s.services?.name).filter(Boolean),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          amountPaid: (a.payments ?? []).reduce((sum: number, p: any) => sum + (p.amount ?? 0), 0),
+        }))
+        setHistoryAppts(appts)
+        setHistoryLoading(false)
       })
   }, [currentScreen, client?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -511,7 +552,8 @@ export default function ClientApp() {
               style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >{label}</button>
           ))}
-          {['History', 'Loyalty', 'Reviews', 'Contact salon', 'About Noorie'].map(label => (
+          <button onClick={() => { setMenuOpen(false); setCurrentScreen('history') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Appointment History</button>
+          {['Loyalty', 'Reviews', 'Contact salon', 'About Noorie'].map(label => (
             <button key={label} onClick={() => alert('Coming soon')} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>{label}</button>
           ))}
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('change-pin') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Change PIN</button>
@@ -928,6 +970,49 @@ export default function ClientApp() {
                 <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(appt.starts_at)}</p>
                 {appt.staffName && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Technician: {appt.staffName}</p>}
                 {appt.services.length > 0 && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>{appt.services.join(', ')}</p>}
+              </div>
+            ))
+          )}
+          {blueFooter}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Appointment History screen ─────────────────────────────────────────────
+
+  if (currentScreen === 'history') {
+    const badgeStyle = (status: string): React.CSSProperties => {
+      if (status === 'completed') return { color: '#034325', backgroundColor: '#E1F5EE', borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 600 }
+      if (status === 'cancelled') return { color: '#6b7280', backgroundColor: '#f3f4f6', borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 600 }
+      return { color: '#991b1b', backgroundColor: '#fee2e2', borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 600 }
+    }
+    const badgeLabel = (status: string) => status === 'no_show' ? 'No show' : status.charAt(0).toUpperCase() + status.slice(1)
+    return (
+      <div style={screenWrap}>
+        <div style={headerStyle}>
+          <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 6, color: '#ffffff', fontSize: 12, padding: '4px 12px', cursor: 'pointer' }}>Back</button>
+          <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 600, margin: 0 }}>Appointment History</p>
+          <div style={{ width: 60 }} />
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {historyLoading ? (
+            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>Loading...</p>
+          ) : historyAppts.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>No appointment history</p>
+          ) : (
+            historyAppts.map(appt => (
+              <div key={appt.id} style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#034325' }}>
+                    {appt.reference_number ? `APT-${String(appt.reference_number).padStart(4, '0')}` : appt.id.slice(0, 8).toUpperCase()}
+                  </span>
+                  <span style={badgeStyle(appt.status)}>{badgeLabel(appt.status)}</span>
+                </div>
+                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(appt.starts_at)}</p>
+                {appt.staffName && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Technician: {appt.staffName}</p>}
+                {appt.services.length > 0 && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>{appt.services.join(', ')}</p>}
+                {appt.amountPaid > 0 && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Paid: AED {appt.amountPaid}</p>}
               </div>
             ))
           )}
