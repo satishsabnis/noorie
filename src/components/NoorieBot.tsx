@@ -1035,7 +1035,10 @@ FORMATTING: Default to plain conversational sentences, maximum 3 sentences unles
         display: 'flex', flexDirection: 'column', gap: 12,
         backgroundColor: '#ffffff',
       }}>
-        {messages.map((m, i) => (
+        {messages.length > 20 && (
+          <p style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', margin: 0 }}>Showing last 20 messages</p>
+        )}
+        {messages.slice(-20).map((m, i) => (
           <div
             key={i}
             style={{
