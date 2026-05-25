@@ -47,7 +47,7 @@ export default function Login() {
       }
 
       signIn(user, staff)
-      navigate(staff.role === 'technician' ? `/${salon.slug}/staff` : `/${salon.slug}/dashboard`)
+      navigate(staff.role === 'technician' ? `/${salon.slug}/staff` : '/dashboard')
     } catch (err: any) {
       const msg = err?.message ?? ''
       if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials')) {
