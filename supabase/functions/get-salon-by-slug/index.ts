@@ -27,7 +27,7 @@ serve(async (req) => {
 
     const { data, error } = await supabase
       .from("salons")
-      .select("id, name, city, country")
+      .select("id, name, city, country, phone, email")
       .eq("slug", slug)
       .maybeSingle()
 
