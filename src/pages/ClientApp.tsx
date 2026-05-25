@@ -222,6 +222,9 @@ export default function ClientApp() {
   const [reviewComment, setReviewComment]           = useState('')
   const [reviewSubmitting, setReviewSubmitting]     = useState(false)
   const [reviewError, setReviewError]               = useState('')
+  const [showAboutNoorie, setShowAboutNoorie]       = useState(false)
+  const [salonPhone, setSalonPhone]                 = useState<string | null>(null)
+  const [salonEmail, setSalonEmail]                 = useState<string | null>(null)
 
   useEffect(() => {
     if (!slug) return
@@ -576,6 +579,16 @@ export default function ClientApp() {
           setInventoryProducts((invData ?? []) as { id: string; name: string; price: number | null; stock_count: number; image_url: string | null }[])
         }
 
+        const { data: salonContactData } = await supabase
+          .from('salons')
+          .select('phone, email')
+          .eq('id', salon!.id)
+          .maybeSingle()
+        if (salonContactData) {
+          setSalonPhone((salonContactData.phone as string | null) ?? null)
+          setSalonEmail((salonContactData.email as string | null) ?? null)
+        }
+
         setSelectedDate(getTomorrow())
         setCurrentScreen('home')
       } catch (postLoginErr: unknown) {
@@ -625,7 +638,7 @@ export default function ClientApp() {
   const blueFooter = (
     <div style={{ textAlign: 'center', padding: '8px 0' }}>
       <img src="/assets/logo-WyJseHTl.png" alt="Blue Flute" style={{ width: 60, display: 'block', margin: '0 auto 6px' }} />
-      <p style={{ fontSize: 10, color: '#9ca3af', margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
+      <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
     </div>
   )
 
@@ -679,10 +692,16 @@ export default function ClientApp() {
           ))}
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('history') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Appointment History</button>
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('reviews') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Reviews</button>
-          {['Loyalty', 'Contact salon', 'About Noorie'].map(label => (
-            <button key={label} onClick={() => alert('Coming soon')} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>{label}</button>
-          ))}
+          <button onClick={() => alert('Coming soon')} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Loyalty</button>
+          <button onClick={() => { setMenuOpen(false); setShowAboutNoorie(true) }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>About Noorie</button>
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('change-pin') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Change PIN</button>
+          {(salonPhone || salonEmail) && (
+            <div style={{ padding: '12px 16px', borderBottom: '0.5px solid #e0e0e0' }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Contact salon</p>
+              {salonPhone && <p style={{ fontSize: 13, color: '#111', margin: '0 0 4px' }}>Phone: {salonPhone}</p>}
+              {salonEmail && <p style={{ fontSize: 13, color: '#111', margin: 0 }}>Email: {salonEmail}</p>}
+            </div>
+          )}
           <div style={{ height: 1, backgroundColor: '#e0e0e0', margin: '8px 0' }} />
           <button onClick={doSignOut} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Sign out</button>
           <button onClick={() => alert('Coming soon')} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '0 16px', height: 44, fontSize: 13, color: '#991b1b', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Delete account</button>
@@ -768,6 +787,15 @@ export default function ClientApp() {
               <p style={{ fontSize: 13, color: '#111', margin: '0 0 4px', lineHeight: 1.5 }}>{selectedPackage.name}</p>
               <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 24px' }}>Contact salon for full package details.</p>
               <button onClick={() => setSelectedPackage(null)} style={{ border: '1px solid #034325', color: '#034325', background: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Close</button>
+            </div>
+          </div>
+        )}
+        {showAboutNoorie && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 300, backgroundColor: '#ffffff', overflowY: 'auto' }}>
+            <div style={{ padding: '24px 20px 48px', maxWidth: 480, margin: '0 auto' }}>
+              <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>About Noorie</p>
+              <p style={{ fontSize: 14, color: '#111', lineHeight: 1.6, margin: '0 0 24px' }}>Noorie is your personal salon companion. Book appointments with your favourite technician, track your visit history, and manage your loyalty points — all in one place. Browse exclusive packages and offers, shop salon products, and stay connected to your salon so you never miss a deal, a booking, or a reward.</p>
+              <button onClick={() => setShowAboutNoorie(false)} style={{ border: '1px solid #034325', color: '#034325', background: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Close</button>
             </div>
           </div>
         )}
