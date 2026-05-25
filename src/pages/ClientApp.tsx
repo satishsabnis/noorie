@@ -44,7 +44,16 @@ interface StaffMember {
 }
 
 type DayConfig = { open: boolean; from: string; to: string }
-type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm'
+type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm' | 'my-profile' | 'upcoming'
+
+interface UpcomingAppt {
+  id: string
+  reference_number: number | null
+  starts_at: string
+  status: string
+  staffName: string | null
+  services: string[]
+}
 type BookingFlow = 'by-time' | 'by-staff' | null
 
 function getTomorrow(): string {
@@ -58,6 +67,13 @@ function initials(name: string): string {
   if (parts.length === 0) return '?'
   if (parts.length === 1) return (parts[0][0] ?? '?').toUpperCase()
   return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
+}
+
+function fmtDubaiDateTime(iso: string): string {
+  const d = new Date(iso)
+  const date = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', year: 'numeric' })
+  const time = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false })
+  return `${date} · ${time}`
 }
 
 function generateSlots(date: string, hours: Record<string, DayConfig> | null): string[] {
@@ -149,6 +165,16 @@ export default function ClientApp() {
   const [changePinError, setChangePinError]     = useState('')
   const [changePinLoading, setChangePinLoading] = useState(false)
 
+  const [profileName, setProfileName]       = useState('')
+  const [profileEmail, setProfileEmail]     = useState('')
+  const [profileDob, setProfileDob]         = useState('')
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileSaving, setProfileSaving]   = useState(false)
+  const [profileError, setProfileError]     = useState('')
+
+  const [upcomingAppts, setUpcomingAppts]     = useState<UpcomingAppt[]>([])
+  const [upcomingLoading, setUpcomingLoading] = useState(false)
+
   useEffect(() => {
     if (!slug) return
     fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/get-salon-by-slug', {
@@ -213,6 +239,51 @@ export default function ClientApp() {
     return () => { cancelled = true }
   }, [currentScreen, salon?.id, selectedDate, selectedStaff?.id, operatingHours])
 
+  useEffect(() => {
+    if (currentScreen !== 'my-profile' || !client) return
+    setProfileLoading(true)
+    setProfileError('')
+    supabase
+      .from('clients')
+      .select('name, phone, email, dob')
+      .eq('id', client.id)
+      .single()
+      .then(({ data, error }) => {
+        if (error || !data) { setProfileError('Failed to load profile'); setProfileLoading(false); return }
+        setProfileName((data.name as string) ?? '')
+        setProfileEmail((data.email as string) ?? '')
+        setProfileDob((data.dob as string) ?? '')
+        setProfileLoading(false)
+      })
+  }, [currentScreen, client?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (currentScreen !== 'upcoming' || !client) return
+    setUpcomingLoading(true)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase
+      .from('appointments')
+      .select('id, reference_number, starts_at, status, staff:staff_id(name), appointment_services(services(name))')
+      .eq('client_id', client.id)
+      .eq('status', 'scheduled')
+      .gte('starts_at', new Date().toISOString())
+      .order('starts_at', { ascending: true })
+      .then(({ data }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const appts: UpcomingAppt[] = (data ?? []).map((a: any) => ({
+          id: a.id,
+          reference_number: a.reference_number,
+          starts_at: a.starts_at,
+          status: a.status,
+          staffName: a.staff?.name ?? null,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          services: (a.appointment_services ?? []).map((s: any) => s.services?.name).filter(Boolean),
+        }))
+        setUpcomingAppts(appts)
+        setUpcomingLoading(false)
+      })
+  }, [currentScreen, client?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handlePinChange = (index: number, value: string) => {
     if (!/^\d?$/.test(value)) return
     const next = [...pin]; next[index] = value; setPin(next)
@@ -269,6 +340,19 @@ export default function ClientApp() {
     } finally {
       setChangePinLoading(false)
     }
+  }
+
+  const handleProfileSave = async () => {
+    if (!client) return
+    setProfileSaving(true)
+    setProfileError('')
+    const { error } = await supabase
+      .from('clients')
+      .update({ name: profileName.trim(), email: profileEmail.trim() || null, dob: profileDob || null })
+      .eq('id', client.id)
+    if (error) { setProfileError(error.message); setProfileSaving(false); return }
+    setClient(prev => prev ? { ...prev, name: profileName.trim() } : prev)
+    setCurrentScreen('home')
   }
 
   const doSignOut = () => {
@@ -420,7 +504,14 @@ export default function ClientApp() {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {['My profile', 'Upcoming', 'History', 'Loyalty', 'Reviews', 'Contact salon', 'About Noorie'].map(label => (
+          {(['My profile', 'Upcoming'] as const).map(label => (
+            <button
+              key={label}
+              onClick={() => { setMenuOpen(false); setCurrentScreen(label === 'My profile' ? 'my-profile' : 'upcoming') }}
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            >{label}</button>
+          ))}
+          {['History', 'Loyalty', 'Reviews', 'Contact salon', 'About Noorie'].map(label => (
             <button key={label} onClick={() => alert('Coming soon')} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>{label}</button>
           ))}
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('change-pin') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Change PIN</button>
@@ -758,6 +849,91 @@ export default function ClientApp() {
         </div>
         <button onClick={() => setCurrentScreen('home')} style={{ backgroundColor: 'transparent', color: '#034325', border: '1px solid #034325', borderRadius: 8, padding: '12px 0', fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}>Back to home</button>
         {blueFooter}
+      </div>
+    )
+  }
+
+  // ── My Profile screen ─────────────────────────────────────────────────────
+
+  if (currentScreen === 'my-profile') {
+    const labelStyle: React.CSSProperties = { fontSize: 12, color: '#6b7280', fontWeight: 500 }
+    const inputStyle: React.CSSProperties = { border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '10px 12px', fontSize: 13, outline: 'none', backgroundColor: '#ffffff', color: '#111', width: '100%', boxSizing: 'border-box' }
+    return (
+      <div style={screenWrap}>
+        <div style={headerStyle}>
+          <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 6, color: '#ffffff', fontSize: 12, padding: '4px 12px', cursor: 'pointer' }}>Back</button>
+          <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 600, margin: 0 }}>My Profile</p>
+          <div style={{ width: 60 }} />
+        </div>
+        {profileLoading ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <p style={{ fontSize: 13, color: '#6b7280' }}>Loading...</p>
+          </div>
+        ) : (
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 100px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={labelStyle}>Name</label>
+              <input value={profileName} onChange={e => setProfileName(e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={labelStyle}>Phone</label>
+              <input value={client?.phone ?? ''} readOnly style={{ ...inputStyle, backgroundColor: '#f3f4f6', color: '#6b7280' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={labelStyle}>Email</label>
+              <input type="email" value={profileEmail} onChange={e => setProfileEmail(e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={labelStyle}>Date of birth</label>
+              <input type="date" value={profileDob} onChange={e => setProfileDob(e.target.value)} style={inputStyle} />
+            </div>
+            {profileError && <p style={{ fontSize: 13, color: '#991b1b', margin: 0 }}>{profileError}</p>}
+            <button
+              onClick={handleProfileSave}
+              disabled={profileSaving}
+              style={{ backgroundColor: profileSaving ? '#e0e0e0' : '#034325', color: profileSaving ? '#9ca3af' : '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 14, fontWeight: 600, cursor: profileSaving ? 'not-allowed' : 'pointer', width: '100%' }}
+            >
+              {profileSaving ? 'Saving...' : 'Save'}
+            </button>
+            {blueFooter}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Upcoming Appointments screen ───────────────────────────────────────────
+
+  if (currentScreen === 'upcoming') {
+    return (
+      <div style={screenWrap}>
+        <div style={headerStyle}>
+          <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 6, color: '#ffffff', fontSize: 12, padding: '4px 12px', cursor: 'pointer' }}>Back</button>
+          <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 600, margin: 0 }}>Upcoming Appointments</p>
+          <div style={{ width: 60 }} />
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {upcomingLoading ? (
+            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>Loading...</p>
+          ) : upcomingAppts.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>No upcoming appointments</p>
+          ) : (
+            upcomingAppts.map(appt => (
+              <div key={appt.id} style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#034325' }}>
+                    {appt.reference_number ? `APT-${String(appt.reference_number).padStart(4, '0')}` : appt.id.slice(0, 8).toUpperCase()}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#034325', backgroundColor: '#E1F5EE', borderRadius: 4, padding: '2px 8px' }}>{appt.status}</span>
+                </div>
+                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(appt.starts_at)}</p>
+                {appt.staffName && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Technician: {appt.staffName}</p>}
+                {appt.services.length > 0 && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>{appt.services.join(', ')}</p>}
+              </div>
+            ))
+          )}
+          {blueFooter}
+        </div>
       </div>
     )
   }
