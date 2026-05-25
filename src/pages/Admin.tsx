@@ -505,6 +505,7 @@ function SectionServices({ salonId }: { salonId: string }) {
   const [newCategory, setNewCategory] = useState('')
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [categoryFilter, setCategoryFilter] = useState('All')
 
   async function load() {
     const { data } = await supabase.from('services').select('id, name, duration_minutes, is_active, price, category').eq('salon_id', salonId).order('name')
@@ -604,12 +605,28 @@ function SectionServices({ salonId }: { salonId: string }) {
         </div>
       </div>
 
+      {!loading && (() => {
+        const cats = ['All', ...Array.from(new Set(services.map(s => s.category).filter(Boolean))).sort()]
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <label style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, flexShrink: 0 }}>Filter by category</label>
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              style={{ border: '1px solid #1D558F', borderRadius: 6, padding: '6px 10px', fontSize: 13, outline: 'none', backgroundColor: '#ffffff', color: '#111', cursor: 'pointer' }}
+            >
+              {cats.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        )
+      })()}
+
       <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, overflowX: 'auto', marginBottom: 14 }}>
         {loading ? <p style={{ padding: 24, textAlign: 'center', fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={TH}>Service</th><th style={TH}>Category</th><th style={TH}>Duration</th><th style={TH}>Price (AED)</th><th style={TH}>Status</th><th style={TH}>Actions</th></tr></thead>
             <tbody>
-              {services.map(svc => (
+              {(categoryFilter === 'All' ? services : services.filter(s => s.category === categoryFilter)).map(svc => (
                 <tr key={svc.id} style={{ opacity: svc.active ? 1 : 0.5 }}>
                   <td style={TD}>
                     {editId === svc.id
