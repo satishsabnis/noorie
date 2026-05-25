@@ -37,18 +37,16 @@ export default function Login() {
 
       signIn(user, staff)
 
-      // Fetch salon slug for multi-tenant routing
-      const { data: salon, error: salonErr } = await supabase
-        .from('salons')
-        .select('slug')
-        .eq('id', staff.salon_id)
-        .maybeSingle()
-
-      if (salonErr || !salon) {
-        throw new Error('Salon not found')
+      if (staff.role === 'technician') {
+        const { data: salon } = await supabase
+          .from('salons')
+          .select('slug')
+          .eq('id', staff.salon_id)
+          .maybeSingle()
+        navigate(salon?.slug ? `/${salon.slug}/staff` : '/staff-app')
+      } else {
+        navigate('/dashboard')
       }
-
-      navigate(staff.role === 'technician' ? `/${salon.slug}/staff` : '/dashboard')
     } catch (err: any) {
       const msg = err?.message ?? ''
       if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials')) {
