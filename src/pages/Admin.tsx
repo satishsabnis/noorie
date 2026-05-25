@@ -723,7 +723,7 @@ function SectionServices({ salonId }: { salonId: string }) {
 
 interface InventoryItem {
   id: string; name: string; type: 'product' | 'supply'
-  price: number | null; stock: number; unit: string
+  price: number | null; stock_count: number; unit: string
   low_stock_threshold: number; image_url: string | null
 }
 
@@ -749,7 +749,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
     setLoading(true)
     const { data } = await supabase
       .from('inventory_items')
-      .select('id, name, type, price, stock, unit, low_stock_threshold, image_url')
+      .select('id, name, type, price, stock_count, unit, low_stock_threshold, image_url')
       .eq('salon_id', salonId).eq('type', type).order('name')
     setItems((data ?? []) as InventoryItem[])
     setLoading(false)
@@ -767,7 +767,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
   function openEdit(item: InventoryItem) {
     setEditItem(item); setFormName(item.name)
     setFormPrice(item.price != null ? String(item.price) : '')
-    setFormStock(String(item.stock)); setFormUnit(item.unit)
+    setFormStock(String(item.stock_count)); setFormUnit(item.unit)
     setFormThreshold(String(item.low_stock_threshold)); setFormImageUrl(item.image_url); setShowForm(true)
   }
 
@@ -788,7 +788,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
     const payload = {
       salon_id: salonId, name: formName.trim(), type,
       price: type === 'product' && formPrice ? parseFloat(formPrice) : null,
-      stock: parseInt(formStock, 10) || 0,
+      stock_count: parseInt(formStock, 10) || 0,
       unit: formUnit.trim() || 'unit',
       low_stock_threshold: parseInt(formThreshold, 10) || 5,
       image_url: type === 'product' ? formImageUrl : null,
@@ -890,7 +890,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
                   {isProduct && <td style={TD}>{item.image_url ? <img src={item.image_url} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '0.5px solid #e0e0e0' }} /> : <span style={{ fontSize: 11, color: '#9ca3af' }}>No image</span>}</td>}
                   <td style={TD}>{item.name}</td>
                   {isProduct && <td style={TD}>{item.price != null ? item.price.toLocaleString() : '—'}</td>}
-                  <td style={{ ...TD, color: item.stock <= item.low_stock_threshold ? '#991b1b' : '#000' }}>{item.stock}</td>
+                  <td style={{ ...TD, color: item.stock_count <= item.low_stock_threshold ? '#991b1b' : '#000' }}>{item.stock_count}</td>
                   <td style={TD}>{item.unit}</td>
                   <td style={TD}>{item.low_stock_threshold}</td>
                   <td style={TD}>
