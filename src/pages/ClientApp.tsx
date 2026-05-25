@@ -206,6 +206,7 @@ export default function ClientApp() {
   const [upcomingLoading, setUpcomingLoading] = useState(false)
 
   const [inventoryProducts, setInventoryProducts] = useState<{ id: string; name: string; price: number | null; stock_count: number; image_url: string | null }[]>([])
+  const [inventoryError, setInventoryError] = useState<string | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<{ id: string; name: string; price: number | null; stock_count: number; image_url: string | null } | null>(null)
   const [selectedPackage, setSelectedPackage] = useState<Service | null>(null)
 
@@ -561,14 +562,19 @@ export default function ClientApp() {
           .maybeSingle()
         setOperatingHours((configData?.operating_hours as Record<string, DayConfig>) ?? null)
 
-        const { data: invData } = await supabase
+        const { data: invData, error: invError } = await supabase
           .from('inventory_items')
           .select('id, name, price, stock_count, image_url')
           .eq('salon_id', salon!.id)
           .eq('type', 'product')
           .eq('is_active', true)
           .order('name')
-        setInventoryProducts((invData ?? []) as { id: string; name: string; price: number | null; stock_count: number; image_url: string | null }[])
+        if (invError) {
+          console.error('Products fetch error:', invError)
+          setInventoryError('Could not load products')
+        } else {
+          setInventoryProducts((invData ?? []) as { id: string; name: string; price: number | null; stock_count: number; image_url: string | null }[])
+        }
 
         setSelectedDate(getTomorrow())
         setCurrentScreen('home')
@@ -724,10 +730,10 @@ export default function ClientApp() {
 
   if (currentScreen === 'home') {
     const packages = services.filter(s => s.category === 'Package')
-    const hScrollWrap: React.CSSProperties = { display: 'flex', overflowX: 'auto', gap: 10, paddingBottom: 4 }
-    const hCard: React.CSSProperties = { flexShrink: 0, width: 160, backgroundColor: '#ffffff', border: '1px solid #034325', borderRadius: 8, padding: '10px 12px' }
+    const gridWrap: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }
+    const gridCard: React.CSSProperties = { backgroundColor: '#ffffff', border: '1px solid #034325', borderRadius: 8, padding: '10px 12px', cursor: 'pointer' }
     return (
-      <div style={{ ...screenWrap, height: '100vh', overflow: 'hidden' }}>
+      <div style={screenWrap}>
         {menuOverlay}
         {bookingModal}
         {selectedProduct && (
@@ -774,16 +780,14 @@ export default function ClientApp() {
             {[0, 1, 2].map(i => <div key={i} style={{ width: 20, height: 2, backgroundColor: '#ffffff', borderRadius: 1 }} />)}
           </button>
         </div>
-        <div style={{ flex: 1, padding: '16px 16px 96px', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button onClick={() => setShowBookingModal(true)} style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}>Book an appointment</button>
-          </div>
+        <div style={{ flex: 1, padding: '16px 16px 40px', backgroundColor: '#ffffff', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <button onClick={() => setShowBookingModal(true)} style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}>Book an appointment</button>
           {packages.length > 0 && (
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Packages & Offers</p>
-              <div style={hScrollWrap}>
+              <div style={gridWrap}>
                 {packages.map(s => (
-                  <div key={s.id} style={{ ...hCard, cursor: 'pointer' }} onClick={() => setSelectedPackage(s)}>
+                  <div key={s.id} style={gridCard} onClick={() => setSelectedPackage(s)}>
                     <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>{s.name}</p>
                     <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 2px' }}>{s.duration_minutes} min</p>
                     <p style={{ fontSize: 12, color: '#034325', fontWeight: 600, margin: 0 }}>AED {s.price}</p>
@@ -792,26 +796,27 @@ export default function ClientApp() {
               </div>
             </div>
           )}
-          {inventoryProducts.length > 0 && (
+          {(inventoryError || inventoryProducts.length > 0) && (
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Products</p>
-              <div style={hScrollWrap}>
-                {inventoryProducts.map(p => (
-                  <div key={p.id} style={{ ...hCard, cursor: 'pointer' }} onClick={() => setSelectedProduct(p)}>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>{p.name}</p>
-                    <p style={{ fontSize: 12, color: '#034325', fontWeight: 600, margin: '0 0 2px' }}>AED {p.price ?? 0}</p>
-                    {p.stock_count === 0
-                      ? <p style={{ fontSize: 11, color: '#991b1b', fontWeight: 600, margin: 0 }}>Out of stock</p>
-                      : <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>{p.stock_count} in stock</p>}
-                  </div>
-                ))}
-              </div>
+              {inventoryError ? (
+                <p style={{ fontSize: 13, color: '#991b1b', margin: 0 }}>{inventoryError}</p>
+              ) : (
+                <div style={gridWrap}>
+                  {inventoryProducts.map(p => (
+                    <div key={p.id} style={gridCard} onClick={() => setSelectedProduct(p)}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>{p.name}</p>
+                      <p style={{ fontSize: 12, color: '#034325', fontWeight: 600, margin: '0 0 2px' }}>AED {p.price ?? 0}</p>
+                      {p.stock_count === 0
+                        ? <p style={{ fontSize: 11, color: '#991b1b', fontWeight: 600, margin: 0 }}>Out of stock</p>
+                        : <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>{p.stock_count} in stock</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-        </div>
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, textAlign: 'center', padding: '8px 0', backgroundColor: '#f9fafb' }}>
-          <img src="/assets/logo-WyJseHTl.png" alt="Blue Flute" style={{ width: 60, display: 'block', margin: '0 auto 6px' }} />
-          <p style={{ fontSize: 10, color: '#9ca3af', margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
+          {blueFooter}
         </div>
       </div>
     )
