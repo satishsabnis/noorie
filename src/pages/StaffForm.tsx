@@ -303,11 +303,13 @@ export default function StaffForm() {
           .eq('id', id!)
         if (updErr) throw updErr
 
-        await supabase.from('staff_services').delete().eq('staff_id', id!)
+        const { error: delErr } = await supabase.from('staff_services').delete().eq('staff_id', id!)
+        if (delErr) throw new Error('Failed to remove old services: ' + delErr.message)
         if (checkedServices.size > 0) {
-          await supabase.from('staff_services').insert(
-            [...checkedServices].map(svcId => ({ staff_id: id!, service_id: svcId }))
+          const { error: insErr } = await supabase.from('staff_services').insert(
+            [...checkedServices].map(svcId => ({ staff_id: id!, service_id: svcId, salon_id: staffRecord?.salon_id }))
           )
+          if (insErr) throw new Error('Failed to save services: ' + insErr.message)
         }
 
         // Update PIN if provided
