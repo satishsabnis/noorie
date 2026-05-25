@@ -44,7 +44,7 @@ interface StaffMember {
 }
 
 type DayConfig = { open: boolean; from: string; to: string }
-type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm' | 'my-profile' | 'upcoming' | 'history'
+type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm' | 'my-profile' | 'upcoming' | 'history' | 'reviews'
 
 interface UpcomingAppt {
   id: string
@@ -63,6 +63,25 @@ interface HistoryAppt {
   staffName: string | null
   services: string[]
   amountPaid: number
+}
+
+interface PendingReview {
+  id: string
+  reference_number: number | null
+  starts_at: string
+  staff_id: string | null
+  staffName: string | null
+  services: string[]
+}
+
+interface SubmittedReview {
+  id: string
+  appointment_id: string | null
+  reference_number: number | null
+  starts_at: string | null
+  salon_rating: number
+  staff_rating: number
+  comment: string | null
 }
 type BookingFlow = 'by-time' | 'by-staff' | null
 
@@ -187,6 +206,16 @@ export default function ClientApp() {
 
   const [historyAppts, setHistoryAppts]       = useState<HistoryAppt[]>([])
   const [historyLoading, setHistoryLoading]   = useState(false)
+
+  const [pendingReviews, setPendingReviews]     = useState<PendingReview[]>([])
+  const [submittedReviews, setSubmittedReviews] = useState<SubmittedReview[]>([])
+  const [reviewsLoading, setReviewsLoading]     = useState(false)
+  const [expandedAppt, setExpandedAppt]         = useState<string | null>(null)
+  const [reviewSalonRating, setReviewSalonRating]   = useState(0)
+  const [reviewStaffRating, setReviewStaffRating]   = useState(0)
+  const [reviewComment, setReviewComment]           = useState('')
+  const [reviewSubmitting, setReviewSubmitting]     = useState(false)
+  const [reviewError, setReviewError]               = useState('')
 
   useEffect(() => {
     if (!slug) return
@@ -324,6 +353,82 @@ export default function ClientApp() {
         setHistoryLoading(false)
       })
   }, [currentScreen, client?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (currentScreen !== 'reviews' || !client || !salon) return
+    setReviewsLoading(true)
+    Promise.all([
+      supabase
+        .from('reviews')
+        .select('id, appointment_id, salon_rating, staff_rating, comment, appointments(reference_number, starts_at)')
+        .eq('client_id', client.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('appointments')
+        .select('id, reference_number, starts_at, staff_id, staff:staff_id(name), appointment_services(services(name))')
+        .eq('client_id', client.id)
+        .eq('status', 'completed')
+        .order('starts_at', { ascending: false }),
+    ]).then(([{ data: reviewData }, { data: apptData }]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const submitted: SubmittedReview[] = (reviewData ?? []).map((r: any) => ({
+        id: r.id,
+        appointment_id: r.appointment_id,
+        reference_number: r.appointments?.reference_number ?? null,
+        starts_at: r.appointments?.starts_at ?? null,
+        salon_rating: r.salon_rating,
+        staff_rating: r.staff_rating,
+        comment: r.comment,
+      }))
+      const reviewedApptIds = new Set(submitted.map(r => r.appointment_id).filter(Boolean))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pending: PendingReview[] = (apptData ?? []).filter((a: any) => !reviewedApptIds.has(a.id)).map((a: any) => ({
+        id: a.id,
+        reference_number: a.reference_number,
+        starts_at: a.starts_at,
+        staff_id: a.staff_id,
+        staffName: a.staff?.name ?? null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        services: (a.appointment_services ?? []).map((s: any) => s.services?.name).filter(Boolean),
+      }))
+      setSubmittedReviews(submitted)
+      setPendingReviews(pending)
+      setReviewsLoading(false)
+    })
+  }, [currentScreen, client?.id, salon?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSubmitReview = async (appt: PendingReview) => {
+    if (!client || !salon) return
+    if (reviewSalonRating === 0 || reviewStaffRating === 0) { setReviewError('Please select both ratings'); return }
+    setReviewSubmitting(true)
+    setReviewError('')
+    const { error } = await supabase.from('reviews').insert({
+      salon_id: salon.id,
+      client_id: client.id,
+      appointment_id: appt.id,
+      staff_id: appt.staff_id,
+      salon_rating: reviewSalonRating,
+      staff_rating: reviewStaffRating,
+      comment: reviewComment.trim() || null,
+    })
+    if (error) { setReviewError(error.message); setReviewSubmitting(false); return }
+    const newReview: SubmittedReview = {
+      id: crypto.randomUUID(),
+      appointment_id: appt.id,
+      reference_number: appt.reference_number,
+      starts_at: appt.starts_at,
+      salon_rating: reviewSalonRating,
+      staff_rating: reviewStaffRating,
+      comment: reviewComment.trim() || null,
+    }
+    setPendingReviews(prev => prev.filter(p => p.id !== appt.id))
+    setSubmittedReviews(prev => [newReview, ...prev])
+    setExpandedAppt(null)
+    setReviewSalonRating(0)
+    setReviewStaffRating(0)
+    setReviewComment('')
+    setReviewSubmitting(false)
+  }
 
   const handlePinChange = (index: number, value: string) => {
     if (!/^\d?$/.test(value)) return
@@ -553,7 +658,8 @@ export default function ClientApp() {
             >{label}</button>
           ))}
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('history') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Appointment History</button>
-          {['Loyalty', 'Reviews', 'Contact salon', 'About Noorie'].map(label => (
+          <button onClick={() => { setMenuOpen(false); setCurrentScreen('reviews') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Reviews</button>
+          {['Loyalty', 'Contact salon', 'About Noorie'].map(label => (
             <button key={label} onClick={() => alert('Coming soon')} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>{label}</button>
           ))}
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('change-pin') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Change PIN</button>
@@ -1015,6 +1121,128 @@ export default function ClientApp() {
                 {appt.amountPaid > 0 && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Paid: AED {appt.amountPaid}</p>}
               </div>
             ))
+          )}
+          {blueFooter}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Reviews screen ────────────────────────────────────────────────────────
+
+  if (currentScreen === 'reviews') {
+    const ratingBtn = (val: number, selected: number, onSelect: (v: number) => void) => (
+      <button
+        key={val}
+        type="button"
+        onClick={() => onSelect(val)}
+        style={{
+          width: 36, height: 36, borderRadius: 6, border: selected === val ? 'none' : '0.5px solid #e0e0e0',
+          backgroundColor: selected === val ? '#034325' : '#ffffff',
+          color: selected === val ? '#ffffff' : '#111',
+          fontSize: 13, fontWeight: 600, cursor: 'pointer',
+        }}
+      >{val}</button>
+    )
+
+    return (
+      <div style={screenWrap}>
+        <div style={headerStyle}>
+          <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 6, color: '#ffffff', fontSize: 12, padding: '4px 12px', cursor: 'pointer' }}>Back</button>
+          <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 600, margin: 0 }}>Reviews</p>
+          <div style={{ width: 60 }} />
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {reviewsLoading ? (
+            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>Loading...</p>
+          ) : pendingReviews.length === 0 && submittedReviews.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>No appointments to review yet</p>
+          ) : (
+            <>
+              {pendingReviews.length > 0 && (
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Leave a Review</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {pendingReviews.map(appt => {
+                      const isOpen = expandedAppt === appt.id
+                      return (
+                        <div key={appt.id} style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
+                          <div
+                            onClick={() => {
+                              if (isOpen) { setExpandedAppt(null) } else {
+                                setExpandedAppt(appt.id)
+                                setReviewSalonRating(0); setReviewStaffRating(0); setReviewComment(''); setReviewError('')
+                              }
+                            }}
+                            style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 4 }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: '#034325' }}>
+                                {appt.reference_number ? `APT-${String(appt.reference_number).padStart(4, '0')}` : appt.id.slice(0, 8).toUpperCase()}
+                              </span>
+                              <span style={{ fontSize: 12, color: '#6b7280' }}>{isOpen ? '▲' : '▼'}</span>
+                            </div>
+                            <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(appt.starts_at)}</p>
+                            {appt.staffName && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Technician: {appt.staffName}</p>}
+                            {appt.services.length > 0 && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>{appt.services.join(', ')}</p>}
+                          </div>
+                          {isOpen && (
+                            <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 12, borderTop: '0.5px solid #e0e0e0' }}>
+                              <div style={{ paddingTop: 12 }}>
+                                <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: '0 0 8px' }}>Salon rating</p>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  {[1,2,3,4,5].map(v => ratingBtn(v, reviewSalonRating, setReviewSalonRating))}
+                                </div>
+                              </div>
+                              <div>
+                                <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: '0 0 8px' }}>Technician rating</p>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  {[1,2,3,4,5].map(v => ratingBtn(v, reviewStaffRating, setReviewStaffRating))}
+                                </div>
+                              </div>
+                              <div>
+                                <p style={{ fontSize: 12, color: '#6b7280', fontWeight: 500, margin: '0 0 6px' }}>Comment (optional)</p>
+                                <textarea
+                                  value={reviewComment}
+                                  onChange={e => setReviewComment(e.target.value)}
+                                  rows={3}
+                                  style={{ width: '100%', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                                />
+                              </div>
+                              {reviewError && <p style={{ fontSize: 12, color: '#991b1b', margin: 0 }}>{reviewError}</p>}
+                              <button
+                                onClick={() => handleSubmitReview(appt)}
+                                disabled={reviewSubmitting}
+                                style={{ backgroundColor: reviewSubmitting ? '#e0e0e0' : '#034325', color: reviewSubmitting ? '#9ca3af' : '#ffffff', border: 'none', borderRadius: 8, padding: '10px 0', fontSize: 13, fontWeight: 600, cursor: reviewSubmitting ? 'not-allowed' : 'pointer', width: '100%' }}
+                              >
+                                {reviewSubmitting ? 'Submitting...' : 'Submit review'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {submittedReviews.length > 0 && (
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>My Reviews</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {submittedReviews.map(r => (
+                      <div key={r.id} style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#034325' }}>
+                          {r.reference_number ? `APT-${String(r.reference_number).padStart(4, '0')}` : 'Review'}
+                        </span>
+                        {r.starts_at && <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(r.starts_at)}</p>}
+                        <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Salon: {r.salon_rating} / 5 · Technician: {r.staff_rating} / 5</p>
+                        {r.comment && <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{r.comment}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
           {blueFooter}
         </div>
