@@ -327,8 +327,38 @@ export default function StaffForm() {
             }),
           })
           const result = await res.json()
-          console.log('PIN update response:', res.status, result)
           if (!result.success) throw new Error(result.error ?? 'Failed to update staff PIN')
+
+          if (!result.auth_updated) {
+            // Staff has no auth account — create one now using the entered PIN
+            const staffData = await supabase
+              .from('staff')
+              .select('name, phone, salon_id')
+              .eq('id', id!)
+              .single()
+
+            if (staffData.error || !staffData.data) throw new Error('Could not fetch staff details to create login')
+
+            const { name, phone, salon_id } = staffData.data
+
+            const createRes = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-staff-user', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              },
+              body: JSON.stringify({
+                name,
+                phone,
+                salon_id,
+                pin: enteredPin,
+                staff_id: id!,
+              }),
+            })
+
+            const createResult = await createRes.json()
+            if (!createResult.success) throw new Error(createResult.error ?? 'Failed to create staff login account')
+          }
         }
       }
 
