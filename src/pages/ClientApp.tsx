@@ -47,7 +47,7 @@ interface StaffMember {
 }
 
 type DayConfig = { open: boolean; from: string; to: string }
-type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm' | 'my-profile' | 'upcoming' | 'history' | 'reviews'
+type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm' | 'my-profile' | 'upcoming' | 'history' | 'reviews' | 'about'
 
 interface UpcomingAppt {
   id: string
@@ -224,7 +224,7 @@ export default function ClientApp() {
   const [reviewComment, setReviewComment]           = useState('')
   const [reviewSubmitting, setReviewSubmitting]     = useState(false)
   const [reviewError, setReviewError]               = useState('')
-  const [showAboutNoorie, setShowAboutNoorie]       = useState(false)
+
 
   useEffect(() => {
     if (!slug) return
@@ -683,7 +683,7 @@ export default function ClientApp() {
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('history') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Appointment History</button>
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('reviews') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Reviews</button>
           <button onClick={() => alert('Coming soon')} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Loyalty</button>
-          <button onClick={() => { setMenuOpen(false); setShowAboutNoorie(true) }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>About Noorie</button>
+          <button onClick={() => { setMenuOpen(false); setCurrentScreen('about') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>About Noorie</button>
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('change-pin') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Change PIN</button>
           {(salon?.phone || salon?.email) && (
             <div style={{ padding: '12px 16px', borderBottom: '0.5px solid #e0e0e0' }}>
@@ -777,15 +777,6 @@ export default function ClientApp() {
               <p style={{ fontSize: 13, color: '#111', margin: '0 0 4px', lineHeight: 1.5 }}>{selectedPackage.name}</p>
               <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 24px' }}>Contact salon for full package details.</p>
               <button onClick={() => setSelectedPackage(null)} style={{ border: '1px solid #034325', color: '#034325', background: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Close</button>
-            </div>
-          </div>
-        )}
-        {showAboutNoorie && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 300, backgroundColor: '#ffffff', overflowY: 'auto' }}>
-            <div style={{ padding: '24px 20px 48px', maxWidth: 480, margin: '0 auto' }}>
-              <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>About Noorie</p>
-              <p style={{ fontSize: 14, color: '#111', lineHeight: 1.6, margin: '0 0 24px' }}>Noorie is your personal salon companion. Book appointments with your favourite technician, track your visit history, and manage your loyalty points, all in one place. Browse exclusive packages and offers, shop salon products, and stay connected to your salon so you never miss a deal, a booking, or a reward.</p>
-              <button onClick={() => setShowAboutNoorie(false)} style={{ border: '1px solid #034325', color: '#034325', background: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Close</button>
             </div>
           </div>
         )}
@@ -1379,6 +1370,32 @@ export default function ClientApp() {
           </button>
         </div>
         {blueFooter}
+      </div>
+    )
+  }
+
+  // ── About Noorie screen ───────────────────────────────────────────────────
+
+  if (currentScreen === 'about') {
+    return (
+      <div style={screenWrap}>
+        <div style={headerStyle}>
+          <button onClick={() => setCurrentScreen('home')} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 6, color: '#ffffff', fontSize: 12, padding: '4px 12px', cursor: 'pointer' }}>Back</button>
+          <p style={{ color: '#ffffff', fontSize: 15, fontWeight: 600, margin: 0 }}>{salon?.name}</p>
+          <div style={{ width: 60 }} />
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 40px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: 0 }}>About Noorie</p>
+          <p style={{ fontSize: 14, color: '#111', lineHeight: 1.6, margin: 0 }}>Noorie is your personal salon companion. Book appointments with your favourite technician, track your visit history, and manage your loyalty points, all in one place. Browse exclusive packages and offers, shop salon products, and stay connected to your salon so you never miss a deal, a booking, or a reward.</p>
+          {(salon?.phone || salon?.email) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: '#034325', margin: 0 }}>Contact Us</p>
+              {salon?.phone && <p style={{ fontSize: 14, color: '#111', margin: 0 }}>Phone: {salon.phone}</p>}
+              {salon?.email && <p style={{ fontSize: 14, color: '#111', margin: 0 }}>Email: {salon.email}</p>}
+            </div>
+          )}
+          {blueFooter}
+        </div>
       </div>
     )
   }
