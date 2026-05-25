@@ -1357,16 +1357,17 @@ export default function Dashboard() {
       const revTotal = Math.round((payRows ?? []).reduce((s, r) => s + ((r.amount as number) ?? 0), 0) * 100) / 100
       const revCount = (payRows ?? []).length
 
-      // Derive top runner: staff with highest revenue from completed appointment services
+      // Derive top runner: staff with highest payment revenue from completed appointments
       const completedIds = new Set(appts.filter(a => a.status === 'completed').map(a => a.id as string))
       const staffRevMap: Record<string, { revenue: number; apptIds: Set<string> }> = {}
-      for (const row of svcRows ?? []) {
-        const apptId = row.appointment_id as string
+      for (const a of appts) {
+        const apptId = a.id as string
         if (!completedIds.has(apptId)) continue
-        const staffName = (row.staff as unknown as { name: string } | null)?.name ?? ''
+        const staffName = (a.staff as unknown as { name: string } | null)?.name ?? ''
         if (!staffName) continue
+        const paidAmount = payMap[apptId]?.totalPaid ?? 0
         if (!staffRevMap[staffName]) staffRevMap[staffName] = { revenue: 0, apptIds: new Set() }
-        staffRevMap[staffName].revenue += (row.price as number) ?? 0
+        staffRevMap[staffName].revenue += paidAmount
         staffRevMap[staffName].apptIds.add(apptId)
       }
       let topRunner: { name: string; revenue: number; appointments: number; appointmentIds: string[] } | null = null
@@ -1384,14 +1385,9 @@ export default function Dashboard() {
         const sundayMs = mondayMs + 6 * 86_400_000
         const weekEndISO   = `${new Date(sundayMs).toISOString().slice(0, 10)}T23:59:59+04:00`
 
-        const { data: trSvcRows } = await supabase
-          .from('appointment_services')
-          .select('appointment_id, price, staff!inner(name), appointments!inner(starts_at, status, salon_id)')
-          .eq('appointments.salon_id', salonId)
-          .eq('appointments.status', 'completed')
-          .eq('staff.name', topRunner.name)
-          .gte('appointments.starts_at', weekStartISO)
-          .lt('appointments.starts_at', weekEndISO)
+        const topRunnerStaffId = (appts.find(a =>
+          (a.staff as unknown as { name: string } | null)?.name === topRunner.name
+        )?.staff as unknown as { id: string } | null)?.id ?? null
 
         const trBuckets = dayLabels.map((day, i) => ({
           day,
@@ -1401,14 +1397,25 @@ export default function Dashboard() {
           _ids: new Set<string>(),
         }))
 
-        for (const row of trSvcRows ?? []) {
-          const appt = (row.appointments as unknown as { starts_at: string } | null)
-          if (!appt?.starts_at) continue
-          const ds = new Date(new Date(appt.starts_at).getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
-          const wi = weekDateStrs.indexOf(ds)
-          if (wi === -1) continue
-          trBuckets[wi]._ids.add(row.appointment_id as string)
-          trBuckets[wi].revenue += (row.price as number | null) ?? 0
+        if (topRunnerStaffId) {
+          const { data: trAppts } = await supabase
+            .from('appointments')
+            .select('id, starts_at, payments(amount)')
+            .eq('salon_id', salonId)
+            .eq('status', 'completed')
+            .eq('staff_id', topRunnerStaffId)
+            .gte('starts_at', weekStartISO)
+            .lt('starts_at', weekEndISO)
+
+          for (const appt of trAppts ?? []) {
+            const ds = new Date(new Date(appt.starts_at as string).getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+            const wi = weekDateStrs.indexOf(ds)
+            if (wi === -1) continue
+            const paidAmount = ((appt.payments as unknown as { amount: number | null }[] | null) ?? [])
+              .reduce((s, p) => s + ((p.amount) ?? 0), 0)
+            trBuckets[wi]._ids.add(appt.id as string)
+            trBuckets[wi].revenue += paidAmount
+          }
         }
         topRunnerWeekOut = trBuckets.map(b => ({
           day: b.day,

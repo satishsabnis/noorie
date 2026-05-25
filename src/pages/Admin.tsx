@@ -1616,12 +1616,15 @@ function SectionPayroll({ salonId }: { salonId: string }) {
           const monthly = (s.monthly_salary as number | null) ?? 0
           const pct     = (s.commission_pct as number | null) ?? 0
 
-          const [{ data: svcData }, { data: advData }] = await Promise.all([
-            supabase.from('appointment_services').select('price').eq('staff_id', sid).gte('started_at', periodStart).lt('started_at', periodEnd),
+          const [{ data: apptData }, { data: advData }] = await Promise.all([
+            supabase.from('appointments').select('id, payments(amount)').eq('salon_id', salonId).eq('staff_id', sid).eq('status', 'completed').gte('starts_at', periodStart).lt('starts_at', periodEnd),
             supabase.from('staff_advances').select('emi_amount').eq('staff_id', sid).eq('status', 'active'),
           ])
 
-          const services_revenue   = (svcData ?? []).reduce((sum, r) => sum + (((r as { price: number | null }).price) ?? 0), 0)
+          const services_revenue   = (apptData ?? []).reduce((sum, a) => {
+            const pays = (a.payments as unknown as { amount: number | null }[] | null) ?? []
+            return sum + pays.reduce((s, p) => s + ((p.amount) ?? 0), 0)
+          }, 0)
           const advance_deductions = (advData ?? []).reduce((sum, r) => sum + (((r as { emi_amount: number | null }).emi_amount) ?? 0), 0)
           const commission_earned  = services_revenue * pct / 100
           const gross              = monthly + commission_earned
