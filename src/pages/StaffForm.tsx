@@ -327,6 +327,7 @@ export default function StaffForm() {
             }),
           })
           const result = await res.json()
+          console.log('PIN update response:', res.status, result)
           if (!result.success) throw new Error(result.error ?? 'Failed to update staff PIN')
         }
       }
