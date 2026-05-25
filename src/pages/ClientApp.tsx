@@ -709,7 +709,10 @@ export default function ClientApp() {
   // ── Home screen ────────────────────────────────────────────────────────────
 
   if (currentScreen === 'home') {
-    const offerServices = services.filter(s => s.price > 0).slice(0, 2)
+    const packages = services.filter(s => s.category === 'Package')
+    const products = services.filter(s => s.category === 'Product')
+    const hScrollWrap: React.CSSProperties = { display: 'flex', overflowX: 'auto', gap: 10, paddingBottom: 4 }
+    const hCard: React.CSSProperties = { flexShrink: 0, width: 160, backgroundColor: '#ffffff', border: '1px solid #034325', borderRadius: 8, padding: '10px 12px' }
     return (
       <div style={{ ...screenWrap, height: '100vh', overflow: 'hidden' }}>
         {menuOverlay}
@@ -724,22 +727,36 @@ export default function ClientApp() {
           </button>
         </div>
         <div style={{ flex: 1, padding: '16px 16px 96px', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {offerServices.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button onClick={() => setShowBookingModal(true)} style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}>Book an appointment</button>
+          </div>
+          {packages.length > 0 && (
             <div>
-              <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Special offers</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {offerServices.map(s => (
-                  <div key={s.id} style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Packages & Offers</p>
+              <div style={hScrollWrap}>
+                {packages.map(s => (
+                  <div key={s.id} style={hCard}>
                     <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>{s.name}</p>
-                    <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{s.duration_minutes} min · AED {s.price}</p>
+                    <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 2px' }}>{s.duration_minutes} min</p>
+                    <p style={{ fontSize: 12, color: '#034325', fontWeight: 600, margin: 0 }}>AED {s.price}</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button onClick={() => setShowBookingModal(true)} style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}>Book an appointment</button>
-          </div>
+          {products.length > 0 && (
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Products</p>
+              <div style={hScrollWrap}>
+                {products.map(s => (
+                  <div key={s.id} style={hCard}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>{s.name}</p>
+                    <p style={{ fontSize: 12, color: '#034325', fontWeight: 600, margin: 0 }}>AED {s.price}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, textAlign: 'center', padding: '8px 0', backgroundColor: '#f9fafb' }}>
           <img src="/assets/logo-WyJseHTl.png" alt="Blue Flute" style={{ width: 60, display: 'block', margin: '0 auto 6px' }} />
