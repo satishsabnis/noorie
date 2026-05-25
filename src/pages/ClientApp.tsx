@@ -35,6 +35,7 @@ interface Service {
   price: number
   is_active: boolean
   commission_pct?: number
+  image_url?: string | null
 }
 
 interface StaffMember {
@@ -204,7 +205,9 @@ export default function ClientApp() {
   const [upcomingAppts, setUpcomingAppts]     = useState<UpcomingAppt[]>([])
   const [upcomingLoading, setUpcomingLoading] = useState(false)
 
-  const [inventoryProducts, setInventoryProducts] = useState<{ id: string; name: string; price: number | null; stock: number }[]>([])
+  const [inventoryProducts, setInventoryProducts] = useState<{ id: string; name: string; price: number | null; stock_count: number; image_url: string | null }[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<{ id: string; name: string; price: number | null; stock_count: number; image_url: string | null } | null>(null)
+  const [selectedPackage, setSelectedPackage] = useState<Service | null>(null)
 
   const [historyAppts, setHistoryAppts]       = useState<HistoryAppt[]>([])
   const [historyLoading, setHistoryLoading]   = useState(false)
@@ -545,7 +548,7 @@ export default function ClientApp() {
 
         const { data: svcData } = await supabase
           .from('services')
-          .select('id, name, category, duration_minutes, price, is_active')
+          .select('id, name, category, duration_minutes, price, is_active, image_url')
           .eq('salon_id', salon!.id)
           .eq('is_active', true)
           .order('category')
@@ -560,12 +563,12 @@ export default function ClientApp() {
 
         const { data: invData } = await supabase
           .from('inventory_items')
-          .select('id, name, price, stock')
+          .select('id, name, price, stock_count, image_url')
           .eq('salon_id', salon!.id)
           .eq('type', 'product')
           .eq('is_active', true)
           .order('name')
-        setInventoryProducts((invData ?? []) as { id: string; name: string; price: number | null; stock: number }[])
+        setInventoryProducts((invData ?? []) as { id: string; name: string; price: number | null; stock_count: number; image_url: string | null }[])
 
         setSelectedDate(getTomorrow())
         setCurrentScreen('home')
@@ -727,6 +730,41 @@ export default function ClientApp() {
       <div style={{ ...screenWrap, height: '100vh', overflow: 'hidden' }}>
         {menuOverlay}
         {bookingModal}
+        {selectedProduct && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 300, backgroundColor: '#ffffff', overflowY: 'auto' }}>
+            <div style={{ padding: '24px 20px 48px', maxWidth: 480, margin: '0 auto' }}>
+              {selectedProduct.image_url ? (
+                <img src={selectedProduct.image_url} alt={selectedProduct.name} style={{ width: '100%', borderRadius: 10, marginBottom: 16, objectFit: 'cover', maxHeight: 260 }} />
+              ) : (
+                <div style={{ width: '100%', height: 200, backgroundColor: '#e0e0e0', borderRadius: 10, marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: 13, color: '#6b7280' }}>No image</span>
+                </div>
+              )}
+              <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 8px' }}>{selectedProduct.name}</p>
+              <p style={{ fontSize: 14, color: '#034325', fontWeight: 600, margin: '0 0 8px' }}>AED {selectedProduct.price ?? 0}</p>
+              {selectedProduct.stock_count === 0
+                ? <p style={{ fontSize: 13, color: '#991b1b', fontWeight: 600, margin: '0 0 24px' }}>Out of stock</p>
+                : <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 24px' }}>{selectedProduct.stock_count} in stock</p>
+              }
+              <button onClick={() => setSelectedProduct(null)} style={{ border: '1px solid #034325', color: '#034325', background: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Close</button>
+            </div>
+          </div>
+        )}
+        {selectedPackage && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 300, backgroundColor: '#ffffff', overflowY: 'auto' }}>
+            <div style={{ padding: '24px 20px 48px', maxWidth: 480, margin: '0 auto' }}>
+              {selectedPackage.image_url && (
+                <img src={selectedPackage.image_url} alt={selectedPackage.name} style={{ width: '100%', borderRadius: 10, marginBottom: 16, objectFit: 'cover', maxHeight: 260 }} />
+              )}
+              <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 8px' }}>{selectedPackage.name}</p>
+              <p style={{ fontSize: 14, color: '#034325', fontWeight: 600, margin: '0 0 4px' }}>AED {selectedPackage.price}</p>
+              <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 16px' }}>{selectedPackage.duration_minutes} min</p>
+              <p style={{ fontSize: 13, color: '#111', margin: '0 0 4px', lineHeight: 1.5 }}>{selectedPackage.name}</p>
+              <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 24px' }}>Contact salon for full package details.</p>
+              <button onClick={() => setSelectedPackage(null)} style={{ border: '1px solid #034325', color: '#034325', background: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Close</button>
+            </div>
+          </div>
+        )}
         <div style={headerStyle}>
           <div>
             <p style={{ color: '#ffffff', fontSize: 16, fontWeight: 700, margin: 0 }}>Hi {client?.name}</p>
@@ -745,7 +783,7 @@ export default function ClientApp() {
               <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Packages & Offers</p>
               <div style={hScrollWrap}>
                 {packages.map(s => (
-                  <div key={s.id} style={hCard}>
+                  <div key={s.id} style={{ ...hCard, cursor: 'pointer' }} onClick={() => setSelectedPackage(s)}>
                     <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>{s.name}</p>
                     <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 2px' }}>{s.duration_minutes} min</p>
                     <p style={{ fontSize: 12, color: '#034325', fontWeight: 600, margin: 0 }}>AED {s.price}</p>
@@ -759,12 +797,12 @@ export default function ClientApp() {
               <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Products</p>
               <div style={hScrollWrap}>
                 {inventoryProducts.map(p => (
-                  <div key={p.id} style={hCard}>
+                  <div key={p.id} style={{ ...hCard, cursor: 'pointer' }} onClick={() => setSelectedProduct(p)}>
                     <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>{p.name}</p>
                     <p style={{ fontSize: 12, color: '#034325', fontWeight: 600, margin: '0 0 2px' }}>AED {p.price ?? 0}</p>
-                    {p.stock === 0
+                    {p.stock_count === 0
                       ? <p style={{ fontSize: 11, color: '#991b1b', fontWeight: 600, margin: 0 }}>Out of stock</p>
-                      : <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>{p.stock} in stock</p>}
+                      : <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>{p.stock_count} in stock</p>}
                   </div>
                 ))}
               </div>
