@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
+import { useSalonTimezone } from '../hooks/useSalonTimezone'
 
 interface ClientDetail {
   id: string
@@ -44,22 +45,22 @@ interface Visit {
   totalPaid: number
 }
 
-function fmtDate(iso: string | null) {
+function fmtDate(iso: string | null, tz = 'Asia/Dubai') {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-GB', {
-    timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', year: 'numeric',
+    timeZone: tz, day: 'numeric', month: 'short', year: 'numeric',
   })
 }
 
-function fmtMonthYear(iso: string) {
+function fmtMonthYear(iso: string, tz = 'Asia/Dubai') {
   return new Date(iso).toLocaleDateString('en-GB', {
-    timeZone: 'Asia/Dubai', month: 'long', year: 'numeric',
+    timeZone: tz, month: 'long', year: 'numeric',
   })
 }
 
-function fmtTime(iso: string) {
+function fmtTime(iso: string, tz = 'Asia/Dubai') {
   return new Date(iso).toLocaleTimeString('en-GB', {
-    timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
   })
 }
 
@@ -109,6 +110,7 @@ function StatusBadge({ status }: { status: string }) {
 export default function ClientProfile() {
   const { id, slug } = useParams<{ id: string; slug?: string }>()
   const navigate = useNavigate()
+  const { tz } = useSalonTimezone()
 
   const [client, setClient] = useState<ClientDetail | null>(null)
   const [visits, setVisits] = useState<Visit[]>([])
@@ -354,7 +356,7 @@ export default function ClientProfile() {
                   {client.name}
                 </p>
                 <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, margin: 0 }}>
-                  {clientSince ? `Client since ${fmtMonthYear(clientSince)}` : 'No visits yet'}
+                  {clientSince ? `Client since ${fmtMonthYear(clientSince, tz)}` : 'No visits yet'}
                 </p>
               </div>
 
@@ -515,7 +517,7 @@ export default function ClientProfile() {
                 {[
                   { label: 'Total visits', value: completedVisits.length.toString() },
                   { label: 'Total spend', value: `AED ${totalSpend.toFixed(2)}` },
-                  { label: 'Last visit', value: fmtDate(lastVisit) },
+                  { label: 'Last visit', value: fmtDate(lastVisit, tz) },
                   { label: 'Avg spend', value: `AED ${avgSpend.toFixed(2)}` },
                 ].map(s => (
                   <div key={s.label} style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '10px 12px' }}>
@@ -552,11 +554,11 @@ export default function ClientProfile() {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <span style={{ fontSize: 12, fontWeight: 500, color: '#000000' }}>
-                          {fmtDate(v.starts_at)}
+                          {fmtDate(v.starts_at, tz)}
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: 11, color: '#6b7280' }}>
-                            {fmtTime(v.starts_at)}{v.ends_at ? ` – ${fmtTime(v.ends_at)}` : ''}
+                            {fmtTime(v.starts_at, tz)}{v.ends_at ? ` – ${fmtTime(v.ends_at, tz)}` : ''}
                           </span>
                           <StatusBadge status={v.status} />
                         </div>

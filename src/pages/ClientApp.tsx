@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { salonOffsetStr } from '../hooks/useSalonTimezone'
 
 const NOORIE_VERSION = 'v2.05.23'
 
@@ -103,10 +104,10 @@ function initials(name: string): string {
   return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
 }
 
-function fmtDubaiDateTime(iso: string): string {
+function fmtDubaiDateTime(iso: string, tz = 'Asia/Dubai'): string {
   const d = new Date(iso)
-  const date = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', year: 'numeric' })
-  const time = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false })
+  const date = d.toLocaleDateString('en-GB', { timeZone: tz, day: 'numeric', month: 'short', year: 'numeric' })
+  const time = d.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false })
   return `${date} · ${time}`
 }
 
@@ -155,6 +156,7 @@ export default function ClientApp() {
   const [salon, setSalon]                 = useState<Salon | null>(null)
   const [salonLoading, setSalonLoading]   = useState(true)
   const [salonNotFound, setSalonNotFound] = useState(false)
+  const [tz, setTz]                       = useState('Asia/Dubai')
 
   const [countryCode, setCountryCode] = useState('+971')
   const [phone, setPhone]             = useState('')
@@ -237,7 +239,12 @@ export default function ClientApp() {
     })
       .then(res => res.json())
       .then(data => {
-        if (data && data.id) setSalon(data as Salon)
+        if (data && data.id) {
+          setSalon(data as Salon)
+          supabase.from('salon_config').select('timezone').eq('salon_id', data.id).single()
+            .then(({ data: cfg }) => { if (cfg?.timezone) setTz(cfg.timezone as string) })
+            .catch(() => {})
+        }
         else setSalonNotFound(true)
         setSalonLoading(false)
       })
@@ -599,10 +606,10 @@ export default function ClientApp() {
     try {
       const date = selectedDate || getTomorrow()
       const time = selectedTime || '10:00'
-      const starts_at = `${date}T${time}:00+04:00`
+      const starts_at = `${date}T${time}:00${salonOffsetStr(tz)}`
       const [h, m] = time.split(':').map(Number)
       const totalMins = h * 60 + m + selectedService.duration_minutes
-      const ends_at = `${date}T${String(Math.floor(totalMins / 60)).padStart(2, '0')}:${String(totalMins % 60).padStart(2, '0')}:00+04:00`
+      const ends_at = `${date}T${String(Math.floor(totalMins / 60)).padStart(2, '0')}:${String(totalMins % 60).padStart(2, '0')}:00${salonOffsetStr(tz)}`
 
       const { data: apptData, error: apptErr } = await supabase
         .from('appointments')
@@ -1157,7 +1164,7 @@ export default function ClientApp() {
                   </span>
                   <span style={{ fontSize: 11, fontWeight: 600, color: '#034325', backgroundColor: '#E1F5EE', borderRadius: 4, padding: '2px 8px' }}>{appt.status}</span>
                 </div>
-                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(appt.starts_at)}</p>
+                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(appt.starts_at, tz)}</p>
                 {appt.staffName && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Technician: {appt.staffName}</p>}
                 {appt.services.length > 0 && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>{appt.services.join(', ')}</p>}
               </div>
@@ -1199,7 +1206,7 @@ export default function ClientApp() {
                   </span>
                   <span style={badgeStyle(appt.status)}>{badgeLabel(appt.status)}</span>
                 </div>
-                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(appt.starts_at)}</p>
+                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(appt.starts_at, tz)}</p>
                 {appt.staffName && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Technician: {appt.staffName}</p>}
                 {appt.services.length > 0 && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>{appt.services.join(', ')}</p>}
                 {appt.amountPaid > 0 && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Paid: AED {appt.amountPaid}</p>}
@@ -1266,7 +1273,7 @@ export default function ClientApp() {
                               </span>
                               <span style={{ fontSize: 12, color: '#6b7280' }}>{isOpen ? '▲' : '▼'}</span>
                             </div>
-                            <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(appt.starts_at)}</p>
+                            <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(appt.starts_at, tz)}</p>
                             {appt.staffName && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Technician: {appt.staffName}</p>}
                             {appt.services.length > 0 && <p style={{ fontSize: 12, color: '#111', margin: 0 }}>{appt.services.join(', ')}</p>}
                           </div>
@@ -1318,7 +1325,7 @@ export default function ClientApp() {
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#034325' }}>
                           {r.reference_number ? `APT-${String(r.reference_number).padStart(4, '0')}` : 'Review'}
                         </span>
-                        {r.starts_at && <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(r.starts_at)}</p>}
+                        {r.starts_at && <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{fmtDubaiDateTime(r.starts_at, tz)}</p>}
                         <p style={{ fontSize: 12, color: '#111', margin: 0 }}>Salon: {r.salon_rating} / 5 · Technician: {r.staff_rating} / 5</p>
                         {r.comment && <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{r.comment}</p>}
                       </div>

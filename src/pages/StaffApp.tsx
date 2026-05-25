@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, Routes, Route } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
+import { useSalonTimezone, salonOffsetStr } from '../hooks/useSalonTimezone'
 import { Toast } from '../components/Toast'
 import { useAppointmentSubscription } from '../hooks/useAppointmentSubscription'
 
@@ -26,14 +27,14 @@ const STAFF_COUNTRY_CODES = [
 ]
 
 // -- Helpers --
-function dubaiTime(iso: string) {
+function dubaiTime(iso: string, tz = 'Asia/Dubai') {
   return new Date(iso).toLocaleTimeString('en-GB', {
-    timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
   })
 }
 
-function todayStr() {
-  return new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+function todayStr(tz = 'Asia/Dubai') {
+  return new Date().toLocaleDateString('en-CA', { timeZone: tz })
 }
 
 // =============================================
@@ -268,6 +269,7 @@ function StaffSchedule() {
   const navigate = useNavigate()
   const { slug } = useParams<{ slug: string }>()
   const { staffRecord, signOut } = useAuthStore()
+  const { tz } = useSalonTimezone()
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [earnings, setEarnings] = useState(0)
@@ -304,7 +306,7 @@ function StaffSchedule() {
   )
 
   async function fetchSchedule() {
-    const today = todayStr()
+    const today = todayStr(tz)
     const staffId = staffRecord!.id
 
     const { data: appts } = await supabase
@@ -312,8 +314,8 @@ function StaffSchedule() {
       .select('id, starts_at, ends_at, status, clients(name)')
       .eq('salon_id', staffRecord!.salon_id)
       .eq('staff_id', staffId)
-      .gte('starts_at', `${today}T00:00:00+04:00`)
-      .lt('starts_at', `${today}T23:59:59+04:00`)
+      .gte('starts_at', `${today}T00:00:00${salonOffsetStr(tz)}`)
+      .lt('starts_at', `${today}T23:59:59${salonOffsetStr(tz)}`)
       .order('starts_at', { ascending: true })
 
     if (!appts || appts.length === 0) { setLoading(false); return }
@@ -416,8 +418,8 @@ function StaffSchedule() {
               {/* Time + status row */}
               <div style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '0.5px solid #f0f0f0' }}>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: '#034325', margin: 0 }}>{dubaiTime(appt.starts_at)}</p>
-                  <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>→ {dubaiTime(appt.ends_at)}</p>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: '#034325', margin: 0 }}>{dubaiTime(appt.starts_at, tz)}</p>
+                  <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>→ {dubaiTime(appt.ends_at, tz)}</p>
                 </div>
                 <Badge status={appt.status} />
               </div>
@@ -552,7 +554,7 @@ function StaffAppointmentDetail() {
       <div style={{ ...cardStyle }}>
         <div style={{ padding: '14px 16px', borderBottom: '0.5px solid #f0f0f0' }}>
           <p style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: '0 0 4px' }}>{appt.clientName}</p>
-          <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>{dubaiTime(appt.starts_at)} → {dubaiTime(appt.ends_at)}</p>
+          <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>{dubaiTime(appt.starts_at, tz)} → {dubaiTime(appt.ends_at, tz)}</p>
         </div>
 
         {/* Services */}

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
+import { useSalonTimezone } from '../hooks/useSalonTimezone'
 
 interface ApptDetail {
   id: string
@@ -47,13 +48,13 @@ interface ServiceRow {
   staffName: string
 }
 
-function fmtDateTime(iso: string) {
+function fmtDateTime(iso: string, tz = 'Asia/Dubai') {
   const d = new Date(iso)
   const datePart = d.toLocaleDateString('en-GB', {
-    timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', year: 'numeric',
+    timeZone: tz, day: 'numeric', month: 'short', year: 'numeric',
   })
   const timePart = d.toLocaleTimeString('en-GB', {
-    timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
   })
   return `${datePart} · ${timePart}`
 }
@@ -234,6 +235,7 @@ function ServiceCard({ svc, apptStatus, saving, onStart, onComplete, onNoShow, o
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { tz } = useSalonTimezone()
 
   const [appt, setAppt] = useState<ApptDetail | null>(null)
   const [services, setServices] = useState<ServiceRow[]>([])
@@ -543,7 +545,7 @@ export default function AppointmentDetail() {
             <div style={{ backgroundColor: '#034325', borderRadius: 10, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <p style={{ color: '#00BF00', fontSize: 11, margin: '0 0 4px' }}>
-                  {fmtDateTime(appt.starts_at)}
+                  {fmtDateTime(appt.starts_at, tz)}
                 </p>
                 <p style={{ color: '#ffffff', fontSize: 18, fontWeight: 500, margin: '0 0 6px', lineHeight: 1.2 }}>
                   {appt.clients?.name ?? 'Unknown client'}
@@ -689,7 +691,7 @@ export default function AppointmentDetail() {
                   <div style={{ marginBottom: 10 }}>
                     {payments.map(p => (
                       <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '0.5px solid #f0f0f0' }}>
-                        <span style={{ fontSize: 11, color: '#6b7280' }}>{fmtDateTime(p.created_at)}</span>
+                        <span style={{ fontSize: 11, color: '#6b7280' }}>{fmtDateTime(p.created_at, tz)}</span>
                         <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 3, backgroundColor: '#f9fafb', border: '0.5px solid #e0e0e0', color: '#6b7280' }}>
                           {p.method === 'cash' ? 'Cash' : 'Card'}
                         </span>

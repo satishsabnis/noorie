@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useSalonTimezone, salonNowUTC, salonTodayStr, salonOffsetStr, salonLocalDateStr } from '../hooks/useSalonTimezone'
 import { supabase } from '../lib/supabase'
 import { getOutstandingBalances } from '../lib/balances'
 import { useAuthStore } from '../stores/authStore'
@@ -66,30 +67,30 @@ interface BriefUnpaid {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function todayStr() {
-  return new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+function todayStr(tz = 'Asia/Dubai') {
+  return salonTodayStr(tz)
 }
 
-function fmtTime(iso: string) {
+function fmtTime(iso: string, tz = 'Asia/Dubai') {
   return new Date(iso).toLocaleTimeString('en-GB', {
-    timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
   })
 }
 
-function fmtDateTime(iso: string) {
+function fmtDateTime(iso: string, tz = 'Asia/Dubai') {
   const d = new Date(iso)
-  const datePart = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short' })
-  const timePart = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false })
+  const datePart = d.toLocaleDateString('en-GB', { timeZone: tz, day: 'numeric', month: 'short' })
+  const timePart = d.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false })
   return `${datePart} · ${timePart}`
 }
 
-function dubaiDateTimeLabel(): string {
+function dubaiDateTimeLabel(tz = 'Asia/Dubai'): string {
   const now = new Date()
-  const weekday = now.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', weekday: 'long' })
-  const day     = now.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric' })
-  const month   = now.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', month: 'short' })
-  const year    = now.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', year: 'numeric' })
-  const time    = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: true })
+  const weekday = now.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'long' })
+  const day     = now.toLocaleDateString('en-GB', { timeZone: tz, day: 'numeric' })
+  const month   = now.toLocaleDateString('en-GB', { timeZone: tz, month: 'short' })
+  const year    = now.toLocaleDateString('en-GB', { timeZone: tz, year: 'numeric' })
+  const time    = now.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true })
   return `${weekday}, ${day} ${month} ${year} · ${time}`
 }
 
@@ -97,9 +98,9 @@ function minutesToHHMM(mins: number): string {
   return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
 }
 
-function dubaiMinutesFromISO(iso: string): number {
+function dubaiMinutesFromISO(iso: string, tz = 'Asia/Dubai'): number {
   const d = new Date(iso)
-  const s = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false })
+  const s = d.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false })
   const [h, m] = s.split(':').map(Number)
   return h * 60 + m
 }
@@ -120,9 +121,9 @@ function findFreeSlots(appts: { startMins: number; endMins: number }[]): { from:
   return slots
 }
 
-function daysUntilBirthday(dob: string): number | null {
+function daysUntilBirthday(dob: string, tz = 'Asia/Dubai'): number | null {
   if (!dob) return null
-  const dubai = new Date(Date.now() + 4 * 60 * 60 * 1000)
+  const dubai = salonNowUTC(tz)
   const y = dubai.getUTCFullYear(), mo = dubai.getUTCMonth(), d = dubai.getUTCDate()
   const [, mm, dd] = dob.split('-').map(Number)
   let bday = new Date(Date.UTC(y, mm - 1, dd))
@@ -179,12 +180,12 @@ interface ApptRow {
   payment: number;
 }
 
-function cardsToRows(cards: ApptFetched[]): ApptRow[] {
+function cardsToRows(cards: ApptFetched[], tz = 'Asia/Dubai'): ApptRow[] {
   return cards.map(card => ({
     client:  card.clientName,
     service: card.services.map(s => s.name).join(', '),
     staff:   card.staffName ?? 'Multiple staff',
-    time:    new Date(card.starts_at).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }),
+    time:    new Date(card.starts_at).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', timeZone: tz }),
     status:  card.status,
     walkIn:  card.is_walk_in,
     payment: card.totalPaid,
@@ -224,7 +225,7 @@ function ApptTable({ rows, showPayment = false }: { rows: ApptRow[]; showPayment
 
 // ── Drill-down panel ──────────────────────────────────────────────────────────
 
-function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff, weeklyRevenue, monthlyRevenue, yearlyRevenue, topRunnerName, topRunnerAppointmentIds, topRunnerWeek, summaryAppointments }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: Exclude<DrillDown, null>) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[]; weeklyRevenue: { day: string; appointments: number; revenue: number; past: boolean }[]; monthlyRevenue: { period: string; appointments: number; revenue: number; past: boolean }[]; yearlyRevenue: { month: string; appointments: number; revenue: number; past: boolean }[]; topRunnerName: string | null; topRunnerAppointmentIds: string[]; topRunnerWeek: { day: string; appointments: number; revenue: number; past: boolean }[]; summaryAppointments: { total: number; completed: number; walkIns: number; noShow: number } }) {
+function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByService, revenueByStaff, weeklyRevenue, monthlyRevenue, yearlyRevenue, topRunnerName, topRunnerAppointmentIds, topRunnerWeek, summaryAppointments, tz = 'Asia/Dubai' }: { drilldown: NonNullable<DrillDown>; onBack: () => void; onDrilldown: (d: Exclude<DrillDown, null>) => void; cards: ApptFetched[]; revenueByService: { service: string; amount: number }[]; revenueByStaff: { staff: string; amount: number }[]; weeklyRevenue: { day: string; appointments: number; revenue: number; past: boolean }[]; monthlyRevenue: { period: string; appointments: number; revenue: number; past: boolean }[]; yearlyRevenue: { month: string; appointments: number; revenue: number; past: boolean }[]; topRunnerName: string | null; topRunnerAppointmentIds: string[]; topRunnerWeek: { day: string; appointments: number; revenue: number; past: boolean }[]; summaryAppointments: { total: number; completed: number; walkIns: number; noShow: number }; tz?: string }) {
   return (
     <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: 16, margin: '0 16px 16px' }}>
 
@@ -257,7 +258,7 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
       )}
 
       {drilldown === 'appointments' && (() => {
-        const rows = cardsToRows(cards)
+        const rows = cardsToRows(cards, tz)
         return (
           <>
             <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
@@ -271,7 +272,7 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
       })()}
 
       {drilldown === 'walkins' && (() => {
-        const rows = cardsToRows(cards.filter(c => c.is_walk_in))
+        const rows = cardsToRows(cards.filter(c => c.is_walk_in), tz)
         return (
           <>
             <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
@@ -285,7 +286,7 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
       })()}
 
       {drilldown === 'completed' && (() => {
-        const rows = cardsToRows(cards.filter(c => c.status === 'completed'))
+        const rows = cardsToRows(cards.filter(c => c.status === 'completed'), tz)
         return (
           <>
             <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 16px' }}>
@@ -300,7 +301,7 @@ function DrillDownPanel({ drilldown, onBack, onDrilldown, cards, revenueByServic
 
       {drilldown === 'toprunner' && (() => {
         const tpAppts = cards.filter(c => topRunnerAppointmentIds.includes(c.id))
-        const tpRows  = cardsToRows(tpAppts)
+        const tpRows  = cardsToRows(tpAppts, tz)
         const wkAppts = topRunnerWeek.reduce((s, r) => s + r.appointments, 0)
         const wkRev   = topRunnerWeek.reduce((s, r) => s + r.revenue, 0)
         return (
@@ -519,8 +520,8 @@ function Clickable({ children, onClick }: { children: React.ReactNode; onClick: 
 
 // ── Client card ───────────────────────────────────────────────────────────────
 
-function ClientCard({ appt, onClick }: { appt: ApptFetched; onClick: () => void }) {
-  const time = fmtTime(appt.starts_at)
+function ClientCard({ appt, onClick, tz = 'Asia/Dubai' }: { appt: ApptFetched; onClick: () => void; tz?: string }) {
+  const time = fmtTime(appt.starts_at, tz)
 
   // Unpaid balance — any appointment with partial payment takes priority over status-based rendering
   if (appt.totalPaid > 0 && appt.balance > 0) {
@@ -552,7 +553,7 @@ function ClientCard({ appt, onClick }: { appt: ApptFetched; onClick: () => void 
               <span style={{ fontSize: 12, color: '#991b1b', fontWeight: 500 }}>AED {appt.balance.toFixed(2)}</span>
             </div>
             {appt.lastPaymentAt && (
-              <span style={{ fontSize: 11, color: '#6b7280' }}>Last payment: {fmtDateTime(appt.lastPaymentAt)}</span>
+              <span style={{ fontSize: 11, color: '#6b7280' }}>Last payment: {fmtDateTime(appt.lastPaymentAt, tz)}</span>
             )}
           </div>
         </div>
@@ -668,7 +669,7 @@ function ClientCard({ appt, onClick }: { appt: ApptFetched; onClick: () => void 
 
 // ── Birthday strip ────────────────────────────────────────────────────────────
 
-function BirthdayStrip({ salonId }: { salonId: string | null }) {
+function BirthdayStrip({ salonId, tz = 'Asia/Dubai' }: { salonId: string | null; tz?: string }) {
   const [birthdays, setBirthdays] = useState<{ id: string; name: string; date: string; phone: string }[]>([])
 
   useEffect(() => {
@@ -680,7 +681,7 @@ function BirthdayStrip({ salonId }: { salonId: string | null }) {
       .not('dob', 'is', null)
       .then(({ data }) => {
         if (!data) return
-        const today = new Date(Date.now() + 4 * 60 * 60 * 1000)
+        const today = salonNowUTC(tz)
         const results = data
           .map(c => {
             const dob = c.dob as string
@@ -724,15 +725,16 @@ function BirthdayStrip({ salonId }: { salonId: string | null }) {
 
 // ── Brief query functions ─────────────────────────────────────────────────────
 
-async function fetchBriefSlots(salonId: string): Promise<BriefSlot[]> {
-  const today = todayStr()
+async function fetchBriefSlots(salonId: string, tz = 'Asia/Dubai'): Promise<BriefSlot[]> {
+  const today = todayStr(tz)
+  const offset = salonOffsetStr(tz)
   const [{ data: staffRows }, { data: apptRows }] = await Promise.all([
     supabase.from('staff').select('id, name').eq('salon_id', salonId),
     supabase.from('appointments')
       .select('staff_id, starts_at, ends_at')
       .eq('salon_id', salonId)
-      .gte('starts_at', `${today}T00:00:00+04:00`)
-      .lt('starts_at', `${today}T23:59:59+04:00`),
+      .gte('starts_at', `${today}T00:00:00${offset}`)
+      .lt('starts_at', `${today}T23:59:59${offset}`),
   ])
   if (!staffRows) return []
   const byStaff: Record<string, { startMins: number; endMins: number }[]> = {}
@@ -740,8 +742,8 @@ async function fetchBriefSlots(salonId: string): Promise<BriefSlot[]> {
     const sid = a.staff_id as string
     if (!byStaff[sid]) byStaff[sid] = []
     byStaff[sid].push({
-      startMins: dubaiMinutesFromISO(a.starts_at as string),
-      endMins:   dubaiMinutesFromISO(a.ends_at as string),
+      startMins: dubaiMinutesFromISO(a.starts_at as string, tz),
+      endMins:   dubaiMinutesFromISO(a.ends_at as string, tz),
     })
   }
   return staffRows
@@ -749,7 +751,7 @@ async function fetchBriefSlots(salonId: string): Promise<BriefSlot[]> {
     .filter(s => s.freeSlots.length > 0)
 }
 
-async function fetchBriefLapsedClient(salonId: string): Promise<BriefLapsedClient | null> {
+async function fetchBriefLapsedClient(salonId: string, tz = 'Asia/Dubai'): Promise<BriefLapsedClient | null> {
   const { data: clientRows } = await supabase
     .from('clients').select('id, name, phone, dob').eq('salon_id', salonId)
   if (!clientRows || clientRows.length === 0) return null
@@ -773,7 +775,7 @@ async function fetchBriefLapsedClient(salonId: string): Promise<BriefLapsedClien
     const cid = p.client_id as string
     spendMap[cid] = (spendMap[cid] ?? 0) + ((p.amount as number) ?? 0)
   }
-  const todayMs = new Date(Date.now() + 4 * 60 * 60 * 1000).getTime()
+  const todayMs = salonNowUTC(tz).getTime()
   const lapsed: BriefLapsedClient[] = []
   for (const c of clientRows) {
     const cid = c.id as string
@@ -781,7 +783,7 @@ async function fetchBriefLapsedClient(salonId: string): Promise<BriefLapsedClien
     if (!last) continue
     const daysSince = Math.floor((todayMs - new Date(last.date).getTime()) / 86_400_000)
     if (daysSince <= 30) continue
-    const birthdayInDays = c.dob ? daysUntilBirthday(c.dob as string) : null
+    const birthdayInDays = c.dob ? daysUntilBirthday(c.dob as string, tz) : null
     lapsed.push({
       name: c.name as string,
       phone: (c.phone as string) ?? '',
@@ -812,14 +814,15 @@ async function fetchBriefUnpaid(salonId: string): Promise<BriefUnpaid[]> {
   }))
 }
 
-async function fetchBriefTopClient(salonId: string): Promise<BriefTopClient | null> {
-  const dubaiNow = new Date(Date.now() + 4 * 60 * 60 * 1000)
+async function fetchBriefTopClient(salonId: string, tz = 'Asia/Dubai'): Promise<BriefTopClient | null> {
+  const dubaiNow = salonNowUTC(tz)
   const ty = dubaiNow.getUTCFullYear()
   const tm = dubaiNow.getUTCMonth()
   const lastDay = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate()
   const mm = String(tm + 1).padStart(2, '0')
-  const monthStart = `${ty}-${mm}-01T00:00:00+04:00`
-  const monthEnd   = `${ty}-${mm}-${String(lastDay).padStart(2, '0')}T23:59:59+04:00`
+  const offset = salonOffsetStr(tz)
+  const monthStart = `${ty}-${mm}-01T00:00:00${offset}`
+  const monthEnd   = `${ty}-${mm}-${String(lastDay).padStart(2, '0')}T23:59:59${offset}`
 
   const { data: apptRows } = await supabase
     .from('appointments')
@@ -888,7 +891,7 @@ async function fetchBriefTopClient(salonId: string): Promise<BriefTopClient | nu
 
 function MorningBrief({
   slots, lapsedClient, unpaid, topClient, loading,
-  errors,
+  errors, tz = 'Asia/Dubai',
 }: {
   slots: BriefSlot[]
   lapsedClient: BriefLapsedClient | null
@@ -896,15 +899,16 @@ function MorningBrief({
   topClient: BriefTopClient | null
   loading: boolean
   errors: { slots: boolean; lapsed: boolean; unpaid: boolean; topClient: boolean }
+  tz?: string
 }) {
   const isMobile = useIsMobile()
-  const [dtLabel, setDtLabel] = useState(dubaiDateTimeLabel())
+  const [dtLabel, setDtLabel] = useState(dubaiDateTimeLabel(tz))
   const [activeModal, setActiveModal] = useState<'slots' | 'lapsed' | 'unpaid' | 'topClient' | null>(null)
 
   useEffect(() => {
-    const t = setInterval(() => setDtLabel(dubaiDateTimeLabel()), 60_000)
+    const t = setInterval(() => setDtLabel(dubaiDateTimeLabel(tz)), 60_000)
     return () => clearInterval(t)
-  }, [])
+  }, [tz])
 
   const tileStyle: React.CSSProperties = {
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -1086,6 +1090,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const staffRecord = useAuthStore(s => s.staffRecord)
+  const { tz, getSalonNow, getSalonTodayString } = useSalonTimezone()
   const [drilldownStack, setDrilldownStack] = useState<Exclude<DrillDown, null>[]>([])
   const drilldown: DrillDown = drilldownStack.length > 0 ? drilldownStack[drilldownStack.length - 1] : null
   const pushDrilldown = (d: Exclude<DrillDown, null>) => setDrilldownStack(s => [...s, d])
@@ -1150,15 +1155,15 @@ export default function Dashboard() {
         return
       }
 
-      const today = todayStr()
+      const today = getSalonTodayString()
 
       // Query 1: appointments + clients + staff
       const { data: appts, error: apptErr } = await supabase
         .from('appointments')
         .select('id, starts_at, status, is_walk_in, clients ( id, name ), staff ( id, name )')
         .eq('salon_id', salonId)
-        .gte('starts_at', `${today}T00:00:00+04:00`)
-        .lt('starts_at', `${today}T23:59:59+04:00`)
+        .gte('starts_at', `${today}T00:00:00${salonOffsetStr(tz)}`)
+        .lt('starts_at', `${today}T23:59:59${salonOffsetStr(tz)}`)
 
       if (apptErr || !appts) {
         if (!cancelled && firstLoad) { setCardsLoading(false); firstLoad = false }
@@ -1175,14 +1180,15 @@ export default function Dashboard() {
       }
 
       // ── Trend revenue: week / month / year (year-wide, independent of today) ──
-      const dubaiNow = new Date(Date.now() + 4 * 60 * 60 * 1000)
+      const dubaiNow = getSalonNow()
       const ty = dubaiNow.getUTCFullYear()
       const tm = dubaiNow.getUTCMonth()   // 0..11
       const td = dubaiNow.getUTCDate()
-      const todayYMD = dubaiNow.toISOString().slice(0, 10)
+      const todayYMD = today
+      const offset = salonOffsetStr(tz)
 
-      const yearStartISO = `${ty}-01-01T00:00:00+04:00`
-      const yearEndISO   = `${ty}-12-31T23:59:59+04:00`
+      const yearStartISO = `${ty}-01-01T00:00:00${offset}`
+      const yearEndISO   = `${ty}-12-31T23:59:59${offset}`
 
       const [{ data: yearAppts }, { data: yearPays }] = await Promise.all([
         supabase.from('appointments')
@@ -1199,8 +1205,7 @@ export default function Dashboard() {
           .lt('created_at', yearEndISO),
       ])
 
-      const toDubaiDate = (iso: string): string =>
-        new Date(new Date(iso).getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      const toDubaiDate = (iso: string): string => salonLocalDateStr(iso, tz)
 
       const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
       const dayIdx = (dubaiNow.getUTCDay() + 6) % 7
@@ -1381,9 +1386,9 @@ export default function Dashboard() {
       // Top runner's Mon-Sun stats for current week (uses mondayMs/weekDateStrs/dayLabels/todayYMD from trend block)
       let topRunnerWeekOut: { day: string; appointments: number; revenue: number; past: boolean }[] = emptyTopRunnerWeek
       if (topRunner) {
-        const weekStartISO = `${new Date(mondayMs).toISOString().slice(0, 10)}T00:00:00+04:00`
+        const weekStartISO = `${new Date(mondayMs).toISOString().slice(0, 10)}T00:00:00${offset}`
         const sundayMs = mondayMs + 6 * 86_400_000
-        const weekEndISO   = `${new Date(sundayMs).toISOString().slice(0, 10)}T23:59:59+04:00`
+        const weekEndISO   = `${new Date(sundayMs).toISOString().slice(0, 10)}T23:59:59${offset}`
 
         const topRunnerStaffId = (appts.find(a =>
           (a.staff as unknown as { name: string } | null)?.name === topRunner.name
@@ -1408,7 +1413,7 @@ export default function Dashboard() {
             .lt('starts_at', weekEndISO)
 
           for (const appt of trAppts ?? []) {
-            const ds = new Date(new Date(appt.starts_at as string).getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+            const ds = salonLocalDateStr(appt.starts_at as string, tz)
             const wi = weekDateStrs.indexOf(ds)
             if (wi === -1) continue
             const paidAmount = ((appt.payments as unknown as { amount: number | null }[] | null) ?? [])
@@ -1464,10 +1469,10 @@ export default function Dashboard() {
       if (!salonId || cancelled) return
       setBriefLoading(true)
       const [slotsRes, lapsedRes, unpaidRes, topClientRes] = await Promise.all([
-        fetchBriefSlots(salonId).then(d => ({ d, e: false })).catch(() => ({ d: [] as BriefSlot[], e: true })),
-        fetchBriefLapsedClient(salonId).then(d => ({ d, e: false })).catch(() => ({ d: null as BriefLapsedClient | null, e: true })),
+        fetchBriefSlots(salonId, tz).then(d => ({ d, e: false })).catch(() => ({ d: [] as BriefSlot[], e: true })),
+        fetchBriefLapsedClient(salonId, tz).then(d => ({ d, e: false })).catch(() => ({ d: null as BriefLapsedClient | null, e: true })),
         fetchBriefUnpaid(salonId).then(d => ({ d, e: false })).catch(() => ({ d: [] as BriefUnpaid[], e: true })),
-        fetchBriefTopClient(salonId).then(d => ({ d, e: false })).catch(() => ({ d: null as BriefTopClient | null, e: true })),
+        fetchBriefTopClient(salonId, tz).then(d => ({ d, e: false })).catch(() => ({ d: null as BriefTopClient | null, e: true })),
       ])
       if (!cancelled) {
         setBriefSlots(slotsRes.d)
@@ -1518,6 +1523,7 @@ export default function Dashboard() {
           topClient={briefTopClient}
           loading={briefLoading}
           errors={briefErrors}
+          tz={tz}
         />
 
         {/* ── Summary strip ── */}
@@ -1578,7 +1584,7 @@ export default function Dashboard() {
 
         {/* ── Main area ── */}
         {drilldown !== null ? (
-          <DrillDownPanel drilldown={drilldown} onBack={popDrilldown} onDrilldown={pushDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} weeklyRevenue={weeklyRevenue} monthlyRevenue={monthlyRevenue} yearlyRevenue={yearlyRevenue} topRunnerName={summaryTopRunner?.name ?? null} topRunnerAppointmentIds={summaryTopRunner?.appointmentIds ?? []} topRunnerWeek={topRunnerWeek} summaryAppointments={summaryAppointments} />
+          <DrillDownPanel drilldown={drilldown} onBack={popDrilldown} onDrilldown={pushDrilldown} cards={cards} revenueByService={revenueByService} revenueByStaff={revenueByStaff} weeklyRevenue={weeklyRevenue} monthlyRevenue={monthlyRevenue} yearlyRevenue={yearlyRevenue} topRunnerName={summaryTopRunner?.name ?? null} topRunnerAppointmentIds={summaryTopRunner?.appointmentIds ?? []} topRunnerWeek={topRunnerWeek} summaryAppointments={summaryAppointments} tz={tz} />
         ) : (
           <>
             {/* Card grid */}
@@ -1594,6 +1600,7 @@ export default function Dashboard() {
                       key={appt.id}
                       appt={appt}
                       onClick={() => navigate(`/appointment/${appt.id}`)}
+                      tz={tz}
                     />
                   ))}
                 </div>
@@ -1601,7 +1608,7 @@ export default function Dashboard() {
             </div>
 
             {/* Birthday strip */}
-            <BirthdayStrip salonId={staffRecord?.salon_id ?? null} />
+            <BirthdayStrip salonId={staffRecord?.salon_id ?? null} tz={tz} />
           </>
         )}
 

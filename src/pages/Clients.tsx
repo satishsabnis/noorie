@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
+import { useSalonTimezone } from '../hooks/useSalonTimezone'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -21,10 +22,10 @@ type SortKey = 'name' | 'last_visit' | 'total_spend' | 'visit_count'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmtDate(iso: string | null) {
+function fmtDate(iso: string | null, tz = 'Asia/Dubai') {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-GB', {
-    timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', year: 'numeric',
+    timeZone: tz, day: 'numeric', month: 'short', year: 'numeric',
   })
 }
 
@@ -52,6 +53,7 @@ const TD: React.CSSProperties = {
 export default function Clients() {
   const navigate  = useNavigate()
   const staffRecord = useAuthStore(s => s.staffRecord)
+  const { tz } = useSalonTimezone()
 
   const [clients,    setClients]    = useState<ClientRow[]>([])
   const [loading,    setLoading]    = useState(true)
@@ -245,7 +247,7 @@ export default function Clients() {
                     </td>
                     <td style={{ ...TD, color: '#6b7280' }}>{c.phone ?? '—'}</td>
                     <td style={{ ...TD, color: '#6b7280' }}>{c.email ?? '—'}</td>
-                    <td style={{ ...TD, color: '#6b7280' }}>{fmtDate(c.lastVisit)}</td>
+                    <td style={{ ...TD, color: '#6b7280' }}>{fmtDate(c.lastVisit, tz)}</td>
                     <td style={{ ...TD, textAlign: 'right' }}>{c.visitCount}</td>
                     <td style={{ ...TD, textAlign: 'right', fontWeight: 500 }}>
                       AED {c.totalSpend.toFixed(2)}

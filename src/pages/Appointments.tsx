@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
+import { useSalonTimezone, salonOffsetStr } from '../hooks/useSalonTimezone'
 
 interface ApptRow {
   id: string
@@ -21,13 +22,13 @@ function fmtApptRef(n: number | null | undefined): string {
   return n != null ? `APT-${String(n).padStart(4, '0')}` : '—'
 }
 
-function todayStr() {
-  return new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+function todayStr(tz = 'Asia/Dubai') {
+  return new Date().toLocaleDateString('en-CA', { timeZone: tz })
 }
 
-function fmtTime(iso: string) {
+function fmtTime(iso: string, tz = 'Asia/Dubai') {
   return new Date(iso).toLocaleTimeString('en-GB', {
-    timeZone: 'Asia/Dubai',
+    timeZone: tz,
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -72,6 +73,7 @@ function StatusBadge({ status }: { status: string }) {
 export default function Appointments() {
   const navigate = useNavigate()
   const staffRecord = useAuthStore(s => s.staffRecord)
+  const { tz } = useSalonTimezone()
 
   const [dateFilter, setDateFilter] = useState(todayStr())
   const [statusFilter, setStatusFilter] = useState('')
@@ -104,8 +106,8 @@ export default function Appointments() {
           staff ( id, name )
         `)
         .eq('salon_id', salonId)
-        .gte('starts_at', `${dateFilter}T00:00:00+04:00`)
-        .lt('starts_at', `${dateFilter}T23:59:59+04:00`)
+        .gte('starts_at', `${dateFilter}T00:00:00${salonOffsetStr(tz)}`)
+        .lt('starts_at', `${dateFilter}T23:59:59${salonOffsetStr(tz)}`)
         .order('starts_at', { ascending: true })
 
       if (apptErr) {
@@ -362,7 +364,7 @@ export default function Appointments() {
                         </span>
                       </td>
                       <td style={{ ...TD, fontVariantNumeric: 'tabular-nums', color: '#6b7280' }}>
-                        {fmtTime(a.starts_at)}
+                        {fmtTime(a.starts_at, tz)}
                       </td>
                       <td style={{ ...TD, fontWeight: 500 }}>
                         {a.clients?.name ?? '—'}

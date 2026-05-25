@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
+import { useSalonTimezone, salonNowUTC, salonOffsetStr } from '../hooks/useSalonTimezone'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -499,6 +500,7 @@ export default function Reports() {
   const salonNameStore = useAuthStore(s => s.salonName)
   const salonId = staffRecord?.salon_id ?? ''
   const role    = staffRecord?.role ?? ''
+  const { tz } = useSalonTimezone()
   const [resolvedSalonName, setResolvedSalonName] = useState<string>(salonNameStore ?? '')
 
   // ── Navigation ──────────────────────────────────────────────────────────
@@ -635,33 +637,34 @@ export default function Reports() {
     if (!salonId) return
     setTopRunnerLoading(true)
 
-    const dubaiNow = new Date(Date.now() + 4 * 60 * 60 * 1000)
+    const dubaiNow = salonNowUTC(tz)
     const ty = dubaiNow.getUTCFullYear()
     const tm = dubaiNow.getUTCMonth()
     const td = dubaiNow.getUTCDate()
+    const offset = salonOffsetStr(tz)
 
     let rangeStart = ''
     let rangeEnd = ''
     if (tab === 'daily') {
       const ymd = dubaiNow.toISOString().slice(0, 10)
-      rangeStart = `${ymd}T00:00:00+04:00`
-      rangeEnd   = `${ymd}T23:59:59+04:00`
+      rangeStart = `${ymd}T00:00:00${offset}`
+      rangeEnd   = `${ymd}T23:59:59${offset}`
     } else if (tab === 'weekly') {
       const dayIdx = (dubaiNow.getUTCDay() + 6) % 7   // 0=Mon..6=Sun
       const mondayMs = Date.UTC(ty, tm, td) - dayIdx * 86_400_000
       const sundayMs = mondayMs + 6 * 86_400_000
       const monStr = new Date(mondayMs).toISOString().slice(0, 10)
       const sunStr = new Date(sundayMs).toISOString().slice(0, 10)
-      rangeStart = `${monStr}T00:00:00+04:00`
-      rangeEnd   = `${sunStr}T23:59:59+04:00`
+      rangeStart = `${monStr}T00:00:00${offset}`
+      rangeEnd   = `${sunStr}T23:59:59${offset}`
     } else if (tab === 'monthly') {
       const lastDay = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate()
       const mm = String(tm + 1).padStart(2, '0')
-      rangeStart = `${ty}-${mm}-01T00:00:00+04:00`
-      rangeEnd   = `${ty}-${mm}-${String(lastDay).padStart(2, '0')}T23:59:59+04:00`
+      rangeStart = `${ty}-${mm}-01T00:00:00${offset}`
+      rangeEnd   = `${ty}-${mm}-${String(lastDay).padStart(2, '0')}T23:59:59${offset}`
     } else {
-      rangeStart = `${ty}-01-01T00:00:00+04:00`
-      rangeEnd   = `${ty}-12-31T23:59:59+04:00`
+      rangeStart = `${ty}-01-01T00:00:00${offset}`
+      rangeEnd   = `${ty}-12-31T23:59:59${offset}`
     }
 
     const { data } = await supabase
@@ -695,33 +698,34 @@ export default function Reports() {
     if (!salonId) return
     setTopClientsLoading(true)
 
-    const dubaiNow = new Date(Date.now() + 4 * 60 * 60 * 1000)
+    const dubaiNow = salonNowUTC(tz)
     const ty = dubaiNow.getUTCFullYear()
     const tm = dubaiNow.getUTCMonth()
     const td = dubaiNow.getUTCDate()
+    const offset = salonOffsetStr(tz)
 
     let rangeStart = ''
     let rangeEnd = ''
     if (tab === 'daily') {
       const ymd = dubaiNow.toISOString().slice(0, 10)
-      rangeStart = `${ymd}T00:00:00+04:00`
-      rangeEnd   = `${ymd}T23:59:59+04:00`
+      rangeStart = `${ymd}T00:00:00${offset}`
+      rangeEnd   = `${ymd}T23:59:59${offset}`
     } else if (tab === 'weekly') {
       const dayIdx = (dubaiNow.getUTCDay() + 6) % 7
       const mondayMs = Date.UTC(ty, tm, td) - dayIdx * 86_400_000
       const sundayMs = mondayMs + 6 * 86_400_000
       const monStr = new Date(mondayMs).toISOString().slice(0, 10)
       const sunStr = new Date(sundayMs).toISOString().slice(0, 10)
-      rangeStart = `${monStr}T00:00:00+04:00`
-      rangeEnd   = `${sunStr}T23:59:59+04:00`
+      rangeStart = `${monStr}T00:00:00${offset}`
+      rangeEnd   = `${sunStr}T23:59:59${offset}`
     } else if (tab === 'monthly') {
       const lastDay = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate()
       const mm = String(tm + 1).padStart(2, '0')
-      rangeStart = `${ty}-${mm}-01T00:00:00+04:00`
-      rangeEnd   = `${ty}-${mm}-${String(lastDay).padStart(2, '0')}T23:59:59+04:00`
+      rangeStart = `${ty}-${mm}-01T00:00:00${offset}`
+      rangeEnd   = `${ty}-${mm}-${String(lastDay).padStart(2, '0')}T23:59:59${offset}`
     } else {
-      rangeStart = `${ty}-01-01T00:00:00+04:00`
-      rangeEnd   = `${ty}-12-31T23:59:59+04:00`
+      rangeStart = `${ty}-01-01T00:00:00${offset}`
+      rangeEnd   = `${ty}-12-31T23:59:59${offset}`
     }
 
     const { data } = await supabase

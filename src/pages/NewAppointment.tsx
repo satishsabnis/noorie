@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
+import { useSalonTimezone, salonNowUTC, salonOffsetStr } from '../hooks/useSalonTimezone'
 
 // -- Time slots --
 const TIME_SLOTS: string[] = []
@@ -12,18 +13,18 @@ for (let h = 9; h <= 23; h++) {
 }
 
 // -- Helpers --
-function todayStr() {
-  return new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+function todayStr(tz = 'Asia/Dubai') {
+  return new Date().toLocaleDateString('en-CA', { timeZone: tz })
 }
 
-function dubaiNowStr(): string {
-  const d = new Date(Date.now() + 4 * 60 * 60 * 1000)
-  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
+function dubaiNowStr(tz = 'Asia/Dubai'): string {
+  return new Date().toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-function nextDubaiSlot(): string {
-  const d = new Date(Date.now() + 4 * 60 * 60 * 1000)
-  const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
+function nextDubaiSlot(tz = 'Asia/Dubai'): string {
+  const timeStr = new Date().toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false })
+  const [hh, mm] = timeStr.split(':').map(Number)
+  const mins = hh * 60 + mm
   const next = Math.ceil((mins + 1) / 30) * 30
   const h = Math.floor(next / 60)
   const m = next % 60
@@ -248,6 +249,7 @@ function nextRowId() { return `r${++_rowCounter}` }
 export default function NewAppointment() {
   const navigate = useNavigate()
   const staffRecord = useAuthStore(s => s.staffRecord)
+  const { tz } = useSalonTimezone()
 
   const [client, setClient] = useState<Client | null>(null)
   const [clients, setClients] = useState<Client[]>([])
@@ -336,15 +338,15 @@ export default function NewAppointment() {
   const handleBook = async () => {
     try {
       if (!canBook || !client) return
-      if (date < todayStr()) {
+      if (date < todayStr(tz)) {
         setError('Cannot book appointments for past dates')
         return
       }
       setSaving(true)
       setError(null)
 
-      const startsAt = `${date}T${time}:00+04:00`
-      const endsAt = endTime ? `${date}T${endTime}:00+04:00` : startsAt
+      const startsAt = `${date}T${time}:00${salonOffsetStr(tz)}`
+      const endsAt = endTime ? `${date}T${endTime}:00${salonOffsetStr(tz)}` : startsAt
       const uniqueStaff = [...new Set(completeRows.map(r => r.staffId))]
       const apptStaffId = uniqueStaff.length === 1 ? uniqueStaff[0] : null
       const salonId = staffRecord?.salon_id ?? null
@@ -423,11 +425,11 @@ export default function NewAppointment() {
                 <input
                   type="date"
                   value={date}
-                  min={todayStr()}
+                  min={todayStr(tz)}
                   onChange={e => {
                     const d = e.target.value
                     setDate(d)
-                    setTime(d === todayStr() ? nextDubaiSlot() : '09:00')
+                    setTime(d === todayStr(tz) ? nextDubaiSlot(tz) : '09:00')
                   }}
                   style={inputStyle}
                 />
@@ -436,8 +438,8 @@ export default function NewAppointment() {
                 <label style={labelStyle}>Start time</label>
                 <select value={time} onChange={e => setTime(e.target.value)} style={selectStyle}>
                   {(() => {
-                    if (date !== todayStr()) return TIME_SLOTS
-                    const future = TIME_SLOTS.filter(t => t > dubaiNowStr())
+                    if (date !== todayStr(tz)) return TIME_SLOTS
+                    const future = TIME_SLOTS.filter(t => t > dubaiNowStr(tz))
                     return future.length > 0 ? future : TIME_SLOTS
                   })().map(t => (
                     <option key={t} value={t}>{t}</option>
