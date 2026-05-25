@@ -463,6 +463,7 @@ function StaffSchedule() {
 function StaffAppointmentDetail() {
   const { id, slug } = useParams<{ id: string; slug: string }>()
   const navigate = useNavigate()
+  const { tz } = useSalonTimezone()
   const [appt, setAppt] = useState<Appointment | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)

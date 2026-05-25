@@ -241,9 +241,8 @@ export default function ClientApp() {
       .then(data => {
         if (data && data.id) {
           setSalon(data as Salon)
-          supabase.from('salon_config').select('timezone').eq('salon_id', data.id).single()
+          supabase.from('salon_config').select('timezone').eq('salon_id', data.id).maybeSingle()
             .then(({ data: cfg }) => { if (cfg?.timezone) setTz(cfg.timezone as string) })
-            .catch(() => {})
         }
         else setSalonNotFound(true)
         setSalonLoading(false)
