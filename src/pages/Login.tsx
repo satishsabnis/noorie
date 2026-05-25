@@ -25,11 +25,9 @@ export default function Login() {
 
     try {
       const { user } = await signInWithMobile(countryCode, mobile, password)
-      console.log('Step 1 - user:', user)
       if (!user) throw new Error('Sign in failed')
 
       const staff = await getStaffByUserId(user.id)
-      console.log('Step 2 - staff:', staff)
       if (!staff) throw new Error('Staff record not found')
 
       if (!staff.role) {
@@ -38,7 +36,6 @@ export default function Login() {
       }
 
       signIn(user, staff)
-      console.log('Step 3 - signIn called')
 
       if (staff.role === 'technician') {
         const { data: salon } = await supabase
@@ -49,10 +46,8 @@ export default function Login() {
         navigate(salon?.slug ? `/${salon.slug}/staff` : '/staff-app')
       } else {
         navigate('/dashboard')
-        console.log('Step 4 - navigate called')
       }
     } catch (err: any) {
-      console.error('Login error:', err)
       const msg = err?.message ?? ''
       if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials')) {
         setError('Invalid mobile number or password.')
