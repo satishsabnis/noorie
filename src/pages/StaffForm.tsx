@@ -313,12 +313,11 @@ export default function StaffForm() {
         // Update PIN if provided
         const enteredPin = pin.join('')
         if (enteredPin && enteredPin.length === 5) {
-          const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
           const res = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/update-staff-pin', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${anonKey}`,
+              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
             },
             body: JSON.stringify({
               staff_id: id!,
