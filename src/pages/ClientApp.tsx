@@ -591,7 +591,6 @@ export default function ClientApp() {
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button onClick={() => setShowBookingModal(true)} style={{ backgroundColor: '#034325', color: '#ffffff', border: 'none', borderRadius: 8, padding: 13, fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}>Book an appointment</button>
-            <button onClick={() => alert('Coming soon')} style={{ backgroundColor: 'transparent', color: '#034325', border: '1px solid #034325', borderRadius: 8, padding: 13, fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}>My bookings</button>
           </div>
         </div>
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, textAlign: 'center', padding: '8px 0', backgroundColor: '#f9fafb' }}>
