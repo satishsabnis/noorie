@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+const NOORIE_VERSION = 'v2.05.23'
+
 const CLIENT_COUNTRY_CODES = [
   { flag: '🇦🇪', code: '+971' },
   { flag: '🇸🇦', code: '+966' },
@@ -1385,7 +1387,10 @@ export default function ClientApp() {
           <div style={{ width: 60 }} />
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 40px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: 0 }}>About Noorie</p>
+          <div>
+            <p style={{ fontSize: 18, fontWeight: 700, color: '#034325', margin: '0 0 4px' }}>About Noorie</p>
+            <p style={{ fontSize: 12, fontWeight: 400, color: '#034325', margin: 0 }}>({NOORIE_VERSION})</p>
+          </div>
           <p style={{ fontSize: 14, color: '#111', lineHeight: 1.6, margin: 0 }}>Noorie is your personal salon companion. Book appointments with your favourite technician, track your visit history, and manage your loyalty points, all in one place. Browse exclusive packages and offers, shop salon products, and stay connected to your salon so you never miss a deal, a booking, or a reward.</p>
           {(salon?.phone || salon?.email) && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
