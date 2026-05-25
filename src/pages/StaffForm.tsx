@@ -77,13 +77,6 @@ export default function StaffForm() {
   const [copied,      setCopied]      = useState(false)
   const [status,      setStatus]      = useState<'active' | 'suspended'>('active')
 
-  // Client PIN
-  const [clientPin,      setClientPin]      = useState(['', '', '', '', ''])
-  const clientPinRefs = useRef<(HTMLInputElement | null)[]>([])
-  const [clientPinCopied, setClientPinCopied] = useState(false)
-  const [showClientPinSuccess, setShowClientPinSuccess] = useState(false)
-  const [clientPinShareURL, setClientPinShareURL] = useState<string | null>(null)
-
   // Pay details
   const [monthlySalary, setMonthlySalary] = useState('0')
   const [commissionPct, setCommissionPct] = useState('0')
@@ -185,30 +178,11 @@ export default function StaffForm() {
     if (e.key === 'Backspace' && !pin[index] && index > 0) pinRefs.current[index - 1]?.focus()
   }
 
-  const handleClientPinChange = (index: number, value: string) => {
-    if (!/^\d?$/.test(value)) return
-    const newClientPin = [...clientPin]
-    newClientPin[index] = value
-    setClientPin(newClientPin)
-    if (value && index < 4) clientPinRefs.current[index + 1]?.focus()
-  }
-
-  const handleClientPinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !clientPin[index] && index > 0) clientPinRefs.current[index - 1]?.focus()
-  }
-
   const handleCopyLink = () => {
     const url = `noorie-salon.vercel.app/${salonSlug}/staff`
     navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }
-
-  const handleCopyClientLink = () => {
-    if (!clientPinShareURL) return
-    navigator.clipboard.writeText(clientPinShareURL)
-    setClientPinCopied(true)
-    setTimeout(() => setClientPinCopied(false), 2000)
   }
 
   function toggleService(svcId: string) {
@@ -280,42 +254,6 @@ export default function StaffForm() {
       setNewSvcDuration('')
     }
     setAddingSvc(false)
-  }
-
-  async function handleSaveClientPin() {
-    const enteredClientPin = clientPin.join('')
-    if (enteredClientPin.length !== 5) { setError('Client PIN must be exactly 5 digits'); return }
-    if (!salonId) { setError('Salon not found'); return }
-
-    setSaving(true)
-    setError(null)
-
-    try {
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-      const res = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/create-client-pin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify({
-          salon_id: salonId,
-          pin: enteredClientPin,
-        }),
-      })
-      const result = await res.json()
-      if (!result.success) throw new Error(result.error ?? 'Failed to save client PIN')
-
-      if (salonSlug) {
-        setClientPinShareURL(`noorie-salon.vercel.app/${salonSlug}/client`)
-        setShowClientPinSuccess(true)
-        setClientPin(['', '', '', '', ''])
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setSaving(false)
-    }
   }
 
   async function handleSave() {
@@ -542,104 +480,6 @@ export default function StaffForm() {
                     </div>
                     {copied && <p style={{ fontSize: 11, color: '#059669', margin: 0 }}>Copied!</p>}
                   </div>
-                )}
-
-              </div>
-            </div>
-
-            {/* Client PIN */}
-            <div style={cardStyle}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: '#034325', margin: '0 0 14px' }}>Client PIN</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-                <div>
-                  <label style={labelStyle}>5-digit PIN (for client app)</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {clientPin.map((digit, i) => (
-                      <input
-                        key={i}
-                        ref={el => { clientPinRefs.current[i] = el }}
-                        type="password"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={digit}
-                        onChange={e => handleClientPinChange(i, e.target.value)}
-                        onKeyDown={e => handleClientPinKeyDown(i, e)}
-                        style={{
-                          width: 40, height: 40, textAlign: 'center', fontSize: 18, fontWeight: 700,
-                          border: '0.5px solid #e0e0e0', borderRadius: 6, outline: 'none',
-                          backgroundColor: '#ffffff', color: '#034325', boxSizing: 'border-box',
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {!showClientPinSuccess ? (
-                  <button
-                    onClick={handleSaveClientPin}
-                    disabled={saving || clientPin.join('').length !== 5}
-                    type="button"
-                    style={{
-                      backgroundColor: saving || clientPin.join('').length !== 5 ? '#e0e0e0' : '#034325',
-                      color: saving || clientPin.join('').length !== 5 ? '#9ca3af' : '#ffffff',
-                      border: 'none',
-                      borderRadius: 6,
-                      padding: '8px 14px',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: saving || clientPin.join('').length !== 5 ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {saving ? 'Saving…' : 'Save client PIN'}
-                  </button>
-                ) : (
-                  <>
-                    {clientPinShareURL && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <label style={labelStyle}>Shareable client app URL:</label>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <div style={{ flex: 1, backgroundColor: '#f9fafb', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '10px 12px', fontSize: 12, color: '#111111', wordBreak: 'break-all' }}>
-                            {clientPinShareURL}
-                          </div>
-                          <button
-                            onClick={handleCopyClientLink}
-                            type="button"
-                            style={{
-                              backgroundColor: '#034325',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: 6,
-                              padding: '10px 14px',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {clientPinCopied ? '✓' : '📋'}
-                          </button>
-                        </div>
-                        {clientPinCopied && <p style={{ fontSize: 11, color: '#059669', margin: 0 }}>Copied!</p>}
-                      </div>
-                    )}
-                    <button
-                      onClick={() => { setShowClientPinSuccess(false); setClientPinShareURL(null) }}
-                      type="button"
-                      style={{
-                        backgroundColor: 'transparent',
-                        color: '#6b7280',
-                        border: '0.5px solid #d1d5db',
-                        borderRadius: 6,
-                        padding: '8px 14px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Dismiss
-                    </button>
-                  </>
                 )}
 
               </div>
