@@ -9,7 +9,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 
 const SECTIONS = [
   'Salon details', 'Services', 'Payments', 'WhatsApp',
-  'Loyalty points', 'Noorie AI', 'Expenses', 'Staff settings', 'Run payroll',
+  'Loyalty points', 'Noorie AI', 'Inventory', 'Expenses', 'Staff settings', 'Run payroll',
 ] as const
 type Section = typeof SECTIONS[number]
 
@@ -73,7 +73,7 @@ interface ConfigData {
   timezone: string
 }
 
-interface ServiceRow { id: string; name: string; duration_minutes: number; active: boolean; price: number; category: string }
+interface ServiceRow { id: string; name: string; duration_minutes: number; active: boolean; price: number; category: string; image_url: string | null }
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -506,9 +506,12 @@ function SectionServices({ salonId }: { salonId: string }) {
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState('All')
+  const [uploadingSvcId, setUploadingSvcId] = useState<string | null>(null)
+  const svcImgRef = useRef<HTMLInputElement | null>(null)
+  const [pendingImgSvcId, setPendingImgSvcId] = useState<string | null>(null)
 
   async function load() {
-    const { data } = await supabase.from('services').select('id, name, duration_minutes, is_active, price, category').eq('salon_id', salonId).order('name')
+    const { data } = await supabase.from('services').select('id, name, duration_minutes, is_active, price, category, image_url').eq('salon_id', salonId).order('name')
     setServices((data ?? []).map(s => ({
       id: s.id as string,
       name: s.name as string,
@@ -516,6 +519,7 @@ function SectionServices({ salonId }: { salonId: string }) {
       active: (s.is_active as boolean) ?? true,
       price: (s.price as number) ?? 0,
       category: (s.category as string) ?? '',
+      image_url: (s.image_url as string | null) ?? null,
     })))
     setLoading(false)
   }
@@ -562,6 +566,20 @@ function SectionServices({ salonId }: { salonId: string }) {
       console.error('[Admin] Services toggleActive exception:', err)
       setError('Unexpected error — check console.')
     }
+  }
+
+  async function handleSvcImageUpload(svcId: string, file: File) {
+    setUploadingSvcId(svcId)
+    const ext = file.name.split('.').pop()
+    const path = `${salonId}/${svcId}.${ext}`
+    const { error: upErr } = await supabase.storage.from('service-images').upload(path, file, { upsert: true })
+    if (upErr) { setError(upErr.message); setUploadingSvcId(null); return }
+    const { data: urlData } = supabase.storage.from('service-images').getPublicUrl(path)
+    const { error: updErr } = await supabase.from('services').update({ image_url: urlData.publicUrl }).eq('id', svcId)
+    if (updErr) { setError(updErr.message); setUploadingSvcId(null); return }
+    setServices(prev => prev.map(s => s.id === svcId ? { ...s, image_url: urlData.publicUrl } : s))
+    setUploadingSvcId(null)
+    setPendingImgSvcId(null)
   }
 
   async function addService() {
@@ -659,10 +677,23 @@ function SectionServices({ salonId }: { salonId: string }) {
                         <button onClick={() => setEditId(null)} style={{ fontSize: 11, backgroundColor: 'transparent', color: '#6b7280', border: '0.5px solid #d1d5db', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Cancel</button>
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         <button onClick={() => { console.log('Edit clicked:', svc.id); setEditId(svc.id); setEditName(svc.name); setEditDur(String(svc.duration_minutes)); setEditPrice(String(svc.price)); setEditCategory(svc.category) }} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Edit</button>
                         <button onClick={() => { console.log('Suspend clicked:', svc.id); toggleActive(svc.id, svc.active) }} style={{ fontSize: 11, border: `0.5px solid ${svc.active ? '#6b7280' : '#034325'}`, color: svc.active ? '#6b7280' : '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>{svc.active ? 'Suspend' : 'Resume'}</button>
                         <button onClick={() => { setDeleteId(svc.id); setDeleteBlocked(false); setError(null) }} style={{ fontSize: 11, border: '0.5px solid #991b1b', color: '#991b1b', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Delete</button>
+                        {svc.category === 'Package' && (
+                          <>
+                            <input ref={el => { if (pendingImgSvcId === svc.id) svcImgRef.current = el }} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f && pendingImgSvcId) handleSvcImageUpload(pendingImgSvcId, f) }} />
+                            {svc.image_url ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <img src={svc.image_url} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, border: '0.5px solid #e0e0e0' }} />
+                                <button onClick={() => { setPendingImgSvcId(svc.id); setTimeout(() => svcImgRef.current?.click(), 50) }} disabled={uploadingSvcId === svc.id} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>{uploadingSvcId === svc.id ? 'Uploading…' : 'Change'}</button>
+                              </div>
+                            ) : (
+                              <button onClick={() => { setPendingImgSvcId(svc.id); setTimeout(() => svcImgRef.current?.click(), 50) }} disabled={uploadingSvcId === svc.id} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>{uploadingSvcId === svc.id ? 'Uploading…' : 'Add image'}</button>
+                            )}
+                          </>
+                        )}
                       </div>
                     )}
                     {deleteId === svc.id && (
@@ -677,6 +708,196 @@ function SectionServices({ salonId }: { salonId: string }) {
                         </div>
                       </div>
                     )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Section: Inventory ────────────────────────────────────────────────────────
+
+interface InventoryItem {
+  id: string; name: string; type: 'product' | 'supply'
+  price: number | null; stock: number; unit: string
+  low_stock_threshold: number; image_url: string | null
+}
+
+function SectionInventory({ salonId }: { salonId: string }) {
+  type InvView = 'choose' | 'products' | 'supplies'
+  const [view, setView] = useState<InvView>('choose')
+  const [items, setItems] = useState<InventoryItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [editItem, setEditItem] = useState<InventoryItem | null>(null)
+  const [formName, setFormName] = useState('')
+  const [formPrice, setFormPrice] = useState('')
+  const [formStock, setFormStock] = useState('0')
+  const [formUnit, setFormUnit] = useState('unit')
+  const [formThreshold, setFormThreshold] = useState('5')
+  const [formImageUrl, setFormImageUrl] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+
+  async function load(type: 'product' | 'supply') {
+    setLoading(true)
+    const { data } = await supabase
+      .from('inventory_items')
+      .select('id, name, type, price, stock, unit, low_stock_threshold, image_url')
+      .eq('salon_id', salonId).eq('type', type).order('name')
+    setItems((data ?? []) as InventoryItem[])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    if (view === 'products') load('product')
+    else if (view === 'supplies') load('supply')
+  }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function openAdd() {
+    setEditItem(null); setFormName(''); setFormPrice(''); setFormStock('0')
+    setFormUnit('unit'); setFormThreshold('5'); setFormImageUrl(null); setShowForm(true)
+  }
+  function openEdit(item: InventoryItem) {
+    setEditItem(item); setFormName(item.name)
+    setFormPrice(item.price != null ? String(item.price) : '')
+    setFormStock(String(item.stock)); setFormUnit(item.unit)
+    setFormThreshold(String(item.low_stock_threshold)); setFormImageUrl(item.image_url); setShowForm(true)
+  }
+
+  async function handleImageUpload(file: File) {
+    setUploading(true)
+    const ext = file.name.split('.').pop()
+    const path = `${salonId}/${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from('inventory-images').upload(path, file, { upsert: true })
+    if (upErr) { setError(upErr.message); setUploading(false); return }
+    const { data: urlData } = supabase.storage.from('inventory-images').getPublicUrl(path)
+    setFormImageUrl(urlData.publicUrl); setUploading(false)
+  }
+
+  async function handleSave() {
+    if (!formName.trim()) { setError('Name is required'); return }
+    setSaving(true); setError(null)
+    const type = view === 'products' ? 'product' : 'supply'
+    const payload = {
+      salon_id: salonId, name: formName.trim(), type,
+      price: type === 'product' && formPrice ? parseFloat(formPrice) : null,
+      stock: parseInt(formStock, 10) || 0,
+      unit: formUnit.trim() || 'unit',
+      low_stock_threshold: parseInt(formThreshold, 10) || 5,
+      image_url: type === 'product' ? formImageUrl : null,
+    }
+    if (editItem) {
+      const { error } = await supabase.from('inventory_items').update(payload).eq('id', editItem.id)
+      if (error) { setError(error.message); setSaving(false); return }
+    } else {
+      const { error } = await supabase.from('inventory_items').insert(payload)
+      if (error) { setError(error.message); setSaving(false); return }
+    }
+    setSaving(false); setShowForm(false); load(type)
+  }
+
+  async function handleDelete(id: string) {
+    const type = view === 'products' ? 'product' : 'supply'
+    const { error } = await supabase.from('inventory_items').delete().eq('id', id)
+    if (error) { setError(error.message); return }
+    load(type)
+  }
+
+  const TH: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', padding: '8px 10px', borderBottom: '0.5px solid #e0e0e0' }
+  const TD: React.CSSProperties = { fontSize: 12, color: '#000', padding: '8px 10px', borderBottom: '0.5px solid #f0f0f0', verticalAlign: 'middle' }
+  const isProduct = view === 'products'
+
+  if (view === 'choose') return (
+    <div>
+      <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 20px' }}>Inventory Management</p>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        <button onClick={() => setView('products')} style={{ backgroundColor: '#034325', color: '#fff', border: 'none', borderRadius: 8, padding: '14px 28px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Products</button>
+        <button onClick={() => setView('supplies')} style={{ backgroundColor: 'transparent', color: '#034325', border: '1.5px solid #034325', borderRadius: 8, padding: '14px 28px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Salon Supplies</button>
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 4px' }}>Products — items sold to clients (price, photo, stock)</p>
+        <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Salon Supplies — internal consumables (stock + unit only)</p>
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <button onClick={() => { setView('choose'); setShowForm(false); setError(null) }} style={{ background: 'none', border: '1px solid #034325', borderRadius: 6, color: '#034325', fontSize: 12, padding: '4px 12px', cursor: 'pointer' }}>Back</button>
+        <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: 0 }}>{isProduct ? 'Products' : 'Salon Supplies'}</p>
+      </div>
+      {error && <p style={{ fontSize: 12, color: '#991b1b', margin: '0 0 10px' }}>{error}</p>}
+
+      {showForm && (
+        <div style={cardStyle}>
+          <p style={subHeading}>{editItem ? 'Edit item' : 'Add item'}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div><label style={labelStyle}>Name</label><input value={formName} onChange={e => setFormName(e.target.value)} style={inputStyle} placeholder="Name" /></div>
+            {isProduct && <div><label style={labelStyle}>Price (AED)</label><input value={formPrice} onChange={e => setFormPrice(e.target.value)} type="number" style={inputStyle} placeholder="0" /></div>}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1 }}><label style={labelStyle}>Stock count</label><input value={formStock} onChange={e => setFormStock(e.target.value)} type="number" style={inputStyle} /></div>
+              <div style={{ flex: 1 }}><label style={labelStyle}>Unit{!isProduct && <span style={{ color: '#6b7280', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}> (ml, g, pack, bottle…)</span>}</label><input value={formUnit} onChange={e => setFormUnit(e.target.value)} style={inputStyle} placeholder={isProduct ? 'unit' : 'ml / g / pack'} /></div>
+              <div style={{ flex: 1 }}><label style={labelStyle}>Low stock alert</label><input value={formThreshold} onChange={e => setFormThreshold(e.target.value)} type="number" style={inputStyle} /></div>
+            </div>
+            {isProduct && (
+              <div>
+                <label style={labelStyle}>Image</label>
+                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleImageUpload(f) }} />
+                {formImageUrl ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <img src={formImageUrl} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, border: '0.5px solid #e0e0e0' }} />
+                    <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} style={{ fontSize: 12, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '4px 12px', cursor: 'pointer' }}>{uploading ? 'Uploading…' : 'Change'}</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} style={{ fontSize: 12, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '4px 12px', cursor: 'pointer' }}>{uploading ? 'Uploading…' : 'Add image'}</button>
+                )}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <button onClick={handleSave} disabled={saving} style={{ backgroundColor: saving ? '#e0e0e0' : '#034325', color: saving ? '#9ca3af' : '#fff', border: 'none', borderRadius: 6, padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? 'Saving…' : 'Save'}</button>
+              <button onClick={() => { setShowForm(false); setError(null) }} style={{ backgroundColor: 'transparent', color: '#6b7280', border: '0.5px solid #d1d5db', borderRadius: 6, padding: '8px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!showForm && <button onClick={openAdd} style={{ backgroundColor: '#034325', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', marginBottom: 12 }}>+ Add {isProduct ? 'product' : 'supply'}</button>}
+
+      <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, overflowX: 'auto' }}>
+        {loading ? <p style={{ padding: 24, textAlign: 'center', fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p> : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr>
+              {isProduct && <th style={TH}>Image</th>}
+              <th style={TH}>Name</th>
+              {isProduct && <th style={TH}>Price (AED)</th>}
+              <th style={TH}>Stock</th>
+              <th style={TH}>Unit</th>
+              <th style={TH}>Low stock</th>
+              <th style={TH}>Actions</th>
+            </tr></thead>
+            <tbody>
+              {items.length === 0 && <tr><td colSpan={isProduct ? 7 : 5} style={{ ...TD, color: '#6b7280', textAlign: 'center', padding: 20 }}>No items yet</td></tr>}
+              {items.map(item => (
+                <tr key={item.id}>
+                  {isProduct && <td style={TD}>{item.image_url ? <img src={item.image_url} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '0.5px solid #e0e0e0' }} /> : <span style={{ fontSize: 11, color: '#9ca3af' }}>No image</span>}</td>}
+                  <td style={TD}>{item.name}</td>
+                  {isProduct && <td style={TD}>{item.price != null ? item.price.toLocaleString() : '—'}</td>}
+                  <td style={{ ...TD, color: item.stock <= item.low_stock_threshold ? '#991b1b' : '#000' }}>{item.stock}</td>
+                  <td style={TD}>{item.unit}</td>
+                  <td style={TD}>{item.low_stock_threshold}</td>
+                  <td style={TD}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => openEdit(item)} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Edit</button>
+                      <button onClick={() => handleDelete(item.id)} style={{ fontSize: 11, border: '0.5px solid #991b1b', color: '#991b1b', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1707,6 +1928,7 @@ export default function Admin() {
           {activeSection === 'WhatsApp'        && <SectionWhatsApp config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Loyalty points'  && <SectionLoyalty config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Noorie AI'       && <SectionAI config={config} salonId={salonId} salon={{ name: salon.name, city: salon.city, country: salon.country }} onRefresh={fetchAll} />}
+          {activeSection === 'Inventory'       && <SectionInventory salonId={salonId} />}
           {activeSection === 'Expenses'        && <SectionExpenses salonId={salonId} />}
           {activeSection === 'Staff settings'  && <SectionStaffSettings config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Run payroll'     && <SectionPayroll salonId={salonId} />}
