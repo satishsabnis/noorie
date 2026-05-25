@@ -137,7 +137,7 @@ export default function StaffForm() {
 
       if (isEdit && id) {
         const [{ data: staffData }, { data: ssData }, { data: advData }] = await Promise.all([
-          supabase.from('staff').select('id, name, phone, role, status, monthly_salary, commission_pct').eq('id', id).single(),
+          supabase.from('staff').select('id, name, phone, role, status, monthly_salary, commission_pct, pin').eq('id', id).single(),
           supabase.from('staff_services').select('service_id').eq('staff_id', id),
           supabase.from('staff_advances').select('*').eq('staff_id', id).order('created_at', { ascending: false }),
         ])
@@ -151,6 +151,7 @@ export default function StaffForm() {
           setStatus((staffData.status as 'active' | 'suspended') ?? 'active')
           setMonthlySalary(String((staffData.monthly_salary as number | null) ?? 0))
           setCommissionPct(String((staffData.commission_pct as number | null) ?? 0))
+          if (staffData.pin) setPin((staffData.pin as string).split('').slice(0, 5))
         }
 
         setCheckedServices(new Set((ssData ?? []).map(ss => ss.service_id as string)))
@@ -358,6 +359,12 @@ export default function StaffForm() {
             const createResult = await createRes.json()
             if (!createResult.success) throw new Error(createResult.error ?? 'Failed to create staff login account')
           }
+
+          const { error: pinSaveErr } = await supabase
+            .from('staff')
+            .update({ pin: enteredPin })
+            .eq('id', id!)
+          if (pinSaveErr) throw new Error('Failed to save PIN to staff record: ' + pinSaveErr.message)
         }
       }
 
