@@ -35,6 +35,8 @@ export default function Login() {
         return
       }
 
+      signIn(user, staff)
+
       // Fetch salon slug for multi-tenant routing
       const { data: salon, error: salonErr } = await supabase
         .from('salons')
@@ -46,7 +48,6 @@ export default function Login() {
         throw new Error('Salon not found')
       }
 
-      signIn(user, staff)
       navigate(staff.role === 'technician' ? `/${salon.slug}/staff` : '/dashboard')
     } catch (err: any) {
       const msg = err?.message ?? ''
