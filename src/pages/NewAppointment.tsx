@@ -425,7 +425,7 @@ export default function NewAppointment() {
                 <input
                   type="date"
                   value={date}
-                  min={todayStr(tz)}
+                  min="2024-07-01"
                   onChange={e => {
                     const d = e.target.value
                     setDate(d)
