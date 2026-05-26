@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, Routes, Route } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { signInWithMobile, getStaffByUserId } from '../lib/auth'
 import { useAuthStore } from '../stores/authStore'
 import { useSalonTimezone, salonOffsetStr } from '../hooks/useSalonTimezone'
 import { Toast } from '../components/Toast'
@@ -79,35 +80,13 @@ function StaffLogin({ salonId, salonName }: { salonId: string; salonName?: strin
 
     setLoading(true)
     try {
-      const res = await fetch('https://eoxgaawoyftjnjkmjbmk.supabase.co/functions/v1/staff-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, pin: enteredPin, salon_id: salonId }),
-      })
-      const result = await res.json()
-
-      if (!res.ok) {
-        if (res.status === 400) setError('PIN must be 5 digits')
-        else if (res.status === 401) {
-          if (result.error?.includes('not found')) setError('No staff found for this salon')
-          else setError('Invalid phone or PIN')
-        } else setError(result.error ?? 'Sign in failed')
-        return
-      }
-
-      if (!result.session) throw new Error('Login succeeded but no session returned')
-
-      try {
-        const { error: sessionError } = await supabase.auth.setSession(result.session)
-        if (sessionError) throw sessionError
-
-        signIn(result.session.user, result.staff)
-        navigate(`/${slug}/staff`)
-      } catch (postLoginErr: unknown) {
-        setError(postLoginErr instanceof Error ? postLoginErr.message : 'Post-login setup failed')
-      }
+      const data = await signInWithMobile(countryCode, phone, enteredPin)
+      const staffRec = await getStaffByUserId(data.user!.id)
+      if (!staffRec) throw new Error('No staff record found for this account')
+      signIn(data.user!, staffRec)
+      navigate(`/${slug}/staff`)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Connection error, please try again')
+      setError(err instanceof Error ? err.message : 'Invalid phone or PIN')
     } finally {
       setLoading(false)
     }
