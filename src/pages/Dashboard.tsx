@@ -1249,13 +1249,54 @@ export default function Dashboard() {
   const [psProductsLoading, setPsProductsLoading] = useState(false)
   const [psCart,            setPsCart]            = useState<Record<string, number>>({})
   const [psPaymentMethod,   setPsPaymentMethod]   = useState<'Cash' | 'Card' | 'Other'>('Cash')
+  const [psSaving,          setPsSaving]          = useState(false)
+  const [psError,           setPsError]           = useState<string | null>(null)
+  const [psSaleSuccess,     setPsSaleSuccess]     = useState(false)
 
   function openProductSales() {
     setPsStep(1); setPsClientSearch(''); setPsShowDropdown(false)
     setPsSelectedClient(null); setPsCart({}); setPsPaymentMethod('Cash')
+    setPsError(null); setPsSaving(false)
     setShowProductSales(true)
   }
   function closeProductSales() { setShowProductSales(false) }
+
+  async function handleProductSale() {
+    const salonId = staffRecord?.salon_id ?? null
+    setPsSaving(true); setPsError(null)
+    try {
+      const clientId = psSelectedClient?.id === 'no-name' ? null : (psSelectedClient?.id ?? null)
+      const { error: payErr } = await supabase.from('payments').insert({
+        salon_id: salonId, client_id: clientId,
+        amount: psCartTotal, method: psPaymentMethod.toLowerCase(),
+        status: 'completed', reference: 'product_sale',
+      })
+      if (payErr) throw new Error(payErr.message)
+
+      const now = new Date().toISOString()
+      for (const [itemId, qty] of psCartItems) {
+        const { error: txErr } = await supabase.from('inventory_transactions').insert({
+          salon_id: salonId, item_id: itemId, type: 'sale', quantity: qty, created_at: now,
+        })
+        if (txErr) throw new Error(txErr.message)
+        const item = psProducts.find(p => p.id === itemId)
+        if (item) {
+          const { error: updErr } = await supabase
+            .from('inventory_items')
+            .update({ stock_count: item.stockCount - qty })
+            .eq('id', itemId)
+          if (updErr) throw new Error(updErr.message)
+        }
+      }
+      closeProductSales()
+      setPsSaleSuccess(true)
+      setTimeout(() => setPsSaleSuccess(false), 3000)
+    } catch (err) {
+      setPsError(err instanceof Error ? err.message : 'Failed to record sale')
+    } finally {
+      setPsSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (!showProductSales) return
@@ -1683,6 +1724,13 @@ export default function Dashboard() {
 
       <div style={{ marginTop: 52, flex: 1, display: 'flex', flexDirection: 'column' }}>
 
+        {/* ── Sale success banner ── */}
+        {psSaleSuccess && (
+          <div style={{ margin: '8px 16px 0', backgroundColor: '#f0fdf4', border: '0.5px solid #034325', borderRadius: 8, padding: '10px 14px' }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#034325' }}>Sale recorded</p>
+          </div>
+        )}
+
         {/* ── Morning Brief ── */}
         <MorningBrief
           slots={briefSlots}
@@ -1852,7 +1900,10 @@ export default function Dashboard() {
               </div>
 
               {/* Footer buttons */}
-              <div style={{ padding: '12px 20px', borderTop: '0.5px solid #f0f0f0', flexShrink: 0, display: 'flex', gap: 10 }}>
+              <div style={{ padding: '12px 20px', borderTop: '0.5px solid #f0f0f0', flexShrink: 0 }}>
+                {psError && <p style={{ fontSize: 12, color: '#991b1b', margin: '0 0 8px' }}>{psError}</p>}
+              </div>
+              <div style={{ padding: '0 20px 12px', flexShrink: 0, display: 'flex', gap: 10 }}>
                 {psStep === 1 ? (
                   <>
                     <button onClick={closeProductSales} style={{ flex: 1, padding: '9px 0', fontSize: 13, borderRadius: 6, cursor: 'pointer', backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325' }}>Cancel</button>
@@ -1864,11 +1915,12 @@ export default function Dashboard() {
                   </>
                 ) : (
                   <>
-                    <button onClick={() => setPsStep(1)} style={{ flex: 1, padding: '9px 0', fontSize: 13, borderRadius: 6, cursor: 'pointer', backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325' }}>Back</button>
+                    <button onClick={() => setPsStep(1)} disabled={psSaving} style={{ flex: 1, padding: '9px 0', fontSize: 13, borderRadius: 6, cursor: 'pointer', backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325' }}>Back</button>
                     <button
-                      onClick={closeProductSales}
-                      style={{ flex: 2, padding: '9px 0', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: 'pointer', backgroundColor: '#034325', color: '#fff', border: 'none' }}
-                    >Confirm sale</button>
+                      onClick={handleProductSale}
+                      disabled={psSaving}
+                      style={{ flex: 2, padding: '9px 0', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: psSaving ? 'not-allowed' : 'pointer', backgroundColor: psSaving ? '#6b9e87' : '#034325', color: '#fff', border: 'none' }}
+                    >{psSaving ? 'Saving…' : 'Confirm sale'}</button>
                   </>
                 )}
               </div>
