@@ -1748,9 +1748,10 @@ function SectionPayroll({ salonId }: { salonId: string }) {
           const monthly = (s.monthly_salary as number | null) ?? 0
           const pct     = (s.commission_pct as number | null) ?? 0
 
-          const [{ data: apptData }, { data: advData }] = await Promise.all([
+          const [{ data: apptData }, { data: advData }, { data: prodPayData }] = await Promise.all([
             supabase.from('appointments').select('id, payments(amount)').eq('salon_id', salonId).eq('staff_id', sid).eq('status', 'completed').gte('starts_at', periodStart).lt('starts_at', periodEnd),
             supabase.from('staff_advances').select('emi_amount').eq('staff_id', sid).eq('status', 'active'),
+            supabase.from('payments').select('created_at').eq('salon_id', salonId).eq('staff_id', sid).eq('reference', 'product_sale').eq('status', 'completed').gte('created_at', periodStart).lt('created_at', periodEnd),
           ])
 
           const services_revenue   = (apptData ?? []).reduce((sum, a) => {
@@ -1758,7 +1759,29 @@ function SectionPayroll({ salonId }: { salonId: string }) {
             return sum + pays.reduce((s, p) => s + ((p.amount) ?? 0), 0)
           }, 0)
           const advance_deductions = (advData ?? []).reduce((sum, r) => sum + (((r as { emi_amount: number | null }).emi_amount) ?? 0), 0)
-          const commission_earned  = services_revenue * pct / 100
+
+          // Product sale commission: match inventory_transactions by approximate timestamp (±60s)
+          let productSaleCommission = 0
+          if ((prodPayData ?? []).length > 0) {
+            const { data: saleTx } = await supabase
+              .from('inventory_transactions')
+              .select('margin_retained, created_at, inventory_items(commission_pct)')
+              .eq('salon_id', salonId)
+              .eq('type', 'sale')
+              .gte('created_at', periodStart)
+              .lt('created_at', periodEnd)
+            const payTimes = (prodPayData ?? []).map(p => new Date(p.created_at as string).getTime())
+            for (const tx of saleTx ?? []) {
+              const txTime = new Date(tx.created_at as string).getTime()
+              if (payTimes.some(pt => Math.abs(txTime - pt) <= 60000)) {
+                const marginRetained = (tx.margin_retained as number | null) ?? 0
+                const commPct = (tx.inventory_items as unknown as { commission_pct: number | null } | null)?.commission_pct ?? 0
+                productSaleCommission += marginRetained * commPct / 100
+              }
+            }
+          }
+
+          const commission_earned  = services_revenue * pct / 100 + productSaleCommission
           const gross              = monthly + commission_earned
           const net_payable        = gross - advance_deductions
 
