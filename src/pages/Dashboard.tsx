@@ -1722,7 +1722,7 @@ export default function Dashboard() {
 
       {/* ── Sale success toast ── */}
       {psSaleSuccess && (
-        <div style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 300, backgroundColor: '#fff', border: '1.5px solid #034325', borderRadius: 8, padding: '12px 20px', fontSize: 13, fontWeight: 600, color: '#034325', whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.12)' }}>
+        <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 300, backgroundColor: '#fff', border: '1.5px solid #034325', borderRadius: 8, padding: '12px 20px', fontSize: 13, fontWeight: 600, color: '#034325', whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.12)' }}>
           Sale recorded
         </div>
       )}
