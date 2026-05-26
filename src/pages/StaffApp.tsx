@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useSalonTimezone, salonOffsetStr } from '../hooks/useSalonTimezone'
 import { Toast } from '../components/Toast'
 import { useAppointmentSubscription } from '../hooks/useAppointmentSubscription'
+import ProductSaleModal from '../components/ProductSaleModal'
 
 // -- Types --
 interface Appointment {
@@ -274,6 +275,9 @@ function StaffSchedule() {
   const [loading, setLoading] = useState(true)
   const [earnings, setEarnings] = useState(0)
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; appointmentId: string; timestamp: number }>>([])
+  const [showProductSales, setShowProductSales] = useState(false)
+  const [saleSuccess, setSaleSuccess] = useState(false)
+  const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
     if (!staffRecord?.id) return
@@ -373,6 +377,14 @@ function StaffSchedule() {
     setLoading(false)
   }
 
+  useEffect(() => {
+    const salonId = staffRecord?.salon_id
+    if (!salonId) return
+    supabase.from('staff').select('id, name').eq('salon_id', salonId)
+      .eq('status', 'active').neq('role', 'owner').order('name')
+      .then(({ data }) => setStaffList((data ?? []) as { id: string; name: string }[]))
+  }, [staffRecord?.salon_id])
+
   const dismissToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id))
   }
@@ -441,6 +453,14 @@ function StaffSchedule() {
         )}
       </div>
 
+      {/* Record product sale button */}
+      <div style={{ padding: '0 16px 16px' }}>
+        <button
+          onClick={() => setShowProductSales(true)}
+          style={{ width: '100%', padding: '11px 0', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer', backgroundColor: 'transparent', color: '#034325', border: '1.5px solid #034325' }}
+        >Record product sale</button>
+      </div>
+
       {toasts.map(toast => (
         <Toast
           key={toast.id}
@@ -449,6 +469,21 @@ function StaffSchedule() {
           onDismiss={() => dismissToast(toast.id)}
         />
       ))}
+
+      {saleSuccess && (
+        <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 300, backgroundColor: '#fff', border: '1.5px solid #034325', borderRadius: 8, padding: '12px 20px', fontSize: 13, fontWeight: 600, color: '#034325', whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.12)' }}>
+          Sale recorded
+        </div>
+      )}
+
+      {showProductSales && (
+        <ProductSaleModal
+          salonId={staffRecord?.salon_id ?? ''}
+          staffList={staffList}
+          onClose={() => setShowProductSales(false)}
+          onSuccess={() => { setSaleSuccess(true); setTimeout(() => setSaleSuccess(false), 3000) }}
+        />
+      )}
 
       <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
         <p style={{ color: '#9ca3af', fontSize: 10, margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
