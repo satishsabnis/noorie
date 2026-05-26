@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, Routes, Route } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { signInWithMobile, getStaffByUserId } from '../lib/auth'
+import { signInStaff, getStaffByUserId } from '../lib/auth'
 import { useAuthStore } from '../stores/authStore'
 import { useSalonTimezone, salonOffsetStr } from '../hooks/useSalonTimezone'
 import { Toast } from '../components/Toast'
@@ -80,7 +80,7 @@ function StaffLogin({ salonId, salonName }: { salonId: string; salonName?: strin
 
     setLoading(true)
     try {
-      const data = await signInWithMobile(countryCode, phone, enteredPin)
+      const data = await signInStaff(countryCode, phone, enteredPin)
       const staffRec = await getStaffByUserId(data.user!.id)
       if (!staffRec) throw new Error('No staff record found for this account')
       signIn(data.user!, staffRec)
