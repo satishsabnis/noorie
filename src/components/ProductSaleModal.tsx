@@ -8,6 +8,15 @@ interface Props {
   onSuccess: () => void
 }
 
+interface Product {
+  id: string
+  name: string
+  price: number
+  stockCount: number
+  marginPct: number
+  commissionPct: number
+}
+
 export default function ProductSaleModal({ salonId, staffList, onClose, onSuccess }: Props) {
   const [psStep,            setPsStep]            = useState<1 | 2>(1)
   const [psClientSearch,    setPsClientSearch]    = useState('')
@@ -15,9 +24,10 @@ export default function ProductSaleModal({ salonId, staffList, onClose, onSucces
   const [psAllClients,      setPsAllClients]      = useState<{ id: string; name: string }[]>([])
   const [psSelectedClient,  setPsSelectedClient]  = useState<{ id: string; name: string } | null>(null)
   const [psSelectedStaff,   setPsSelectedStaff]   = useState<{ id: string; name: string } | null>(null)
-  const [psProducts,        setPsProducts]        = useState<{ id: string; name: string; price: number; stockCount: number }[]>([])
+  const [psProducts,        setPsProducts]        = useState<Product[]>([])
   const [psProductsLoading, setPsProductsLoading] = useState(false)
   const [psCart,            setPsCart]            = useState<Record<string, number>>({})
+  const [psPrices,          setPsPrices]          = useState<Record<string, number>>({})
   const [psPaymentMethod,   setPsPaymentMethod]   = useState<'Cash' | 'Card' | 'Other'>('Cash')
   const [psSaving,          setPsSaving]          = useState(false)
   const [psError,           setPsError]           = useState<string | null>(null)
@@ -26,12 +36,21 @@ export default function ProductSaleModal({ salonId, staffList, onClose, onSucces
     setPsProductsLoading(true)
     Promise.all([
       supabase.from('clients').select('id, name').eq('salon_id', salonId).order('name'),
-      supabase.from('inventory_items').select('id, name, price, stock_count')
+      supabase.from('inventory_items').select('id, name, price, stock_count, margin_pct, commission_pct')
         .eq('salon_id', salonId).eq('type', 'product').eq('is_active', true).order('name'),
     ]).then(([{ data: clients }, { data: products }]) => {
       setPsAllClients((clients ?? []) as { id: string; name: string }[])
-      setPsProducts(((products ?? []) as { id: string; name: string; price: number | null; stock_count: number }[])
-        .map(p => ({ id: p.id, name: p.name, price: p.price ?? 0, stockCount: p.stock_count })))
+      setPsProducts(((products ?? []) as {
+        id: string; name: string; price: number | null; stock_count: number
+        margin_pct: number | null; commission_pct: number | null
+      }[]).map(p => ({
+        id: p.id,
+        name: p.name,
+        price: p.price ?? 0,
+        stockCount: p.stock_count,
+        marginPct: p.margin_pct ?? 0,
+        commissionPct: p.commission_pct ?? 0,
+      })))
       setPsProductsLoading(false)
     })
   }, [salonId])
@@ -40,20 +59,59 @@ export default function ProductSaleModal({ salonId, staffList, onClose, onSucces
     ? psAllClients.filter(c => c.name.toLowerCase().includes(psClientSearch.toLowerCase()))
     : psAllClients.slice(0, 8)
 
-  const psCartTotal = Object.entries(psCart).reduce((sum, [id, qty]) => {
-    const p = psProducts.find(p => p.id === id)
-    return sum + (p ? p.price * qty : 0)
-  }, 0)
   const psCartItems = Object.entries(psCart).filter(([, qty]) => qty > 0)
+
+  const psCartTotal = psCartItems.reduce((sum, [id, qty]) => {
+    const price = psPrices[id] ?? psProducts.find(p => p.id === id)?.price ?? 0
+    return sum + price * qty
+  }, 0)
+
   const psCanNext = psSelectedClient !== null && psSelectedStaff !== null && psCartItems.length > 0
+
+  function addToCart(p: Product) {
+    setPsCart(prev => ({ ...prev, [p.id]: 1 }))
+    setPsPrices(prev => ({ ...prev, [p.id]: prev[p.id] ?? p.price }))
+  }
+
+  function incrementCart(p: Product) {
+    setPsCart(prev => ({ ...prev, [p.id]: (prev[p.id] ?? 0) + 1 }))
+  }
+
+  function decrementCart(id: string) {
+    setPsCart(prev => {
+      const n = { ...prev }
+      n[id] = Math.max(0, (n[id] ?? 0) - 1)
+      if (n[id] === 0) delete n[id]
+      return n
+    })
+  }
+
+  function decrementCartStep2(id: string) {
+    setPsCart(prev => {
+      const n = { ...prev }
+      n[id] = Math.max(0, (n[id] ?? 0) - 1)
+      if (n[id] === 0) delete n[id]
+      if (Object.keys(n).filter(k => n[k] > 0).length === 0) setPsStep(1)
+      return n
+    })
+  }
+
+  const priceInputStyle: React.CSSProperties = {
+    width: 72, fontSize: 12, border: '0.5px solid #d1d5db', borderRadius: 4,
+    padding: '3px 6px', textAlign: 'right', outline: 'none',
+  }
 
   async function handleProductSale() {
     setPsSaving(true); setPsError(null)
     try {
       const clientId = psSelectedClient?.id === 'no-name' ? null : (psSelectedClient?.id ?? null)
+      const totalAmount = psCartItems.reduce((sum, [id, qty]) => {
+        return sum + (psPrices[id] ?? psProducts.find(p => p.id === id)?.price ?? 0) * qty
+      }, 0)
+
       const { error: payErr } = await supabase.from('payments').insert({
         salon_id: salonId, client_id: clientId,
-        amount: psCartTotal, method: psPaymentMethod.toLowerCase(),
+        amount: totalAmount, method: psPaymentMethod.toLowerCase(),
         status: 'completed', reference: 'product_sale',
         staff_id: psSelectedStaff?.id ?? null,
       })
@@ -61,18 +119,24 @@ export default function ProductSaleModal({ salonId, staffList, onClose, onSucces
 
       const now = new Date().toISOString()
       for (const [itemId, qty] of psCartItems) {
+        const product = psProducts.find(p => p.id === itemId)!
+        const priceSold = psPrices[itemId] ?? product.price
+        const marginAmount = product.price * product.marginPct / 100
+        const discountGiven = Math.max(0, product.price - priceSold)
+        const marginRetained = Math.max(0, marginAmount - discountGiven)
+
         const { error: txErr } = await supabase.from('inventory_transactions').insert({
           salon_id: salonId, item_id: itemId, type: 'sale', quantity: qty, created_at: now,
+          price_sold: priceSold,
+          margin_retained: marginRetained,
         })
         if (txErr) throw new Error(txErr.message)
-        const item = psProducts.find(p => p.id === itemId)
-        if (item) {
-          const { error: updErr } = await supabase
-            .from('inventory_items')
-            .update({ stock_count: item.stockCount - qty })
-            .eq('id', itemId)
-          if (updErr) throw new Error(updErr.message)
-        }
+
+        const { error: updErr } = await supabase
+          .from('inventory_items')
+          .update({ stock_count: product.stockCount - qty })
+          .eq('id', itemId)
+        if (updErr) throw new Error(updErr.message)
       }
       onSuccess()
       onClose()
@@ -181,14 +245,21 @@ export default function ProductSaleModal({ salonId, staffList, onClose, onSucces
                         </div>
                         {qty > 0 ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                            <button onClick={() => setPsCart(prev => { const n = { ...prev }; n[p.id] = Math.max(0, (n[p.id] ?? 0) - 1); if (n[p.id] === 0) delete n[p.id]; return n })} style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: 'pointer', color: '#111' }}>−</button>
+                            <button onClick={() => decrementCart(p.id)} style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: 'pointer', color: '#111' }}>−</button>
                             <span style={{ fontSize: 13, fontWeight: 500, color: '#111', minWidth: 20, textAlign: 'center' }}>{qty}</span>
-                            <button disabled={outOfStock} onClick={() => !outOfStock && setPsCart(prev => ({ ...prev, [p.id]: (prev[p.id] ?? 0) + 1 }))} style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: outOfStock ? 'not-allowed' : 'pointer', color: '#111' }}>+</button>
+                            <button disabled={outOfStock} onClick={() => !outOfStock && incrementCart(p)} style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: outOfStock ? 'not-allowed' : 'pointer', color: '#111' }}>+</button>
+                            <input
+                              type="number"
+                              value={psPrices[p.id] ?? p.price}
+                              min={0}
+                              onChange={e => setPsPrices(prev => ({ ...prev, [p.id]: parseFloat(e.target.value) || 0 }))}
+                              style={priceInputStyle}
+                            />
                           </div>
                         ) : (
                           <button
                             disabled={outOfStock}
-                            onClick={() => !outOfStock && setPsCart(prev => ({ ...prev, [p.id]: 1 }))}
+                            onClick={() => !outOfStock && addToCart(p)}
                             style={{ backgroundColor: outOfStock ? '#e0e0e0' : '#034325', color: '#fff', border: 'none', borderRadius: 6, width: 28, height: 28, fontSize: 18, lineHeight: 1, cursor: outOfStock ? 'not-allowed' : 'pointer', flexShrink: 0 }}
                           >+</button>
                         )}
@@ -214,17 +285,12 @@ export default function ProductSaleModal({ salonId, staffList, onClose, onSucces
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>
                 {psCartItems.map(([id, qty]) => {
                   const p = psProducts.find(p => p.id === id)!
+                  const unitPrice = psPrices[id] ?? p.price
                   return (
                     <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '0.5px solid #f0f0f0' }}>
                       <span style={{ flex: 1, fontSize: 13, color: '#111' }}>{p.name}</span>
                       <button
-                        onClick={() => setPsCart(prev => {
-                          const n = { ...prev }
-                          n[id] = Math.max(0, (n[id] ?? 0) - 1)
-                          if (n[id] === 0) delete n[id]
-                          if (Object.keys(n).filter(k => n[k] > 0).length === 0) setPsStep(1)
-                          return n
-                        })}
+                        onClick={() => decrementCartStep2(id)}
                         style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: 'pointer', color: '#111', flexShrink: 0 }}
                       >−</button>
                       <span style={{ fontSize: 13, fontWeight: 500, color: '#111', minWidth: 20, textAlign: 'center' }}>{qty}</span>
@@ -232,7 +298,14 @@ export default function ProductSaleModal({ salonId, staffList, onClose, onSucces
                         onClick={() => setPsCart(prev => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }))}
                         style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: 'pointer', color: '#111', flexShrink: 0 }}
                       >+</button>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#034325', minWidth: 64, textAlign: 'right' }}>AED {(p.price * qty).toFixed(2)}</span>
+                      <input
+                        type="number"
+                        value={unitPrice}
+                        min={0}
+                        onChange={e => setPsPrices(prev => ({ ...prev, [id]: parseFloat(e.target.value) || 0 }))}
+                        style={priceInputStyle}
+                      />
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#034325', minWidth: 64, textAlign: 'right' }}>AED {(unitPrice * qty).toFixed(2)}</span>
                     </div>
                   )
                 })}
