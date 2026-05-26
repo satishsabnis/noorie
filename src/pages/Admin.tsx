@@ -748,6 +748,9 @@ function SectionInventory({ salonId }: { salonId: string }) {
   const [stockInQty, setStockInQty] = useState('')
   const [stockInDate, setStockInDate] = useState('')
   const [stockInSaving, setStockInSaving] = useState(false)
+  const [showMonthEnd, setShowMonthEnd] = useState(false)
+  const [monthEndCounts, setMonthEndCounts] = useState<Record<string, string>>({})
+  const [monthEndSaving, setMonthEndSaving] = useState(false)
 
   async function load(type: 'product' | 'supply') {
     setLoading(true)
@@ -843,6 +846,24 @@ function SectionInventory({ salonId }: { salonId: string }) {
     load('supply')
   }
 
+  async function handleMonthEnd() {
+    setMonthEndSaving(true)
+    const now = new Date().toISOString()
+    const entries = Object.entries(monthEndCounts).filter(([, v]) => v !== '')
+    for (const [itemId, val] of entries) {
+      const count = parseInt(val, 10)
+      if (isNaN(count)) continue
+      await supabase.from('inventory_transactions').insert({
+        type: 'stock_take', item_id: itemId, salon_id: salonId, quantity: count, created_at: now,
+      })
+      await supabase.from('inventory_items').update({ stock_count: count }).eq('id', itemId)
+    }
+    setShowMonthEnd(false)
+    setMonthEndCounts({})
+    setMonthEndSaving(false)
+    load('supply')
+  }
+
   const TH: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', padding: '8px 10px', borderBottom: '0.5px solid #e0e0e0' }
   const TD: React.CSSProperties = { fontSize: 12, color: '#000', padding: '8px 10px', borderBottom: '0.5px solid #f0f0f0', verticalAlign: 'middle' }
   const isProduct = view === 'products'
@@ -863,6 +884,38 @@ function SectionInventory({ salonId }: { salonId: string }) {
 
   return (
     <div>
+      {/* Month-end count modal */}
+      {showMonthEnd && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, maxWidth: 420, width: '90%', padding: 24, maxHeight: '70vh', overflowY: 'auto' }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#111', margin: '0 0 16px' }}>Month-end count</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+              {items.map(item => (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ fontSize: 13, color: '#111' }}>{item.name}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="—"
+                    value={monthEndCounts[item.id] ?? ''}
+                    onChange={e => setMonthEndCounts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                    style={{ ...inputStyle, width: 90, textAlign: 'right' }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={handleMonthEnd} disabled={monthEndSaving} style={{ backgroundColor: '#034325', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', flex: 1 }}>
+                {monthEndSaving ? 'Saving…' : 'Save count'}
+              </button>
+              <button onClick={() => { setShowMonthEnd(false); setMonthEndCounts({}) }} style={{ backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325', borderRadius: 6, padding: '8px 18px', fontSize: 13, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stock In modal */}
       {stockInItem && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -930,7 +983,12 @@ function SectionInventory({ salonId }: { salonId: string }) {
         </div>
       )}
 
-      {!showForm && <button onClick={openAdd} style={{ backgroundColor: '#034325', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', marginBottom: 12 }}>+ Add {isProduct ? 'product' : 'supply'}</button>}
+      {!showForm && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+          <button onClick={openAdd} style={{ backgroundColor: '#034325', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+ Add {isProduct ? 'product' : 'supply'}</button>
+          {!isProduct && <button onClick={() => { setMonthEndCounts({}); setShowMonthEnd(true) }} style={{ backgroundColor: 'transparent', color: '#034325', border: '1px solid #034325', borderRadius: 6, padding: '8px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Month-end count</button>}
+        </div>
+      )}
 
       <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, overflowX: 'auto' }}>
         {loading ? <p style={{ padding: 24, textAlign: 'center', fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p> : (
