@@ -263,6 +263,7 @@ export default function NewAppointment() {
   ])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
 
   useEffect(() => {
     const salonId = staffRecord?.salon_id
@@ -335,13 +336,8 @@ export default function NewAppointment() {
     }))
   }
 
-  const handleBook = async () => {
+  const doBook = async () => {
     try {
-      if (!canBook || !client) return
-      if (date < todayStr(tz)) {
-        setError('Cannot book appointments for past dates')
-        return
-      }
       setSaving(true)
       setError(null)
 
@@ -355,7 +351,7 @@ export default function NewAppointment() {
         .from('appointments')
         .insert({
           salon_id: salonId,
-          client_id: client.id,
+          client_id: client!.id,
           staff_id: apptStaffId,
           starts_at: startsAt,
           ends_at: endsAt,
@@ -387,9 +383,63 @@ export default function NewAppointment() {
     }
   }
 
+  const handleBook = async () => {
+    if (!canBook || !client) return
+    if (date < todayStr(tz)) {
+      setError('Cannot book appointments for past dates')
+      return
+    }
+    setError(null)
+
+    const salonId = staffRecord?.salon_id ?? null
+    const offset = salonOffsetStr(tz)
+    const { data: existing } = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('salon_id', salonId)
+      .eq('client_id', client.id)
+      .gte('starts_at', `${date}T00:00:00${offset}`)
+      .lte('starts_at', `${date}T23:59:59${offset}`)
+      .neq('status', 'cancelled')
+      .limit(1)
+
+    if (existing && existing.length > 0) {
+      setShowDuplicateModal(true)
+      return
+    }
+
+    await doBook()
+  }
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
       <Topbar />
+
+      {/* Duplicate appointment modal */}
+      {showDuplicateModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, maxWidth: 380, width: '90%', padding: 24 }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#111', margin: '0 0 10px' }}>Duplicate appointment</p>
+            <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 20px' }}>
+              This client already has an appointment on this date. Do you want to continue or go back to edit?
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setShowDuplicateModal(false); doBook() }}
+                style={{ backgroundColor: '#034325', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', flex: 1 }}
+              >
+                Continue
+              </button>
+              <button
+                onClick={() => setShowDuplicateModal(false)}
+                style={{ backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325', borderRadius: 6, padding: '8px 18px', fontSize: 13, cursor: 'pointer' }}
+              >
+                Edit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginTop: 52, flex: 1, padding: '20px 16px 32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
