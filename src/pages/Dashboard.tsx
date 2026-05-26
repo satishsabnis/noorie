@@ -1695,18 +1695,6 @@ export default function Dashboard() {
           tz={tz}
         />
 
-        {/* ── Product Sales tile ── */}
-        <div
-          onClick={openProductSales}
-          style={{
-            backgroundColor: '#034325', borderRadius: 10, padding: '14px 20px',
-            margin: '0 16px 14px', borderLeft: '3px solid #C9A227', cursor: 'pointer',
-          }}
-        >
-          <p style={{ fontSize: 13, fontWeight: 500, color: '#ffffff', margin: '0 0 4px' }}>Product Sales</p>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', margin: 0 }}>Record an in-salon product purchase</p>
-        </div>
-
         {/* ── Product Sales modal ── */}
         {showProductSales && (
           <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1896,6 +1884,14 @@ export default function Dashboard() {
             value={<Clickable onClick={() => pushDrilldown('revenue-today')}>AED {summaryRevenue.total.toLocaleString()}</Clickable>}
             sub={<span style={{ color: '#6b7280', fontSize: 11 }}>{summaryRevenue.paymentsCount} payments collected</span>}
           />
+          <div
+            onClick={openProductSales}
+            style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '0.5px solid #e0e0e0', padding: '12px 16px', flex: 1, cursor: 'pointer' }}
+          >
+            <p style={{ color: '#6b7280', fontSize: 11, margin: '0 0 4px' }}>Product Sales</p>
+            <p style={{ color: '#034325', fontSize: 22, fontWeight: 500, margin: '0 0 4px', lineHeight: 1.2 }}>Record a sale</p>
+            <p style={{ color: '#6b7280', fontSize: 11, margin: 0 }}>Tap to open</p>
+          </div>
           <SummaryCard
             label="Top runner today"
             value={<Clickable onClick={() => pushDrilldown('toprunner')}><span style={{ fontSize: 18 }}>{summaryTopRunner?.name ?? '—'}</span></Clickable>}
