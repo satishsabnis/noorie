@@ -738,7 +738,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
   const [formName, setFormName] = useState('')
   const [formPrice, setFormPrice] = useState('')
   const [formStock, setFormStock] = useState('0')
-  const [formUnit, setFormUnit] = useState('unit')
+  const [formUnit, setFormUnit] = useState('ml')
   const [formThreshold, setFormThreshold] = useState('5')
   const [formImageUrl, setFormImageUrl] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -769,7 +769,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
 
   function openAdd() {
     setEditItem(null); setFormName(''); setFormPrice(''); setFormStock('0')
-    setFormUnit('unit'); setFormThreshold('5'); setFormImageUrl(null); setShowForm(true)
+    setFormUnit('ml'); setFormThreshold('5'); setFormImageUrl(null); setShowForm(true)
   }
   function openEdit(item: InventoryItem) {
     setEditItem(item); setFormName(item.name)
@@ -829,7 +829,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
     if (!qty || qty <= 0) return
     setStockInSaving(true)
     const { error: txErr } = await supabase.from('inventory_transactions').insert({
-      type: 'stock_in',
+      type: 'restock',
       item_id: stockInItem.id,
       salon_id: salonId,
       quantity: qty,
@@ -854,7 +854,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
       const count = parseInt(val, 10)
       if (isNaN(count)) continue
       await supabase.from('inventory_transactions').insert({
-        type: 'stock_take', item_id: itemId, salon_id: salonId, quantity: count, created_at: now,
+        type: 'adjustment', item_id: itemId, salon_id: salonId, quantity: count, created_at: now,
       })
       await supabase.from('inventory_items').update({ stock_count: count }).eq('id', itemId)
     }
@@ -920,7 +920,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
       {stockInItem && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: 12, maxWidth: 380, width: '90%', padding: 24 }}>
-            <p style={{ fontSize: 14, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>Stock in</p>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>New Stock</p>
             <p style={{ fontSize: 13, color: '#034325', fontWeight: 500, margin: '0 0 16px' }}>{stockInItem.name}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
               <div>
@@ -958,7 +958,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
             {isProduct && <div><label style={labelStyle}>Price (AED)</label><input value={formPrice} onChange={e => setFormPrice(e.target.value)} type="number" style={inputStyle} placeholder="0" /></div>}
             <div style={{ display: 'flex', gap: 10 }}>
               <div style={{ flex: 1 }}><label style={labelStyle}>Stock count</label><input value={formStock} onChange={e => setFormStock(e.target.value)} type="number" style={inputStyle} /></div>
-              <div style={{ flex: 1 }}><label style={labelStyle}>Unit{!isProduct && <span style={{ color: '#6b7280', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}> (ml, g, pack, bottle…)</span>}</label><input value={formUnit} onChange={e => setFormUnit(e.target.value)} style={inputStyle} placeholder={isProduct ? 'unit' : 'ml / g / pack'} /></div>
+              <div style={{ flex: 1 }}><label style={labelStyle}>Unit</label>{isProduct ? <input value={formUnit} onChange={e => setFormUnit(e.target.value)} style={inputStyle} placeholder="unit" /> : <select value={formUnit} onChange={e => setFormUnit(e.target.value)} style={inputStyle}>{['ml','L','gms','kg','pcs','sachets','bottles','tubes'].map(u => <option key={u} value={u}>{u}</option>)}</select>}</div>
               <div style={{ flex: 1 }}><label style={labelStyle}>Low stock alert</label><input value={formThreshold} onChange={e => setFormThreshold(e.target.value)} type="number" style={inputStyle} /></div>
             </div>
             {isProduct && (
@@ -999,7 +999,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
               {isProduct && <th style={TH}>Price (AED)</th>}
               <th style={TH}>Stock</th>
               <th style={TH}>Unit</th>
-              <th style={TH}>Low stock</th>
+              <th style={TH}>Reorder level</th>
               <th style={TH}>Actions</th>
             </tr></thead>
             <tbody>
@@ -1016,7 +1016,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => openEdit(item)} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Edit</button>
                       <button onClick={() => handleDelete(item.id)} style={{ fontSize: 11, border: '0.5px solid #991b1b', color: '#991b1b', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Delete</button>
-                      {!isProduct && <button onClick={() => openStockIn(item)} style={{ fontSize: 11, border: '0.5px solid #C9A227', color: '#C9A227', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Stock in</button>}
+                      {!isProduct && <button onClick={() => openStockIn(item)} style={{ fontSize: 11, border: '0.5px solid #C9A227', color: '#C9A227', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>New Stock</button>}
                     </div>
                   </td>
                 </tr>
