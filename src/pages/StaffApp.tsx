@@ -459,6 +459,7 @@ function StaffSchedule() {
         <ProductSaleModal
           salonId={staffRecord?.salon_id ?? ''}
           staffList={staffList}
+          loggedInStaffId={staffRecord?.id ?? null}
           onClose={() => setShowProductSales(false)}
           onSuccess={() => { setSaleSuccess(true); setTimeout(() => setSaleSuccess(false), 3000) }}
         />

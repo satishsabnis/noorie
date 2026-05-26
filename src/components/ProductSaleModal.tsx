@@ -6,6 +6,7 @@ interface Props {
   staffList: { id: string; name: string }[]
   onClose: () => void
   onSuccess: () => void
+  loggedInStaffId?: string | null
 }
 
 interface Product {
@@ -17,7 +18,7 @@ interface Product {
   commissionPct: number
 }
 
-export default function ProductSaleModal({ salonId, staffList, onClose, onSuccess }: Props) {
+export default function ProductSaleModal({ salonId, staffList, onClose, onSuccess, loggedInStaffId }: Props) {
   const [psStep,            setPsStep]            = useState<1 | 2>(1)
   const [psClientSearch,    setPsClientSearch]    = useState('')
   const [psShowDropdown,    setPsShowDropdown]    = useState(false)
@@ -55,9 +56,15 @@ export default function ProductSaleModal({ salonId, staffList, onClose, onSucces
     })
   }, [salonId])
 
+  useEffect(() => {
+    if (!loggedInStaffId || staffList.length === 0) return
+    const found = staffList.find(s => s.id === loggedInStaffId)
+    if (found) setPsSelectedStaff(found)
+  }, [loggedInStaffId, staffList])
+
   const psFilteredClients = psClientSearch.trim()
     ? psAllClients.filter(c => c.name.toLowerCase().includes(psClientSearch.toLowerCase()))
-    : psAllClients.slice(0, 8)
+    : psAllClients
 
   const psCartItems = Object.entries(psCart).filter(([, qty]) => qty > 0)
 
@@ -211,19 +218,25 @@ export default function ProductSaleModal({ salonId, staffList, onClose, onSucces
               {/* Staff */}
               <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Staff</p>
               <div style={{ marginBottom: 14 }}>
-                <select
-                  value={psSelectedStaff?.id ?? ''}
-                  onChange={e => {
-                    const found = staffList.find(s => s.id === e.target.value)
-                    setPsSelectedStaff(found ?? null)
-                  }}
-                  style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, border: '0.5px solid #d1d5db', borderRadius: 6, padding: '8px 10px', outline: 'none', backgroundColor: '#fff' }}
-                >
-                  <option value="">Select staff…</option>
-                  {staffList.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                {loggedInStaffId ? (
+                  <span style={{ backgroundColor: '#f0fdf4', color: '#034325', border: '0.5px solid #034325', fontSize: 12, padding: '4px 10px', borderRadius: 20 }}>
+                    {psSelectedStaff?.name ?? '…'}
+                  </span>
+                ) : (
+                  <select
+                    value={psSelectedStaff?.id ?? ''}
+                    onChange={e => {
+                      const found = staffList.find(s => s.id === e.target.value)
+                      setPsSelectedStaff(found ?? null)
+                    }}
+                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, border: '0.5px solid #d1d5db', borderRadius: 6, padding: '8px 10px', outline: 'none', backgroundColor: '#fff' }}
+                  >
+                    <option value="">Select staff…</option>
+                    {staffList.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Products */}
