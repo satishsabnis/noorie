@@ -494,6 +494,19 @@ function buildYTDPDF(opts: {
 </html>`
 }
 
+interface ProductSaleRow {
+  id: string
+  date: string
+  clientName: string
+  staffName: string
+  productName: string
+  qty: number
+  priceSold: number
+  marginRetained: number
+  commissionPct: number
+  commission: number
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Reports() {
@@ -507,7 +520,7 @@ export default function Reports() {
   // ── Navigation ──────────────────────────────────────────────────────────
   const location = useLocation()
   const hasMounted = useRef(false)
-  const [view,          setView]          = useState<'landing' | 'finance' | 'payroll' | 'ytd' | 'toprunner' | 'topclients' | 'inventory'>('landing')
+  const [view,          setView]          = useState<'landing' | 'finance' | 'payroll' | 'ytd' | 'toprunner' | 'topclients' | 'inv-landing' | 'inv-product-sales' | 'inv-supplies'>('landing')
   const [showModal,     setShowModal]     = useState<'finance' | 'payroll' | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
   const [selectedYear,  setSelectedYear]  = useState<number>(new Date().getFullYear())
@@ -521,6 +534,10 @@ export default function Reports() {
   const [invYear,        setInvYear]        = useState<number>(new Date().getFullYear())
   const [invData,        setInvData]        = useState<{ itemId: string; name: string; openingStock: number; newStock: number; closingCount: number | null; consumed: number | null }[]>([])
   const [invLoading,     setInvLoading]     = useState(false)
+  const [psSalesMonth,   setPsSalesMonth]   = useState<number>(new Date().getMonth() + 1)
+  const [psSalesYear,    setPsSalesYear]    = useState<number>(new Date().getFullYear())
+  const [psSalesData,    setPsSalesData]    = useState<ProductSaleRow[]>([])
+  const [psSalesLoading, setPsSalesLoading] = useState(false)
 
   // Reset to landing when the Reports nav link is tapped while already on /reports
   useEffect(() => {
@@ -538,10 +555,15 @@ export default function Reports() {
     if (view === 'topclients') fetchTopClients(topClientsTab)
   }, [view, topClientsTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Refetch inventory consumption whenever the view becomes 'inventory' or month/year changes
+  // Refetch inventory consumption whenever the view becomes 'inv-supplies' or month/year changes
   useEffect(() => {
-    if (view === 'inventory') fetchInventoryConsumption(invMonth, invYear)
+    if (view === 'inv-supplies') fetchInventoryConsumption(invMonth, invYear)
   }, [view, invMonth, invYear]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refetch product sales whenever the view becomes 'inv-product-sales' or month/year changes
+  useEffect(() => {
+    if (view === 'inv-product-sales') fetchProductSales(psSalesMonth, psSalesYear)
+  }, [view, psSalesMonth, psSalesYear]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Config ──────────────────────────────────────────────────────────────
   const [fyStartMonth,            setFyStartMonth]            = useState<number | null>(null)
@@ -826,6 +848,73 @@ export default function Reports() {
 
     setInvData(rows)
     setInvLoading(false)
+  }
+
+  // ── Product Sales fetch ─────────────────────────────────────────────────
+  async function fetchProductSales(month: number, year: number) {
+    if (!salonId) return
+    setPsSalesLoading(true)
+    const monthStart = new Date(year, month - 1, 1).toISOString()
+    const monthEnd   = new Date(year, month, 1).toISOString()
+
+    const [{ data: txns }, { data: pays }] = await Promise.all([
+      supabase
+        .from('inventory_transactions')
+        .select('id, item_id, quantity, price_sold, margin_retained, created_at, inventory_items(name, commission_pct)')
+        .eq('salon_id', salonId)
+        .eq('type', 'sale')
+        .gte('created_at', monthStart)
+        .lt('created_at', monthEnd)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('payments')
+        .select('id, client_id, staff_id, created_at')
+        .eq('salon_id', salonId)
+        .eq('reference', 'product_sale')
+        .eq('status', 'completed')
+        .gte('created_at', monthStart)
+        .lt('created_at', monthEnd),
+    ])
+
+    const clientIds = [...new Set((pays ?? []).map(p => p.client_id as string).filter(Boolean))]
+    const staffIds  = [...new Set((pays ?? []).map(p => p.staff_id  as string).filter(Boolean))]
+
+    const [{ data: clientsData }, { data: staffData }] = await Promise.all([
+      clientIds.length > 0
+        ? supabase.from('clients').select('id, name').in('id', clientIds)
+        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      staffIds.length > 0
+        ? supabase.from('staff').select('id, name').in('id', staffIds)
+        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    ])
+
+    const clientMap: Record<string, string> = {}
+    for (const c of clientsData ?? []) clientMap[(c as { id: string; name: string }).id] = (c as { id: string; name: string }).name
+    const staffMap: Record<string, string> = {}
+    for (const s of staffData ?? []) staffMap[(s as { id: string; name: string }).id] = (s as { id: string; name: string }).name
+
+    const rows: ProductSaleRow[] = (txns ?? []).map(tx => {
+      const txTime = new Date(tx.created_at as string).getTime()
+      const matchedPay = (pays ?? []).find(p => Math.abs(new Date(p.created_at as string).getTime() - txTime) <= 60000)
+      const item = tx.inventory_items as unknown as { name: string; commission_pct: number | null } | null
+      const commPct = item?.commission_pct ?? 0
+      const marginRetained = (tx.margin_retained as number | null) ?? 0
+      return {
+        id:             tx.id as string,
+        date:           tx.created_at as string,
+        clientName:     matchedPay ? (clientMap[matchedPay.client_id as string] ?? 'No Name') : 'No Name',
+        staffName:      matchedPay ? (staffMap[matchedPay.staff_id   as string] ?? '—') : '—',
+        productName:    item?.name ?? '—',
+        qty:            (tx.quantity as number) ?? 0,
+        priceSold:      (tx.price_sold as number | null) ?? 0,
+        marginRetained,
+        commissionPct:  commPct,
+        commission:     marginRetained * commPct / 100,
+      }
+    })
+
+    setPsSalesData(rows)
+    setPsSalesLoading(false)
   }
 
   // ── Finance fetch ───────────────────────────────────────────────────────
@@ -1157,15 +1246,15 @@ export default function Reports() {
               )}
               {role === 'owner' && (
                 <div
-                  onClick={() => setView('inventory')}
+                  onClick={() => setView('inv-landing')}
                   style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '14px 8px', cursor: 'pointer',
                   }}
                 >
                   <div>
-                    <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Inventory Consumption</p>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Opening stock, restocks, closing count, consumed per month</p>
+                    <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Inventory Report</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Product sales and salon supply consumption</p>
                   </div>
                   <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
                 </div>
@@ -1701,12 +1790,116 @@ export default function Reports() {
           )
         })()}
 
-        {/* ── Inventory Consumption ── */}
-        {view === 'inventory' && role === 'owner' && (
+        {/* ── Inventory Report Sub-landing ── */}
+        {view === 'inv-landing' && role === 'owner' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <button onClick={() => setView('landing')} style={backBtn}>Back</button>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#111' }}>Inventory Report</p>
+            </div>
+            <div style={cardStyle}>
+              <div
+                onClick={() => setView('inv-product-sales')}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 8px', cursor: 'pointer', borderBottom: '0.5px solid #f0f0f0' }}
+              >
+                <div>
+                  <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Product Sales</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Sales transactions, margin, and commission</p>
+                </div>
+                <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
+              </div>
+              <div
+                onClick={() => setView('inv-supplies')}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 8px', cursor: 'pointer' }}
+              >
+                <div>
+                  <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Salon Supplies</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Opening stock, restocks, closing count, consumed per month</p>
+                </div>
+                <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Product Sales Report ── */}
+        {view === 'inv-product-sales' && role === 'owner' && (() => {
+          const totQty      = psSalesData.reduce((s, r) => s + r.qty, 0)
+          const totPrice    = psSalesData.reduce((s, r) => s + r.priceSold * r.qty, 0)
+          const totMargin   = psSalesData.reduce((s, r) => s + r.marginRetained, 0)
+          const totComm     = psSalesData.reduce((s, r) => s + r.commission, 0)
+          return (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                <button onClick={() => setView('inv-landing')} style={backBtn}>Back</button>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#111' }}>
+                  Product Sales — {MONTHS[psSalesMonth - 1]} {psSalesYear}
+                </p>
+                <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', alignItems: 'center' }}>
+                  <select value={psSalesMonth} onChange={e => setPsSalesMonth(Number(e.target.value))} style={selStyle}>
+                    {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                  </select>
+                  <select value={psSalesYear} onChange={e => setPsSalesYear(Number(e.target.value))} style={selStyle}>
+                    {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {psSalesLoading ? (
+                <div style={cardStyle}><p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading...</p></div>
+              ) : psSalesData.length === 0 ? (
+                <div style={cardStyle}><p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>No product sales for this period.</p></div>
+              ) : (
+                <div style={cardStyle}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          <th style={TH}>Date</th>
+                          <th style={TH}>Client</th>
+                          <th style={TH}>Staff</th>
+                          <th style={TH}>Product</th>
+                          <th style={{ ...TH, textAlign: 'right' }}>Qty</th>
+                          <th style={{ ...TH, textAlign: 'right' }}>Price Sold</th>
+                          <th style={{ ...TH, textAlign: 'right' }}>Margin Retained</th>
+                          <th style={{ ...TH, textAlign: 'right' }}>Commission</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {psSalesData.map(row => (
+                          <tr key={row.id}>
+                            <td style={TD}>{formatDate(row.date)}</td>
+                            <td style={TD}>{row.clientName}</td>
+                            <td style={TD}>{row.staffName}</td>
+                            <td style={TD}>{row.productName}</td>
+                            <td style={{ ...TD, textAlign: 'right' }}>{row.qty}</td>
+                            <td style={{ ...TD, textAlign: 'right' }}>{formatMoney(row.priceSold * row.qty)}</td>
+                            <td style={{ ...TD, textAlign: 'right' }}>{formatMoney(row.marginRetained)}</td>
+                            <td style={{ ...TD, textAlign: 'right', color: '#034325' }}>{formatMoney(row.commission)}</td>
+                          </tr>
+                        ))}
+                        <tr>
+                          <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }} colSpan={4}>Total</td>
+                          <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>{totQty}</td>
+                          <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>{formatMoney(totPrice)}</td>
+                          <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>{formatMoney(totMargin)}</td>
+                          <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none', color: '#034325' }}>{formatMoney(totComm)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* ── Salon Supplies (Inventory Consumption) ── */}
+        {view === 'inv-supplies' && role === 'owner' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-              <button onClick={() => setView('landing')} style={backBtn}>Back</button>
-              <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#111' }}>Inventory Consumption</p>
+              <button onClick={() => setView('inv-landing')} style={backBtn}>Back</button>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#111' }}>Salon Supplies</p>
               <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', alignItems: 'center' }}>
                 <select value={invMonth} onChange={e => setInvMonth(Number(e.target.value))} style={selStyle}>
                   {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
