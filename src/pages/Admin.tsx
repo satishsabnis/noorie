@@ -744,6 +744,10 @@ function SectionInventory({ salonId }: { salonId: string }) {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
+  const [stockInItem, setStockInItem] = useState<InventoryItem | null>(null)
+  const [stockInQty, setStockInQty] = useState('')
+  const [stockInDate, setStockInDate] = useState('')
+  const [stockInSaving, setStockInSaving] = useState(false)
 
   async function load(type: 'product' | 'supply') {
     setLoading(true)
@@ -810,6 +814,35 @@ function SectionInventory({ salonId }: { salonId: string }) {
     load(type)
   }
 
+  function openStockIn(item: InventoryItem) {
+    setStockInItem(item)
+    setStockInQty('')
+    setStockInDate(new Date().toISOString().slice(0, 10))
+  }
+
+  async function handleStockIn() {
+    if (!stockInItem) return
+    const qty = parseInt(stockInQty, 10)
+    if (!qty || qty <= 0) return
+    setStockInSaving(true)
+    const { error: txErr } = await supabase.from('inventory_transactions').insert({
+      type: 'stock_in',
+      item_id: stockInItem.id,
+      salon_id: salonId,
+      quantity: qty,
+      created_at: stockInDate,
+    })
+    if (txErr) { setError(txErr.message); setStockInSaving(false); return }
+    const { error: updErr } = await supabase
+      .from('inventory_items')
+      .update({ stock_count: stockInItem.stock_count + qty })
+      .eq('id', stockInItem.id)
+    if (updErr) { setError(updErr.message); setStockInSaving(false); return }
+    setStockInItem(null)
+    setStockInSaving(false)
+    load('supply')
+  }
+
   const TH: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', padding: '8px 10px', borderBottom: '0.5px solid #e0e0e0' }
   const TD: React.CSSProperties = { fontSize: 12, color: '#000', padding: '8px 10px', borderBottom: '0.5px solid #f0f0f0', verticalAlign: 'middle' }
   const isProduct = view === 'products'
@@ -830,6 +863,34 @@ function SectionInventory({ salonId }: { salonId: string }) {
 
   return (
     <div>
+      {/* Stock In modal */}
+      {stockInItem && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, maxWidth: 380, width: '90%', padding: 24 }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#111', margin: '0 0 4px' }}>Stock in</p>
+            <p style={{ fontSize: 13, color: '#034325', fontWeight: 500, margin: '0 0 16px' }}>{stockInItem.name}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+              <div>
+                <label style={labelStyle}>Quantity</label>
+                <input type="number" value={stockInQty} onChange={e => setStockInQty(e.target.value)} style={inputStyle} placeholder="0" min="1" />
+              </div>
+              <div>
+                <label style={labelStyle}>Date</label>
+                <input type="date" value={stockInDate} onChange={e => setStockInDate(e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={handleStockIn} disabled={stockInSaving} style={{ backgroundColor: '#034325', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', flex: 1 }}>
+                {stockInSaving ? 'Saving…' : 'Add stock'}
+              </button>
+              <button onClick={() => setStockInItem(null)} style={{ backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325', borderRadius: 6, padding: '8px 18px', fontSize: 13, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <button onClick={() => { setView('choose'); setShowForm(false); setError(null) }} style={{ background: 'none', border: '1px solid #034325', borderRadius: 6, color: '#034325', fontSize: 12, padding: '4px 12px', cursor: 'pointer' }}>Back</button>
         <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: 0 }}>{isProduct ? 'Products' : 'Salon Supplies'}</p>
@@ -897,6 +958,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => openEdit(item)} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Edit</button>
                       <button onClick={() => handleDelete(item.id)} style={{ fontSize: 11, border: '0.5px solid #991b1b', color: '#991b1b', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Delete</button>
+                      {!isProduct && <button onClick={() => openStockIn(item)} style={{ fontSize: 11, border: '0.5px solid #f97316', color: '#f97316', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Stock in</button>}
                     </div>
                   </td>
                 </tr>
