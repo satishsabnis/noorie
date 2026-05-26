@@ -506,7 +506,7 @@ export default function Reports() {
   // ── Navigation ──────────────────────────────────────────────────────────
   const location = useLocation()
   const hasMounted = useRef(false)
-  const [view,          setView]          = useState<'landing' | 'finance' | 'payroll' | 'ytd' | 'toprunner' | 'topclients'>('landing')
+  const [view,          setView]          = useState<'landing' | 'finance' | 'payroll' | 'ytd' | 'toprunner' | 'topclients' | 'inventory'>('landing')
   const [showModal,     setShowModal]     = useState<'finance' | 'payroll' | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
   const [selectedYear,  setSelectedYear]  = useState<number>(new Date().getFullYear())
@@ -516,6 +516,10 @@ export default function Reports() {
   const [topClientsTab,  setTopClientsTab]  = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly')
   const [topClientsData, setTopClientsData] = useState<{ name: string; visits: number; spend: number; last_visit: string }[]>([])
   const [topClientsLoading, setTopClientsLoading] = useState(false)
+  const [invMonth,       setInvMonth]       = useState<number>(new Date().getMonth() + 1)
+  const [invYear,        setInvYear]        = useState<number>(new Date().getFullYear())
+  const [invData,        setInvData]        = useState<{ itemId: string; name: string; openingStock: number; newStock: number; closingCount: number | null; consumed: number | null }[]>([])
+  const [invLoading,     setInvLoading]     = useState(false)
 
   // Reset to landing when the Reports nav link is tapped while already on /reports
   useEffect(() => {
@@ -532,6 +536,11 @@ export default function Reports() {
   useEffect(() => {
     if (view === 'topclients') fetchTopClients(topClientsTab)
   }, [view, topClientsTab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refetch inventory consumption whenever the view becomes 'inventory' or month/year changes
+  useEffect(() => {
+    if (view === 'inventory') fetchInventoryConsumption(invMonth, invYear)
+  }, [view, invMonth, invYear]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Config ──────────────────────────────────────────────────────────────
   const [fyStartMonth,            setFyStartMonth]            = useState<number | null>(null)
@@ -762,6 +771,59 @@ export default function Reports() {
 
     setTopClientsData(result)
     setTopClientsLoading(false)
+  }
+
+  // ── Inventory Consumption fetch ─────────────────────────────────────────
+  async function fetchInventoryConsumption(month: number, year: number) {
+    if (!salonId) return
+    setInvLoading(true)
+    const monthStart = new Date(year, month - 1, 1).toISOString()
+    const monthEnd   = new Date(year, month, 1).toISOString()
+
+    const { data: items } = await supabase
+      .from('inventory_items')
+      .select('id, name')
+      .eq('salon_id', salonId)
+      .eq('type', 'supply')
+      .order('name')
+
+    if (!items || items.length === 0) { setInvData([]); setInvLoading(false); return }
+
+    const itemIds = (items as { id: string; name: string }[]).map(i => i.id)
+
+    const { data: txns } = await supabase
+      .from('inventory_transactions')
+      .select('item_id, type, quantity, created_at')
+      .eq('salon_id', salonId)
+      .in('item_id', itemIds)
+      .order('created_at', { ascending: true })
+
+    const allTxns = (txns ?? []) as { item_id: string; type: string; quantity: number; created_at: string }[]
+
+    const rows = (items as { id: string; name: string }[]).map(item => {
+      const mine = allTxns.filter(t => t.item_id === item.id)
+
+      const prevAdjustments = mine.filter(t => t.type === 'adjustment' && t.created_at < monthStart)
+      const openingStock = prevAdjustments.length > 0
+        ? prevAdjustments[prevAdjustments.length - 1].quantity
+        : 0
+
+      const newStock = mine
+        .filter(t => t.type === 'restock' && t.created_at >= monthStart && t.created_at < monthEnd)
+        .reduce((s, t) => s + t.quantity, 0)
+
+      const monthAdjustments = mine.filter(t => t.type === 'adjustment' && t.created_at >= monthStart && t.created_at < monthEnd)
+      const closingCount = monthAdjustments.length > 0
+        ? monthAdjustments[monthAdjustments.length - 1].quantity
+        : null
+
+      const consumed = closingCount !== null ? openingStock + newStock - closingCount : null
+
+      return { itemId: item.id, name: item.name, openingStock, newStock, closingCount, consumed }
+    })
+
+    setInvData(rows)
+    setInvLoading(false)
   }
 
   // ── Finance fetch ───────────────────────────────────────────────────────
@@ -1076,11 +1138,27 @@ export default function Reports() {
                   style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '14px 8px', cursor: 'pointer',
+                    borderBottom: canViewTopRunner ? '0.5px solid #f0f0f0' : 'none',
                   }}
                 >
                   <div>
                     <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Top Clients Report</p>
                     <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Daily, weekly, monthly, yearly client spend leaderboard</p>
+                  </div>
+                  <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
+                </div>
+              )}
+              {role === 'owner' && (
+                <div
+                  onClick={() => setView('inventory')}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '14px 8px', cursor: 'pointer',
+                  }}
+                >
+                  <div>
+                    <p style={{ margin: 0, fontSize: 14, color: '#111', fontWeight: 500 }}>Inventory Consumption</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6b7280' }}>Opening stock, restocks, closing count, consumed per month</p>
                   </div>
                   <span style={{ color: '#9ca3af', fontSize: 20, lineHeight: 1 }}>›</span>
                 </div>
@@ -1614,6 +1692,77 @@ export default function Reports() {
             </div>
           )
         })()}
+
+        {/* ── Inventory Consumption ── */}
+        {view === 'inventory' && role === 'owner' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+              <button onClick={() => setView('landing')} style={backBtn}>Back</button>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#111' }}>Inventory Consumption</p>
+              <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', alignItems: 'center' }}>
+                <select value={invMonth} onChange={e => setInvMonth(Number(e.target.value))} style={selStyle}>
+                  {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                </select>
+                <select value={invYear} onChange={e => setInvYear(Number(e.target.value))} style={selStyle}>
+                  {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {invLoading ? (
+              <div style={cardStyle}><p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Loading...</p></div>
+            ) : invData.length === 0 ? (
+              <div style={cardStyle}><p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>No supply items found.</p></div>
+            ) : (
+              <div style={cardStyle}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={TH}>Item</th>
+                        <th style={{ ...TH, textAlign: 'right' }}>Opening stock</th>
+                        <th style={{ ...TH, textAlign: 'right' }}>New Stock received</th>
+                        <th style={{ ...TH, textAlign: 'right' }}>Closing count</th>
+                        <th style={{ ...TH, textAlign: 'right' }}>Consumed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invData.map(row => (
+                        <tr key={row.itemId}>
+                          <td style={TD}>{row.name}</td>
+                          <td style={{ ...TD, textAlign: 'right' }}>{row.openingStock}</td>
+                          <td style={{ ...TD, textAlign: 'right' }}>{row.newStock}</td>
+                          <td style={{ ...TD, textAlign: 'right', color: row.closingCount === null ? '#9ca3af' : '#111' }}>
+                            {row.closingCount !== null ? row.closingCount : '—'}
+                          </td>
+                          <td style={{ ...TD, textAlign: 'right', color: row.consumed !== null ? '#034325' : '#9ca3af', fontWeight: row.consumed !== null ? 600 : 400 }}>
+                            {row.consumed !== null ? row.consumed : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Totals row */}
+                      <tr>
+                        <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total</td>
+                        <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>
+                          {invData.reduce((s, r) => s + r.openingStock, 0)}
+                        </td>
+                        <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>
+                          {invData.reduce((s, r) => s + r.newStock, 0)}
+                        </td>
+                        <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none', color: '#9ca3af' }}>—</td>
+                        <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none', color: '#034325' }}>
+                          {invData.every(r => r.consumed !== null)
+                            ? invData.reduce((s, r) => s + (r.consumed ?? 0), 0)
+                            : '—'}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
       </div>
 
