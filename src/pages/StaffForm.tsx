@@ -765,6 +765,17 @@ export default function StaffForm() {
               {allServices.length === 0 && (
                 <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>No services in catalogue yet.</p>
               )}
+              {allServices.length > 0 && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '6px 4px', borderBottom: '0.5px solid #f0f0f0', marginBottom: 2 }}>
+                  <input
+                    type="checkbox"
+                    checked={allServices.length > 0 && checkedServices.size === allServices.length}
+                    onChange={e => setCheckedServices(e.target.checked ? new Set(allServices.map(s => s.id)) : new Set())}
+                    style={{ accentColor: '#034325', width: 14, height: 14, flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 13, color: '#000000', flex: 1, fontWeight: 500 }}>Select all</span>
+                </label>
+              )}
               {allServices.map(svc => (
                 <label key={svc.id} style={{
                   display: 'flex', alignItems: 'center', gap: 8,
