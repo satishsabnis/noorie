@@ -958,7 +958,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => openEdit(item)} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Edit</button>
                       <button onClick={() => handleDelete(item.id)} style={{ fontSize: 11, border: '0.5px solid #991b1b', color: '#991b1b', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Delete</button>
-                      {!isProduct && <button onClick={() => openStockIn(item)} style={{ fontSize: 11, border: '0.5px solid #f97316', color: '#f97316', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Stock in</button>}
+                      {!isProduct && <button onClick={() => openStockIn(item)} style={{ fontSize: 11, border: '0.5px solid #C9A227', color: '#C9A227', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Stock in</button>}
                     </div>
                   </td>
                 </tr>
