@@ -339,7 +339,7 @@ function buildFinancePDF(opts: {
   salonName: string
   month: number
   year: number
-  income: { cash: number; card: number; other: number; total: number }
+  income: { cash: number; card: number; other: number; productSales: number; total: number }
   expenses: {
     fixed:    { items: { id: string; name: string; amount: number }[]; total: number }
     variable: { items: { id: string; name: string; amount: number }[]; total: number }
@@ -391,6 +391,7 @@ function buildFinancePDF(opts: {
       <tr><td>Cash</td><td style="text-align:right;">AED ${formatMoney(income.cash)}</td></tr>
       <tr><td>Card</td><td style="text-align:right;">AED ${formatMoney(income.card)}</td></tr>
       <tr><td>Other</td><td style="text-align:right;">AED ${formatMoney(income.other)}</td></tr>
+      <tr><td>Product Sales</td><td style="text-align:right;">AED ${formatMoney(income.productSales)}</td></tr>
       <tr><td style="font-weight:600;color:#034325;border-bottom:none;">Total income</td><td style="text-align:right;font-weight:600;color:#034325;border-bottom:none;">AED ${formatMoney(income.total)}</td></tr>
     </table>
     <p class="st">Fixed Expenses</p>
@@ -547,7 +548,8 @@ export default function Reports() {
   const [supervisorViewFinancials, setSupervisorViewFinancials] = useState(false)
 
   // ── Finance ─────────────────────────────────────────────────────────────
-  const [financeIncome,   setFinanceIncome]   = useState({ cash: 0, card: 0, other: 0, total: 0 })
+  const [financeIncome,        setFinanceIncome]        = useState({ cash: 0, card: 0, other: 0, total: 0 })
+  const [financeProductSales,  setFinanceProductSales]  = useState(0)
   const [financeExpenses, setFinanceExpenses] = useState({
     fixed:    { items: [] as { id: string; name: string; amount: number }[], total: 0 },
     variable: { items: [] as { id: string; name: string; amount: number }[], total: 0 },
@@ -833,11 +835,14 @@ export default function Reports() {
     const start = new Date(year, month - 1, 1).toISOString()
     const end   = new Date(year, month, 1).toISOString()
 
-    const [{ data: apptRows }, { data: expRows }] = await Promise.all([
+    const [{ data: apptRows }, { data: expRows }, { data: psRows }] = await Promise.all([
       supabase.from('appointments').select('id').eq('salon_id', salonId)
         .gte('starts_at', start).lt('starts_at', end),
       supabase.from('salon_expenses').select('id, category, name, amount')
         .eq('salon_id', salonId).eq('month', month).eq('year', year),
+      supabase.from('payments').select('amount')
+        .eq('salon_id', salonId).eq('reference', 'product_sale').eq('status', 'completed')
+        .gte('created_at', start).lt('created_at', end),
     ])
 
     const apptIds = (apptRows ?? []).map(r => r.id as string)
@@ -853,7 +858,9 @@ export default function Reports() {
       else if (m === 'card') card += amt
       else other += amt
     }
-    setFinanceIncome({ cash, card, other, total: cash + card + other })
+    const productSales = (psRows ?? []).reduce((s, p) => s + ((p.amount as number) ?? 0), 0)
+    setFinanceProductSales(productSales)
+    setFinanceIncome({ cash, card, other, total: cash + card + other + productSales })
 
     const allExp        = (expRows ?? []) as { id: string; category: string; name: string; amount: number }[]
     const fixedItems    = allExp.filter(e => e.category === 'fixed')
@@ -1182,7 +1189,7 @@ export default function Reports() {
                   buildFinancePDF({
                     salonName: resolvedSalonName || 'Salon',
                     month: selectedMonth, year: selectedYear,
-                    income: financeIncome, expenses: financeExpenses,
+                    income: { ...financeIncome, productSales: financeProductSales }, expenses: financeExpenses,
                   }),
                   `finance-report-${MONTHS[selectedMonth - 1]}-${selectedYear}`
                 )}
@@ -1201,6 +1208,7 @@ export default function Reports() {
                     <tr><td style={TD}>Cash</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.cash)}</td></tr>
                     <tr><td style={TD}>Card</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.card)}</td></tr>
                     <tr><td style={TD}>Other</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.other)}</td></tr>
+                    <tr><td style={TD}>Product Sales</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeProductSales)}</td></tr>
                     <tr>
                       <td style={{ ...TD, fontWeight: 600, color: '#034325', borderBottom: 'none' }}>Total income</td>
                       <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: '#034325', borderBottom: 'none' }}>AED {formatMoney(financeIncome.total)}</td>
