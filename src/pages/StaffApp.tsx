@@ -433,7 +433,7 @@ function StaffSchedule() {
       </div>
 
       {/* Record product sale button */}
-      <div style={{ padding: '0 16px 16px' }}>
+      <div style={{ padding: '0 16px 16px', paddingBottom: 60 }}>
         <button
           onClick={() => setShowProductSales(true)}
           style={{ width: '100%', padding: '11px 0', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer', backgroundColor: 'transparent', color: '#034325', border: '1.5px solid #034325' }}
@@ -464,7 +464,8 @@ function StaffSchedule() {
         />
       )}
 
-      <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: '#f9fafb', textAlign: 'center', padding: '8px 0', zIndex: 10 }}>
+        <img src="/assets/logo-WyJseHTl.png" alt="Blue Flute" style={{ width: 40, display: 'block', margin: '0 auto 4px' }} />
         <p style={{ color: '#9ca3af', fontSize: 10, margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
       </div>
     </div>
