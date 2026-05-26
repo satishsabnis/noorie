@@ -1720,16 +1720,16 @@ export default function Dashboard() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
 
+      {/* ── Sale success toast ── */}
+      {psSaleSuccess && (
+        <div style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 300, backgroundColor: '#fff', border: '1.5px solid #034325', borderRadius: 8, padding: '12px 20px', fontSize: 13, fontWeight: 600, color: '#034325', whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.12)' }}>
+          Sale recorded
+        </div>
+      )}
+
       <Topbar onDashboardClick={resetDrilldown} />
 
       <div style={{ marginTop: 52, flex: 1, display: 'flex', flexDirection: 'column' }}>
-
-        {/* ── Sale success banner ── */}
-        {psSaleSuccess && (
-          <div style={{ margin: '8px 16px 0', backgroundColor: '#f0fdf4', border: '0.5px solid #034325', borderRadius: 8, padding: '10px 14px' }}>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#034325' }}>Sale recorded</p>
-          </div>
-        )}
 
         {/* ── Morning Brief ── */}
         <MorningBrief
@@ -1815,61 +1815,67 @@ export default function Dashboard() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 14 }}>
                         {psProducts.map(p => {
                           const outOfStock = p.stockCount === 0
+                          const qty = psCart[p.id] ?? 0
                           return (
                             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', borderBottom: '0.5px solid #f0f0f0', opacity: outOfStock ? 0.45 : 1 }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <p style={{ margin: 0, fontSize: 13, color: '#111', fontWeight: 500 }}>{p.name}</p>
                                 <p style={{ margin: 0, fontSize: 11, color: '#6b7280' }}>AED {p.price.toFixed(2)} · stock: {p.stockCount}</p>
                               </div>
-                              <button
-                                disabled={outOfStock}
-                                onClick={() => !outOfStock && setPsCart(prev => ({ ...prev, [p.id]: (prev[p.id] ?? 0) + 1 }))}
-                                style={{ backgroundColor: outOfStock ? '#e0e0e0' : '#034325', color: '#fff', border: 'none', borderRadius: 6, width: 28, height: 28, fontSize: 18, lineHeight: 1, cursor: outOfStock ? 'not-allowed' : 'pointer', flexShrink: 0 }}
-                              >+</button>
+                              {qty > 0 ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                  <button onClick={() => setPsCart(prev => { const n = { ...prev }; n[p.id] = Math.max(0, (n[p.id] ?? 0) - 1); if (n[p.id] === 0) delete n[p.id]; return n })} style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: 'pointer', color: '#111' }}>−</button>
+                                  <span style={{ fontSize: 13, fontWeight: 500, color: '#111', minWidth: 20, textAlign: 'center' }}>{qty}</span>
+                                  <button disabled={outOfStock} onClick={() => !outOfStock && setPsCart(prev => ({ ...prev, [p.id]: (prev[p.id] ?? 0) + 1 }))} style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: outOfStock ? 'not-allowed' : 'pointer', color: '#111' }}>+</button>
+                                </div>
+                              ) : (
+                                <button
+                                  disabled={outOfStock}
+                                  onClick={() => !outOfStock && setPsCart(prev => ({ ...prev, [p.id]: 1 }))}
+                                  style={{ backgroundColor: outOfStock ? '#e0e0e0' : '#034325', color: '#fff', border: 'none', borderRadius: 6, width: 28, height: 28, fontSize: 18, lineHeight: 1, cursor: outOfStock ? 'not-allowed' : 'pointer', flexShrink: 0 }}
+                                >+</button>
+                              )}
                             </div>
                           )
                         })}
                       </div>
                     )}
 
-                    {/* Cart */}
                     {psCartItems.length > 0 && (
-                      <>
-                        <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cart</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-                          {psCartItems.map(([id, qty]) => {
-                            const p = psProducts.find(p => p.id === id)!
-                            return (
-                              <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', borderBottom: '0.5px solid #f0f0f0' }}>
-                                <span style={{ flex: 1, fontSize: 13, color: '#111' }}>{p.name}</span>
-                                <button onClick={() => setPsCart(prev => { const n = { ...prev }; n[id] = Math.max(0, n[id] - 1); if (n[id] === 0) delete n[id]; return n })} style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: 'pointer', color: '#111' }}>−</button>
-                                <span style={{ fontSize: 13, fontWeight: 500, color: '#111', minWidth: 20, textAlign: 'center' }}>{qty}</span>
-                                <button onClick={() => setPsCart(prev => ({ ...prev, [id]: prev[id] + 1 }))} style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: 'pointer', color: '#111' }}>+</button>
-                                <span style={{ fontSize: 13, fontWeight: 600, color: '#034325', minWidth: 60, textAlign: 'right' }}>AED {(p.price * qty).toFixed(2)}</span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Total</span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: '#034325' }}>AED {psCartTotal.toFixed(2)}</span>
-                        </div>
-                      </>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Total</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#034325' }}>AED {psCartTotal.toFixed(2)}</span>
+                      </div>
                     )}
                   </>
                 )}
 
                 {psStep === 2 && (
                   <>
-                    {/* Cart summary */}
+                    {/* Cart summary — editable */}
                     <p style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Order summary</p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>
                       {psCartItems.map(([id, qty]) => {
                         const p = psProducts.find(p => p.id === id)!
                         return (
-                          <div key={id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '0.5px solid #f0f0f0' }}>
-                            <span style={{ fontSize: 13, color: '#111' }}>{p.name} × {qty}</span>
-                            <span style={{ fontSize: 13, fontWeight: 500, color: '#111' }}>AED {(p.price * qty).toFixed(2)}</span>
+                          <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '0.5px solid #f0f0f0' }}>
+                            <span style={{ flex: 1, fontSize: 13, color: '#111' }}>{p.name}</span>
+                            <button
+                              onClick={() => setPsCart(prev => {
+                                const n = { ...prev }
+                                n[id] = Math.max(0, (n[id] ?? 0) - 1)
+                                if (n[id] === 0) delete n[id]
+                                if (Object.keys(n).filter(k => n[k] > 0).length === 0) setPsStep(1)
+                                return n
+                              })}
+                              style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: 'pointer', color: '#111', flexShrink: 0 }}
+                            >−</button>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: '#111', minWidth: 20, textAlign: 'center' }}>{qty}</span>
+                            <button
+                              onClick={() => setPsCart(prev => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }))}
+                              style={{ backgroundColor: 'transparent', border: '0.5px solid #d1d5db', borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: 'pointer', color: '#111', flexShrink: 0 }}
+                            >+</button>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#034325', minWidth: 64, textAlign: 'right' }}>AED {(p.price * qty).toFixed(2)}</span>
                           </div>
                         )
                       })}
