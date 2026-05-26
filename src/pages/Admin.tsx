@@ -725,6 +725,7 @@ interface InventoryItem {
   id: string; name: string; type: 'product' | 'supply'
   price: number | null; stock_count: number; unit: string
   low_stock_threshold: number; image_url: string | null
+  commission_pct: number | null
 }
 
 function SectionInventory({ salonId }: { salonId: string }) {
@@ -741,6 +742,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
   const [formUnit, setFormUnit] = useState('ml')
   const [formThreshold, setFormThreshold] = useState('5')
   const [formImageUrl, setFormImageUrl] = useState<string | null>(null)
+  const [formCommissionPct, setFormCommissionPct] = useState(0)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
@@ -756,7 +758,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
     setLoading(true)
     const { data } = await supabase
       .from('inventory_items')
-      .select('id, name, type, price, stock_count, unit, low_stock_threshold, image_url')
+      .select('id, name, type, price, stock_count, unit, low_stock_threshold, image_url, commission_pct')
       .eq('salon_id', salonId).eq('type', type).order('name')
     setItems((data ?? []) as InventoryItem[])
     setLoading(false)
@@ -769,13 +771,14 @@ function SectionInventory({ salonId }: { salonId: string }) {
 
   function openAdd() {
     setEditItem(null); setFormName(''); setFormPrice(''); setFormStock('0')
-    setFormUnit('ml'); setFormThreshold('5'); setFormImageUrl(null); setShowForm(true)
+    setFormUnit('ml'); setFormThreshold('5'); setFormImageUrl(null); setFormCommissionPct(0); setShowForm(true)
   }
   function openEdit(item: InventoryItem) {
     setEditItem(item); setFormName(item.name)
     setFormPrice(item.price != null ? String(item.price) : '')
     setFormStock(String(item.stock_count)); setFormUnit(item.unit)
-    setFormThreshold(String(item.low_stock_threshold)); setFormImageUrl(item.image_url); setShowForm(true)
+    setFormThreshold(String(item.low_stock_threshold)); setFormImageUrl(item.image_url)
+    setFormCommissionPct(item.commission_pct ?? 0); setShowForm(true)
   }
 
   async function handleImageUpload(file: File) {
@@ -799,6 +802,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
       unit: formUnit.trim() || 'unit',
       low_stock_threshold: parseInt(formThreshold, 10) || 5,
       image_url: type === 'product' ? formImageUrl : null,
+      ...(type === 'product' ? { commission_pct: formCommissionPct } : {}),
     }
     if (editItem) {
       const { error } = await supabase.from('inventory_items').update(payload).eq('id', editItem.id)
@@ -956,6 +960,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div><label style={labelStyle}>Name</label><input value={formName} onChange={e => setFormName(e.target.value)} style={inputStyle} placeholder="Name" /></div>
             {isProduct && <div><label style={labelStyle}>Price (AED)</label><input value={formPrice} onChange={e => setFormPrice(e.target.value)} type="number" style={inputStyle} placeholder="0" /></div>}
+            {isProduct && <div><label style={labelStyle}>Commission %</label><input value={formCommissionPct} onChange={e => setFormCommissionPct(Number(e.target.value))} type="number" min={0} max={100} style={inputStyle} /></div>}
             <div style={{ display: 'flex', gap: 10 }}>
               <div style={{ flex: 1 }}><label style={labelStyle}>Stock count</label><input value={formStock} onChange={e => setFormStock(e.target.value)} type="number" style={inputStyle} /></div>
               <div style={{ flex: 1 }}><label style={labelStyle}>Unit</label>{isProduct ? <input value={formUnit} onChange={e => setFormUnit(e.target.value)} style={inputStyle} placeholder="unit" /> : <select value={formUnit} onChange={e => setFormUnit(e.target.value)} style={inputStyle}>{['ml','L','gms','kg','pcs','sachets','bottles','tubes'].map(u => <option key={u} value={u}>{u}</option>)}</select>}</div>
