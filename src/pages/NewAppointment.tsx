@@ -385,10 +385,6 @@ export default function NewAppointment() {
 
   const handleBook = async () => {
     if (!canBook || !client) return
-    if (date < todayStr(tz)) {
-      setError('Cannot book appointments for past dates')
-      return
-    }
     setError(null)
 
     const salonId = staffRecord?.salon_id ?? null
