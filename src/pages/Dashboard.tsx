@@ -1218,6 +1218,11 @@ export default function Dashboard() {
 
   const [showMarketPulse,     setShowMarketPulse]     = useState(false)
   const [marketPulseLastScan, setMarketPulseLastScan] = useState<string | null>(null)
+  const [activeBBCampaign, setActiveBBCampaign] = useState<{
+    id: string; name: string; price: number; starts_at: string; ends_at: string;
+    opened: number; fees: number; revealed: number; redeemed_now: number; saved: number; expired: number;
+    catalogue_value: number; discounted_value: number;
+  } | null>(null);
   const [mpCardHovered,       setMpCardHovered]       = useState(false)
   const [cards, setCards] = useState<ApptFetched[]>([])
   const [cardsLoading, setCardsLoading] = useState(true)
@@ -1619,9 +1624,43 @@ export default function Dashboard() {
       }
     }
 
+    async function fetchActiveBBCampaign() {
+      const salonId = staffRecord?.salon_id
+      if (!salonId || cancelled) return
+      const { data: campaigns } = await supabase
+        .from('blind_box_campaigns')
+        .select('id, name, price, starts_at, ends_at')
+        .eq('salon_id', salonId)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (!campaigns) { setActiveBBCampaign(null); return; }
+      const { data: rewards } = await supabase
+        .from('blind_box_rewards')
+        .select('status, bb_fee_paid, catalogue_price, discounted_price')
+        .eq('campaign_id', campaigns.id);
+      if (!rewards) { setActiveBBCampaign(null); return; }
+      setActiveBBCampaign({
+        id: campaigns.id,
+        name: campaigns.name,
+        price: campaigns.price,
+        starts_at: campaigns.starts_at,
+        ends_at: campaigns.ends_at,
+        opened: rewards.length,
+        fees: rewards.reduce((s, r) => s + (r.bb_fee_paid || 0), 0),
+        revealed: rewards.length,
+        redeemed_now: rewards.filter(r => r.status === 'redeemed_now').length,
+        saved: rewards.filter(r => r.status === 'saved').length,
+        expired: rewards.filter(r => r.status === 'expired').length,
+        catalogue_value: rewards.reduce((s, r) => s + (r.catalogue_price || 0), 0),
+        discounted_value: rewards.reduce((s, r) => s + (r.discounted_price || 0), 0),
+      });
+    }
+
     async function run() {
       await fetchCards()
       await fetchBrief()
+      await fetchActiveBBCampaign()
     }
 
     run()
@@ -1742,6 +1781,40 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
+
+        {activeBBCampaign && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 20, margin: '10px 0',
+            background: '#fff', border: '1.5px solid #C9A227', borderRadius: 8, padding: '14px 18px',
+            flexWrap: 'wrap',
+          }}>
+            <div style={{ flexShrink: 0 }}>
+              <div style={{ fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 4, background: '#faeeda', color: '#854F0B', display: 'inline-block', marginBottom: 4 }}>Blind Box — active</div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: '#111' }}>{activeBBCampaign.name}</div>
+              <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                {activeBBCampaign.starts_at} – {activeBBCampaign.ends_at} · AED {activeBBCampaign.price} to open
+              </div>
+            </div>
+            <div style={{ width: 1, height: 48, background: '#e0e0e0', flexShrink: 0 }} />
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', flex: 1 }}>
+              {[
+                { label: 'Opened', value: String(activeBBCampaign.opened) },
+                { label: 'BB fees', value: `AED ${activeBBCampaign.fees.toFixed(2)}` },
+                { label: 'Revealed', value: String(activeBBCampaign.revealed) },
+                { label: 'Redeemed now', value: String(activeBBCampaign.redeemed_now) },
+                { label: 'Saved', value: String(activeBBCampaign.saved) },
+                { label: 'Expired', value: String(activeBBCampaign.expired) },
+                { label: 'Cat. value', value: `AED ${activeBBCampaign.catalogue_value.toFixed(2)}` },
+                { label: 'Disc. value', value: `AED ${activeBBCampaign.discounted_value.toFixed(2)}` },
+              ].map(stat => (
+                <div key={stat.label} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: '#888' }}>{stat.label}</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: stat.label === 'BB fees' ? '#854F0B' : '#111', marginTop: 2 }}>{stat.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Main area ── */}
         {drilldown !== null ? (
