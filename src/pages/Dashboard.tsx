@@ -1532,7 +1532,6 @@ export default function Dashboard() {
         }
         const weekStartISO = `${weekDates[0]}T00:00:00${offset}`
         const weekEndISO = `${weekDates[6]}T23:59:59${offset}`
-        console.log('weekStartISO', weekStartISO, 'weekEndISO', weekEndISO, 'dayIdx', dayIdx, 'ty tm td', ty, tm, td)
 
         const topRunnerStaffId = (appts.find(a =>
           (a.staff as unknown as { name: string } | null)?.name === topRunner.name
