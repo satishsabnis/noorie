@@ -255,6 +255,14 @@ export default function AppointmentDetail() {
   const [addStaffId, setAddStaffId] = useState('')
   const [addPrice, setAddPrice] = useState('')
   const [addingSvc, setAddingSvc] = useState(false)
+  const [showBlindBox, setShowBlindBox] = useState(false);
+  const [bbCampaign, setBbCampaign] = useState<{
+    id: string; name: string; price: number; reward_type: string;
+    discount_value: number; prize_validity_days: number; trigger_at_service: number;
+    eligible_tiers: string;
+  } | null>(null);
+  const [bbRevealedService, setBbRevealedService] = useState<{ id: string; name: string } | null>(null);
+  const [bbChoice, setBbChoice] = useState<'use_now' | 'save' | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [pendingPhoto, setPendingPhoto] = useState<{ serviceId: string; field: 'before_photos' | 'after_photos' } | null>(null)
@@ -383,6 +391,73 @@ export default function AppointmentDetail() {
     return () => { cancelled = true }
   }, [appt?.salon_id])
 
+  useEffect(() => {
+    if (!showBlindBox) return;
+    const timer = setTimeout(() => {
+      const area = document.getElementById('bbScratchArea');
+      const canvas = document.getElementById('bbScratchCanvas') as HTMLCanvasElement;
+      if (!area || !canvas) return;
+      const w = area.offsetWidth;
+      const h = area.offsetHeight;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d')!;
+      const grad = ctx.createLinearGradient(0, 0, w, h);
+      grad.addColorStop(0, '#E8C84A');
+      grad.addColorStop(0.3, '#F5D96B');
+      grad.addColorStop(0.6, '#C9A227');
+      grad.addColorStop(1, '#E8C84A');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(150,100,0,0.5)';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('SCRATCH HERE', w/2, h/2 - 6);
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = 'rgba(150,100,0,0.4)';
+      ctx.fillText('Your reward is hidden below', w/2, h/2 + 14);
+      ctx.globalCompositeOperation = 'destination-out';
+      let isScratching = false;
+      let revealed = false;
+      function getPos(e: MouseEvent | TouchEvent) {
+        const rect = canvas.getBoundingClientRect();
+        const touch = (e as TouchEvent).touches ? (e as TouchEvent).touches[0] : e as MouseEvent;
+        return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+      }
+      function scratch(x: number, y: number) {
+        ctx.beginPath();
+        ctx.arc(x, y, 28, 0, Math.PI * 2);
+        ctx.fill();
+        if (revealed) return;
+        const data = ctx.getImageData(0, 0, w, h).data;
+        let cleared = 0;
+        for (let i = 3; i < data.length; i += 4) { if (data[i] === 0) cleared++; }
+        if (cleared / (w * h) > 0.45) {
+          revealed = true;
+          setTimeout(() => {
+            canvas.style.transition = 'opacity 0.5s';
+            canvas.style.opacity = '0';
+            const hint = document.getElementById('bbHint');
+            const expiry = document.getElementById('bbExpiry');
+            const useBtn = document.getElementById('bbUseNow');
+            const saveBtn = document.getElementById('bbSaveLater');
+            if (hint) hint.style.display = 'none';
+            if (expiry) expiry.style.opacity = '1';
+            if (useBtn) useBtn.style.opacity = '1';
+            if (saveBtn) saveBtn.style.opacity = '1';
+          }, 200);
+        }
+      }
+      canvas.addEventListener('mousedown', (e) => { isScratching = true; const p = getPos(e); scratch(p.x, p.y); });
+      canvas.addEventListener('mousemove', (e) => { if (isScratching) { const p = getPos(e); scratch(p.x, p.y); } });
+      canvas.addEventListener('mouseup', () => isScratching = false);
+      canvas.addEventListener('touchstart', (e) => { e.preventDefault(); isScratching = true; const p = getPos(e); scratch(p.x, p.y); }, { passive: false });
+      canvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (isScratching) { const p = getPos(e); scratch(p.x, p.y); } }, { passive: false });
+      canvas.addEventListener('touchend', () => isScratching = false);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [showBlindBox]);
+
   async function handleStartService(serviceId: string) {
     setSaving(true)
     const now = new Date().toISOString()
@@ -453,6 +528,74 @@ export default function AppointmentDetail() {
     refresh()
   }
 
+  async function checkBlindBoxTrigger(newServiceCount: number) {
+    if (!appt || !staffRecord?.salon_id) return;
+    const { data: campaign } = await supabase
+      .from('blind_box_campaigns')
+      .select('id, name, price, reward_type, discount_value, prize_validity_days, trigger_at_service, eligible_tiers')
+      .eq('salon_id', staffRecord.salon_id)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!campaign) return;
+    if (newServiceCount !== campaign.trigger_at_service) return;
+    const { data: pool } = await supabase
+      .from('blind_box_prize_pool')
+      .select('service_id, services(id, name)')
+      .eq('campaign_id', campaign.id);
+    if (!pool || pool.length === 0) return;
+    const random = pool[Math.floor(Math.random() * pool.length)];
+    const svc = random.services as { id: string; name: string };
+    setBbCampaign(campaign);
+    setBbRevealedService(svc);
+    setShowBlindBox(true);
+  }
+
+  async function handleBBChoice(choice: 'use_now' | 'save') {
+    if (!bbCampaign || !bbRevealedService || !appt || !staffRecord?.salon_id) return;
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + bbCampaign.prize_validity_days);
+    const expiryStr = expiresAt.toISOString().split('T')[0];
+    const catPrice = bbRevealedService ? (await supabase.from('services').select('price').eq('id', bbRevealedService.id).single()).data?.price || 0 : 0;
+    const discountedPrice = bbCampaign.reward_type === 'free' ? 0
+      : bbCampaign.reward_type === 'percentage' ? catPrice * (1 - bbCampaign.discount_value / 100)
+      : bbCampaign.reward_type === 'fixed_aed' ? Math.max(0, catPrice - bbCampaign.discount_value)
+      : 0;
+    await supabase.from('blind_box_rewards').insert({
+      salon_id: staffRecord.salon_id,
+      campaign_id: bbCampaign.id,
+      client_id: appt.client_id,
+      appointment_id: appt.id,
+      service_id: bbRevealedService.id,
+      bb_fee_paid: bbCampaign.price,
+      catalogue_price: catPrice,
+      discounted_price: discountedPrice,
+      status: choice === 'use_now' ? 'redeemed_now' : 'saved',
+      expires_at: expiryStr,
+    });
+    if (choice === 'use_now') {
+      await supabase.from('appointment_services').insert({
+        appointment_id: appt.id,
+        service_id: bbRevealedService.id,
+        staff_id: staffRecord.id,
+        price: discountedPrice,
+        status: 'pending',
+      });
+      await supabase.from('payments').insert({
+        salon_id: staffRecord.salon_id,
+        appointment_id: appt.id,
+        client_id: appt.client_id,
+        amount: bbCampaign.price,
+        method: 'cash',
+        status: 'completed',
+        reference: 'blind_box',
+      });
+    }
+    setShowBlindBox(false);
+    setBbCampaign(null);
+    setBbRevealedService(null);
+    refresh();
+  }
+
   async function handleAddService() {
     if (!appt) return
     if (!addSvcId || !addStaffId) return
@@ -476,6 +619,7 @@ export default function AppointmentDetail() {
     setAddPrice('')
     setAddingSvc(false)
     refresh()
+    await checkBlindBoxTrigger(services.length + 1);
   }
 
   function triggerPhoto(serviceId: string, field: 'before_photos' | 'after_photos') {
@@ -759,6 +903,32 @@ export default function AppointmentDetail() {
       <div style={{ textAlign: 'center', padding: '10px 0 14px' }}>
         <p style={{ color: '#9ca3af', fontSize: 10, margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
       </div>
+
+      {showBlindBox && bbRevealedService && bbCampaign && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 16, width: 320, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+            <div style={{ background: '#034325', padding: '18px 20px 14px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', color: '#C9A227', textTransform: 'uppercase', marginBottom: 4 }}>{bbCampaign.name}</div>
+              <div style={{ fontSize: 18, fontWeight: 600, color: '#fff' }}>Your Blind Box</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>Scratch to reveal your reward</div>
+            </div>
+            <div style={{ position: 'relative', height: 180, margin: 20, borderRadius: 10, overflow: 'hidden', cursor: 'crosshair' }} id="bbScratchArea">
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', background: '#faeeda', borderRadius: 10 }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#034325', textAlign: 'center', padding: '0 16px' }}>{bbRevealedService.name}</div>
+              </div>
+              <canvas id="bbScratchCanvas" style={{ position: 'absolute', inset: 0, borderRadius: 10, touchAction: 'none' }} />
+            </div>
+            <div style={{ textAlign: 'center', fontSize: 11, color: '#888', margin: '-8px 0 12px' }} id="bbHint">Scratch with your finger</div>
+            <div style={{ textAlign: 'center', fontSize: 11, color: '#888', padding: '0 20px 16px', opacity: 0, transition: 'opacity 0.4s' }} id="bbExpiry">
+              Valid until {(() => { const d = new Date(); d.setDate(d.getDate() + bbCampaign.prize_validity_days); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); })()}  if saved for later
+            </div>
+            <div style={{ display: 'flex', gap: 10, padding: '0 20px 20px' }}>
+              <button id="bbUseNow" onClick={() => handleBBChoice('use_now')} style={{ flex: 1, background: '#034325', color: '#fff', border: 'none', borderRadius: 8, padding: 12, fontSize: 13, fontWeight: 500, cursor: 'pointer', opacity: 0, transition: 'opacity 0.4s' }}>Use now</button>
+              <button id="bbSaveLater" onClick={() => handleBBChoice('save')} style={{ flex: 1, background: 'transparent', color: '#034325', border: '1.5px solid #034325', borderRadius: 8, padding: 12, fontSize: 13, fontWeight: 500, cursor: 'pointer', opacity: 0, transition: 'opacity 0.4s' }}>Save for later</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )
