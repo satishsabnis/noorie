@@ -1336,7 +1336,7 @@ export default function Dashboard() {
           .gte('starts_at', yearStartISO)
           .lt('starts_at', yearEndISO),
         supabase.from('payments')
-          .select('amount, created_at')
+          .select('amount, created_at, appointments(starts_at)')
           .eq('salon_id', salonId)
           .eq('status', 'completed')
           .gte('created_at', yearStartISO)
@@ -1398,7 +1398,7 @@ export default function Dashboard() {
       }
 
       for (const p of yearPays ?? []) {
-        const ds = toDubaiDate(p.created_at as string)
+        const ds = toDubaiDate((p.appointments as any)?.starts_at as string ?? p.created_at as string)
         const amt = (p.amount as number) ?? 0
         const wi = weekDateStrs.indexOf(ds)
         if (wi !== -1) weeklyBuckets[wi].revenue += amt
