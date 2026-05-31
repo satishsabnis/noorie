@@ -529,11 +529,11 @@ export default function AppointmentDetail() {
   }
 
   async function checkBlindBoxTrigger(newServiceCount: number) {
-    if (!appt || !staffRecord?.salon_id) return;
+    if (!appt || !appt.salon_id) return;
     const { data: campaign } = await supabase
       .from('blind_box_campaigns')
       .select('id, name, price, reward_type, discount_value, prize_validity_days, trigger_at_service, eligible_tiers')
-      .eq('salon_id', staffRecord.salon_id)
+      .eq('salon_id', appt.salon_id)
       .eq('is_active', true)
       .maybeSingle();
     if (!campaign) return;
@@ -544,14 +544,15 @@ export default function AppointmentDetail() {
       .eq('campaign_id', campaign.id);
     if (!pool || pool.length === 0) return;
     const random = pool[Math.floor(Math.random() * pool.length)];
-    const svc = random.services as { id: string; name: string };
+    const svcArr = random.services as unknown as { id: string; name: string }[];
+    const svc = Array.isArray(svcArr) ? svcArr[0] : svcArr as unknown as { id: string; name: string };
     setBbCampaign(campaign);
     setBbRevealedService(svc);
     setShowBlindBox(true);
   }
 
   async function handleBBChoice(choice: 'use_now' | 'save') {
-    if (!bbCampaign || !bbRevealedService || !appt || !staffRecord?.salon_id) return;
+    if (!bbCampaign || !bbRevealedService || !appt || !appt.salon_id) return;
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + bbCampaign.prize_validity_days);
     const expiryStr = expiresAt.toISOString().split('T')[0];
@@ -561,7 +562,7 @@ export default function AppointmentDetail() {
       : bbCampaign.reward_type === 'fixed_aed' ? Math.max(0, catPrice - bbCampaign.discount_value)
       : 0;
     await supabase.from('blind_box_rewards').insert({
-      salon_id: staffRecord.salon_id,
+      salon_id: appt.salon_id,
       campaign_id: bbCampaign.id,
       client_id: appt.client_id,
       appointment_id: appt.id,
@@ -576,12 +577,12 @@ export default function AppointmentDetail() {
       await supabase.from('appointment_services').insert({
         appointment_id: appt.id,
         service_id: bbRevealedService.id,
-        staff_id: staffRecord.id,
+        staff_id: addStaffId,
         price: discountedPrice,
         status: 'pending',
       });
       await supabase.from('payments').insert({
-        salon_id: staffRecord.salon_id,
+        salon_id: appt.salon_id,
         appointment_id: appt.id,
         client_id: appt.client_id,
         amount: bbCampaign.price,
