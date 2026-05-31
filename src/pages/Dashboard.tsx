@@ -1347,7 +1347,7 @@ export default function Dashboard() {
 
       const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
       const dayIdx = (dubaiNow.getUTCDay() + 6) % 7
-      const mondayMs = Date.UTC(ty, tm, td) - dayIdx * 86_400_000 - 14400000
+      const mondayMs = Date.UTC(ty, tm, td) - dayIdx * 86_400_000
       const weekDateStrs: string[] = []
       for (let i = 0; i < 7; i++) {
         weekDateStrs.push(new Date(mondayMs + i * 86_400_000).toISOString().slice(0, 10))
