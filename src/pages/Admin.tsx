@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Topbar from '../components/Topbar'
+import LoyaltyAdmin from './LoyaltyAdmin'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -1350,6 +1351,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
   }
 
   return (
+    <>
     <div>
       <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Noorie AI</p>
       <div style={cardStyle}>
@@ -1500,6 +1502,8 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
 
       <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setDirty(false) }} />
     </div>
+    <LoyaltyAdmin salonId={salonId} />
+    </>
   )
 }
 
