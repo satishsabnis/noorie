@@ -1525,7 +1525,6 @@ export default function Dashboard() {
       // Top runner's Mon-Sun stats for current week (uses mondayMs/weekDateStrs/dayLabels/todayYMD from trend block)
       let topRunnerWeekOut: { day: string; appointments: number; revenue: number; past: boolean }[] = emptyTopRunnerWeek
       if (topRunner) {
-        const mondayDate = new Date(mondayMs)
         const weekDates: string[] = []
         for (let i = 0; i < 7; i++) {
           const d = new Date(mondayMs + i * 86_400_000)
