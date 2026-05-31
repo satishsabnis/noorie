@@ -1347,7 +1347,7 @@ export default function Dashboard() {
 
       const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
       const dayIdx = (dubaiNow.getUTCDay() + 6) % 7
-      const mondayMs = Date.UTC(ty, tm, td) - dayIdx * 86_400_000
+      const mondayMs = Date.UTC(ty, tm, td) - dayIdx * 86_400_000 - 14400000
       const weekDateStrs: string[] = []
       for (let i = 0; i < 7; i++) {
         weekDateStrs.push(new Date(mondayMs + i * 86_400_000).toISOString().slice(0, 10))
@@ -1541,23 +1541,24 @@ export default function Dashboard() {
         }))
 
         if (topRunnerStaffId) {
-          const { data: trAppts } = await supabase
-            .from('appointments')
-            .select('id, starts_at, payments(amount)')
-            .eq('salon_id', salonId)
-            .eq('status', 'completed')
+          const { data: weekAppts } = await supabase
+            .from('appointment_services')
+            .select('appointment_id, price, staff_id, appointments!inner(starts_at, salon_id, status)')
             .eq('staff_id', topRunnerStaffId)
-            .gte('starts_at', weekStartISO)
-            .lt('starts_at', weekEndISO)
+            .eq('appointments.salon_id', salonId)
+            .gte('appointments.starts_at', weekStartISO)
+            .lte('appointments.starts_at', weekEndISO)
+            .neq('appointments.status', 'cancelled')
+            .neq('appointments.status', 'no_show')
 
-          for (const appt of trAppts ?? []) {
-            const ds = salonLocalDateStr(appt.starts_at as string, tz)
+          for (const row of weekAppts ?? []) {
+            const apptData = row.appointments as unknown as { starts_at: string; salon_id: string; status: string } | null
+            if (!apptData) continue
+            const ds = salonLocalDateStr(apptData.starts_at, tz)
             const wi = weekDateStrs.indexOf(ds)
             if (wi === -1) continue
-            const paidAmount = ((appt.payments as unknown as { amount: number | null }[] | null) ?? [])
-              .reduce((s, p) => s + ((p.amount) ?? 0), 0)
-            trBuckets[wi]._ids.add(appt.id as string)
-            trBuckets[wi].revenue += paidAmount
+            trBuckets[wi]._ids.add(row.appointment_id as string)
+            trBuckets[wi].revenue += (row.price as number | null) ?? 0
           }
         }
         topRunnerWeekOut = trBuckets.map(b => ({
