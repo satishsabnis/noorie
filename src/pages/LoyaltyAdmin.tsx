@@ -251,8 +251,14 @@ export default function LoyaltyAdmin({ salonId }: LoyaltyAdminProps) {
 
   async function saveCampaign(campaign: BlindBoxCampaign) {
     setSaving(s => ({ ...s, [campaign.id]: true }));
-    const { prize_pool, ...rest } = campaign;
-    const { data, error } = await supabase.from('blind_box_campaigns').upsert({ ...rest, salon_id: salonId }, { onConflict: 'id' }).select().single();
+    const { prize_pool, id, ...rest } = campaign;
+    let data: { id: string } | null = null;
+    let error: unknown = null;
+    if (campaign.id.startsWith('new_')) {
+      ({ data, error } = await supabase.from('blind_box_campaigns').insert({ ...rest, salon_id: salonId }).select().single());
+    } else {
+      ({ data, error } = await supabase.from('blind_box_campaigns').upsert({ id, ...rest, salon_id: salonId }, { onConflict: 'id' }).select().single());
+    }
     if (!error && data) {
       await supabase.from('blind_box_prize_pool').delete().eq('campaign_id', data.id);
       if (prize_pool && prize_pool.length > 0) {
