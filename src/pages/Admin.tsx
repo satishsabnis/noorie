@@ -10,7 +10,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 
 const SECTIONS = [
   'Salon details', 'Services', 'Payments', 'WhatsApp',
-  'Loyalty points', 'Noorie AI', 'Inventory', 'Expenses', 'Staff settings', 'Run payroll',
+  'Loyalty points', 'Noorie AI', 'Loyalty Program', 'Inventory', 'Expenses', 'Staff settings', 'Run payroll',
 ] as const
 type Section = typeof SECTIONS[number]
 
@@ -1351,7 +1351,6 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
   }
 
   return (
-    <>
     <div>
       <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Noorie AI</p>
       <div style={cardStyle}>
@@ -1502,8 +1501,6 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
 
       <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setDirty(false) }} />
     </div>
-    <LoyaltyAdmin salonId={salonId} />
-    </>
   )
 }
 
@@ -2090,6 +2087,7 @@ export default function Admin() {
           {activeSection === 'WhatsApp'        && <SectionWhatsApp config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Loyalty points'  && <SectionLoyalty config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Noorie AI'       && <SectionAI config={config} salonId={salonId} salon={{ name: salon.name, city: salon.city, country: salon.country }} onRefresh={fetchAll} />}
+          {activeSection === 'Loyalty Program' && <LoyaltyAdmin salonId={salonId} />}
           {activeSection === 'Inventory'       && <SectionInventory salonId={salonId} />}
           {activeSection === 'Expenses'        && <SectionExpenses salonId={salonId} />}
           {activeSection === 'Staff settings'  && <SectionStaffSettings config={config} salonId={salonId} onRefresh={fetchAll} />}
