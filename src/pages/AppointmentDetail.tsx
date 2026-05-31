@@ -492,6 +492,106 @@ export default function AppointmentDetail() {
     refresh()
   }
 
+  async function creditLoyaltyPoints(
+    clientId: string,
+    salonId: string,
+    appointmentId: string,
+    amountPaid: number,
+    isAppBooking: boolean
+  ) {
+    const { data: cfg } = await supabase
+      .from('loyalty_config')
+      .select('*')
+      .eq('salon_id', salonId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!cfg) return;
+
+    const { data: client } = await supabase
+      .from('clients')
+      .select('loyalty_points')
+      .eq('id', clientId)
+      .single();
+    if (!client) return;
+
+    const currentPoints = (client.loyalty_points as number) || 0;
+
+    const proThreshold = cfg.pro_threshold as number;
+    const maxThreshold = cfg.max_threshold as number;
+    const tier = currentPoints >= maxThreshold ? 'max' : currentPoints >= proThreshold ? 'pro' : 'regular';
+
+    const pct = tier === 'max' ? (cfg.max_service_pct as number)
+      : tier === 'pro' ? (cfg.pro_service_pct as number)
+      : (cfg.regular_service_pct as number);
+
+    const earnedPoints = Math.round((amountPaid * pct / 100) * 100) / 100;
+
+    const ledgerRows: object[] = [];
+
+    if (earnedPoints > 0) {
+      ledgerRows.push({
+        salon_id: salonId,
+        client_id: clientId,
+        type: 'spend',
+        points: Math.round(earnedPoints),
+        reason: 'service_payment',
+        reference_id: appointmentId,
+      });
+    }
+
+    if (isAppBooking && cfg.bp_app_booking) {
+      ledgerRows.push({
+        salon_id: salonId,
+        client_id: clientId,
+        type: 'behaviour',
+        points: cfg.bp_app_booking as number,
+        reason: 'app_booking',
+        reference_id: appointmentId,
+      });
+    }
+
+    if (ledgerRows.length === 0) return;
+
+    await supabase.from('loyalty_points_ledger').insert(ledgerRows);
+
+    const totalNewPoints = ledgerRows.reduce((s, r: any) => s + r.points, 0);
+    await supabase.from('clients').update({
+      loyalty_points: currentPoints + totalNewPoints,
+    }).eq('id', clientId);
+  }
+
+  async function creditPreBookPoints(clientId: string, salonId: string, appointmentId: string) {
+    const { data: cfg } = await supabase
+      .from('loyalty_config')
+      .select('is_active, bp_pre_book')
+      .eq('salon_id', salonId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!cfg || !cfg.bp_pre_book) return;
+
+    const { data: client } = await supabase
+      .from('clients')
+      .select('loyalty_points')
+      .eq('id', clientId)
+      .single();
+    if (!client) return;
+
+    const currentPoints = (client.loyalty_points as number) || 0;
+
+    await supabase.from('loyalty_points_ledger').insert({
+      salon_id: salonId,
+      client_id: clientId,
+      type: 'behaviour',
+      points: cfg.bp_pre_book as number,
+      reason: 'pre_book',
+      reference_id: appointmentId,
+    });
+
+    await supabase.from('clients').update({
+      loyalty_points: currentPoints + (cfg.bp_pre_book as number),
+    }).eq('id', clientId);
+  }
+
   async function handleCollectPayment() {
     if (!appt) return
     setSaving(true)
@@ -519,6 +619,13 @@ export default function AppointmentDetail() {
       if (newBalance <= 0) {
         await supabase.from('appointments').update({ status: 'completed' }).eq('id', appt.id)
       }
+      await creditLoyaltyPoints(
+        appt.client_id as string,
+        appt.salon_id as string,
+        appt.id as string,
+        amount,
+        false
+      );
       setSaving(false)
       navigate('/dashboard')
       return
