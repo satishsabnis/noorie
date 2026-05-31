@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import blueFlutelogo from '../assets/logo.png'
 import { useIsMobile } from '../hooks/useIsMobile'
 
-const NOORIE_VERSION = 'v2.05.24'
+const NOORIE_VERSION = 'v2.05.25'
 
 const NAV_LINKS = [
   { label: 'Dashboard',    to: '/dashboard' },
