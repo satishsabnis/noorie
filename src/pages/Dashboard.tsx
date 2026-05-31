@@ -1508,7 +1508,7 @@ export default function Dashboard() {
         .in('appointment_id', (appts ?? []).filter(a => a.status === 'completed').map(a => a.id))
       const staffRevMap: Record<string, { revenue: number; apptIds: Set<string> }> = {}
       for (const row of todayAptSvcs ?? []) {
-        const name = (row.staff as { name: string } | null)?.name
+        const name = (row.staff as unknown as { name: string } | null)?.name
         if (!name) continue
         if (!staffRevMap[name]) staffRevMap[name] = { revenue: 0, apptIds: new Set() }
         staffRevMap[name].revenue += (row.price as number | null) ?? 0
