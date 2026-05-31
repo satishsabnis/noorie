@@ -1792,7 +1792,7 @@ export default function Dashboard() {
               <div style={{ fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 4, background: '#faeeda', color: '#854F0B', display: 'inline-block', marginBottom: 4 }}>Blind Box — active</div>
               <div style={{ fontSize: 14, fontWeight: 500, color: '#111' }}>{activeBBCampaign.name}</div>
               <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
-                {activeBBCampaign.starts_at} – {activeBBCampaign.ends_at} · AED {activeBBCampaign.price} to open
+                {new Date(activeBBCampaign.starts_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} – {new Date(activeBBCampaign.ends_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · AED {activeBBCampaign.price} to open
               </div>
             </div>
             <div style={{ width: 1, height: 48, background: '#e0e0e0', flexShrink: 0 }} />
