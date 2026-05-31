@@ -10,7 +10,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 
 const SECTIONS = [
   'Salon details', 'Services', 'Payments', 'WhatsApp',
-  'Loyalty points', 'Noorie AI', 'Loyalty Program', 'Inventory', 'Expenses', 'Staff settings', 'Run payroll',
+  'Noorie AI', 'Loyalty Program', 'Inventory', 'Expenses', 'Staff settings', 'Run payroll',
 ] as const
 type Section = typeof SECTIONS[number]
 
@@ -2085,7 +2085,6 @@ export default function Admin() {
           {activeSection === 'Services'        && <SectionServices salonId={salonId} />}
           {activeSection === 'Payments'        && <SectionPayments config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'WhatsApp'        && <SectionWhatsApp config={config} salonId={salonId} onRefresh={fetchAll} />}
-          {activeSection === 'Loyalty points'  && <SectionLoyalty config={config} salonId={salonId} onRefresh={fetchAll} />}
           {activeSection === 'Noorie AI'       && <SectionAI config={config} salonId={salonId} salon={{ name: salon.name, city: salon.city, country: salon.country }} onRefresh={fetchAll} />}
           {activeSection === 'Loyalty Program' && <LoyaltyAdmin salonId={salonId} />}
           {activeSection === 'Inventory'       && <SectionInventory salonId={salonId} />}
