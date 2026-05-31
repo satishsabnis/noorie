@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { salonOffsetStr } from '../hooks/useSalonTimezone'
 
-const NOORIE_VERSION = 'v2.05.24'
+const NOORIE_VERSION = 'v2.05.26'
 
 const CLIENT_COUNTRY_CODES = [
   { flag: '🇦🇪', code: '+971' },
