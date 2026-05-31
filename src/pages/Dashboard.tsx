@@ -1500,18 +1500,19 @@ export default function Dashboard() {
       const revTotal = Math.round((payRows ?? []).reduce((s, r) => s + ((r.amount as number) ?? 0), 0) * 100) / 100
       const revCount = (payRows ?? []).length
 
-      // Derive top runner: staff with highest payment revenue from completed appointments
+      // Derive top runner: staff with highest service revenue from completed appointments
       const completedIds = new Set(appts.filter(a => a.status === 'completed').map(a => a.id as string))
+      const { data: todayAptSvcs } = await supabase
+        .from('appointment_services')
+        .select('staff_id, price, appointment_id, staff(name)')
+        .in('appointment_id', (appts ?? []).filter(a => a.status === 'completed').map(a => a.id))
       const staffRevMap: Record<string, { revenue: number; apptIds: Set<string> }> = {}
-      for (const a of appts) {
-        const apptId = a.id as string
-        if (!completedIds.has(apptId)) continue
-        const staffName = (a.staff as unknown as { name: string } | null)?.name ?? ''
-        if (!staffName) continue
-        const paidAmount = payMap[apptId]?.totalPaid ?? 0
-        if (!staffRevMap[staffName]) staffRevMap[staffName] = { revenue: 0, apptIds: new Set() }
-        staffRevMap[staffName].revenue += paidAmount
-        staffRevMap[staffName].apptIds.add(apptId)
+      for (const row of todayAptSvcs ?? []) {
+        const name = (row.staff as { name: string } | null)?.name
+        if (!name) continue
+        if (!staffRevMap[name]) staffRevMap[name] = { revenue: 0, apptIds: new Set() }
+        staffRevMap[name].revenue += (row.price as number | null) ?? 0
+        staffRevMap[name].apptIds.add(row.appointment_id as string)
       }
       let topRunner: { name: string; revenue: number; appointments: number; appointmentIds: string[] } | null = null
       for (const [name, data] of Object.entries(staffRevMap)) {
