@@ -83,6 +83,9 @@ export default function Appointments() {
   const [rows, setRows] = useState<ApptRow[]>([])
   const [loading, setLoading] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [staffSvcMap, setStaffSvcMap] = useState<Record<string, Record<string, number>>>({})
+  const [staffIdMap, setStaffIdMap] = useState<Record<string, string>>({})
+  const [svcStaffNames, setSvcStaffNames] = useState<string[]>([])
 
   useEffect(() => {
     const salonId = staffRecord?.salon_id
@@ -124,7 +127,7 @@ export default function Appointments() {
 
       const { data: svcRows, error: svcErr } = await supabase
         .from('appointment_services')
-        .select('appointment_id, price, services(name)')
+        .select('appointment_id, price, staff_id, services(name), staff(id, name)')
         .in('appointment_id', appointmentIds)
 
       if (svcErr) {
@@ -151,6 +154,24 @@ export default function Appointments() {
         if (serviceName) svcMap[apptId].names.push(serviceName)
         svcMap[apptId].total += (row.price as number | null) ?? 0
       }
+
+      const staffSvcMap: Record<string, Record<string, number>> = {}
+      for (const s of svcRows ?? []) {
+        const sid = s.staff_id as string | null
+        if (!sid) continue
+        const aid = s.appointment_id as string
+        if (!staffSvcMap[aid]) staffSvcMap[aid] = {}
+        if (!staffSvcMap[aid][sid]) staffSvcMap[aid][sid] = 0
+        staffSvcMap[aid][sid] += (s.price as number | null) ?? 0
+      }
+
+      const staffIdMap: Record<string, string> = {}
+      for (const s of svcRows ?? []) {
+        const sObj = s.staff as unknown as { id: string; name: string } | null
+        if (sObj?.name && sObj?.id) staffIdMap[sObj.name] = sObj.id
+      }
+
+      const svcStaffNamesComputed = Array.from(new Set((svcRows ?? []).map(s => (s.staff as unknown as { name: string } | null)?.name).filter(Boolean) as string[])).sort()
 
       const merged: ApptRow[] = appts.map((a: any) => {
         const clientsData = a.clients as any
@@ -187,7 +208,13 @@ export default function Appointments() {
         }
       })
 
-      if (!cancelled) { setRows(merged); setLoading(false) }
+      if (!cancelled) {
+        setRows(merged)
+        setStaffSvcMap(staffSvcMap)
+        setStaffIdMap(staffIdMap)
+        setSvcStaffNames(svcStaffNamesComputed)
+        setLoading(false)
+      }
     }
 
     fetchData()
@@ -197,7 +224,11 @@ export default function Appointments() {
   const filtered = useMemo(() => {
     return rows.filter(a => {
       if (statusFilter && a.status !== statusFilter) return false
-      if (staffFilter && a.staff?.name !== staffFilter) return false
+      if (staffFilter) {
+        const sid = staffIdMap[staffFilter]
+        const apptStaffSvcs = sid ? staffSvcMap[a.id as string] : null
+        if (!apptStaffSvcs || !apptStaffSvcs[sid]) return false
+      }
       if (search.trim()) {
         const q = search.toLowerCase()
         const clientMatch = a.clients?.name.toLowerCase().includes(q) ?? false
@@ -206,18 +237,17 @@ export default function Appointments() {
       }
       return true
     })
-  }, [rows, statusFilter, staffFilter, search])
+  }, [rows, statusFilter, staffFilter, search, staffIdMap, staffSvcMap])
 
-  const staffNames = useMemo(() => {
-    const names = new Set(
-      rows.map(a => a.staff?.name).filter((n): n is string => !!n)
-    )
-    return Array.from(names).sort()
-  }, [rows])
+  const staffNames = svcStaffNames
 
   const completedCount = filtered.filter(a => a.status === 'completed').length
   const totalRevenue = filtered.reduce((sum, a) => {
     if (a.status !== 'completed') return sum
+    if (staffFilter) {
+      const sid = staffIdMap[staffFilter]
+      return sum + (sid && staffSvcMap[a.id as string]?.[sid] ? staffSvcMap[a.id as string][sid] : 0)
+    }
     return sum + a.totalPrice
   }, 0)
 
