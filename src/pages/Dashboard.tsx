@@ -1525,9 +1525,15 @@ export default function Dashboard() {
       // Top runner's Mon-Sun stats for current week (uses mondayMs/weekDateStrs/dayLabels/todayYMD from trend block)
       let topRunnerWeekOut: { day: string; appointments: number; revenue: number; past: boolean }[] = emptyTopRunnerWeek
       if (topRunner) {
-        const weekStartISO = `${new Date(mondayMs).toISOString().slice(0, 10)}T00:00:00${offset}`
-        const sundayMs = mondayMs + 6 * 86_400_000
-        const weekEndISO   = `${new Date(sundayMs).toISOString().slice(0, 10)}T23:59:59${offset}`
+        const mondayDate = new Date(mondayMs)
+        const weekDates: string[] = []
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(mondayMs + i * 86_400_000)
+          weekDates.push(d.toISOString().slice(0, 10))
+        }
+        const weekStartISO = `${weekDates[0]}T00:00:00${offset}`
+        const weekEndISO = `${weekDates[6]}T23:59:59${offset}`
+        console.log('weekStartISO', weekStartISO, 'weekEndISO', weekEndISO, 'dayIdx', dayIdx, 'ty tm td', ty, tm, td)
 
         const topRunnerStaffId = (appts.find(a =>
           (a.staff as unknown as { name: string } | null)?.name === topRunner.name
