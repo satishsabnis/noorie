@@ -1052,7 +1052,7 @@ async function fetchBrief14DayContext(
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 300,
-        system: 'You are Noorie, an AI assistant for salon owners in the GCC. Write a sharp 3 to 4 sentence morning brief for the owner using the data provided. Use specific numbers from the data. Be direct and actionable. No emojis. No bullet points. No greeting. No sign-off. Write in plain English.',
+        system: 'You are Noorie, an AI assistant for salon owners in the GCC. Return exactly 3 to 4 facts about the salon using the data provided. Format: fact1|fact2|fact3|fact4 Rules: pipe character separates facts, no other separators, no line breaks, no markdown, no emojis, no greeting, no sign-off, no labels. Each fact must contain a specific number from the data. Be direct. Example format: Revenue up 12% to AED 5,800 vs AED 5,200 prior|Aisha led this week at AED 1,400|Three clients drove 9 of 32 visits|AED 280 outstanding from two appointments',
         tools: [],
         messages: [{ role: 'user', content: contextString }],
         salonId,
@@ -1120,7 +1120,7 @@ function buildLowStockHTML(items: BriefLowStock[], salonName: string, tz: string
 
 function MorningBrief({
   slots, lapsedClient, unpaid, topClient, lowStock, loading,
-  errors, tz = 'Asia/Dubai',
+  errors, tz = 'Asia/Dubai', narrative, narrativeLoading,
 }: {
   slots: BriefSlot[]
   lapsedClient: BriefLapsedClient | null
@@ -1313,6 +1313,34 @@ function MorningBrief({
             )}
 
           </div>
+        </div>
+      )}
+
+      {/* ── Noorie AI narrative card ── */}
+      {(narrativeLoading === true || (narrative != null && narrative !== '')) && (
+        <div style={{
+          backgroundColor: '#034325', borderRadius: 10, padding: '18px 20px',
+          margin: '14px 16px 0',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#00BF00', flexShrink: 0 }} />
+            <span style={{ color: '#00BF00', fontSize: 10, fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Noorie AI</span>
+          </div>
+          {narrativeLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#00BF00', flexShrink: 0 }} />
+              <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>Generating your brief...</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {(narrative ?? '').split('|').map(s => s.trim()).filter(Boolean).map((bullet, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#00BF00', fontSize: 11, flexShrink: 0, marginTop: 2, marginRight: 8 }}>&#9658;</span>
+                  <span style={{ color: '#fff', fontSize: 13, lineHeight: 1.6 }}>{bullet}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
