@@ -74,7 +74,7 @@ interface ConfigData {
   timezone: string
 }
 
-interface ServiceRow { id: string; name: string; duration_minutes: number; active: boolean; price: number; category: string; image_url: string | null }
+interface ServiceRow { id: string; name: string; duration_minutes: number; active: boolean; price: number; category: string; image_url: string | null; show_on_client_app: boolean }
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -512,7 +512,7 @@ function SectionServices({ salonId }: { salonId: string }) {
   const [pendingImgSvcId, setPendingImgSvcId] = useState<string | null>(null)
 
   async function load() {
-    const { data } = await supabase.from('services').select('id, name, duration_minutes, is_active, price, category, image_url').eq('salon_id', salonId).order('name')
+    const { data } = await supabase.from('services').select('id, name, duration_minutes, is_active, price, category, image_url, show_on_client_app').eq('salon_id', salonId).order('name')
     setServices((data ?? []).map(s => ({
       id: s.id as string,
       name: s.name as string,
@@ -521,6 +521,7 @@ function SectionServices({ salonId }: { salonId: string }) {
       price: (s.price as number) ?? 0,
       category: (s.category as string) ?? '',
       image_url: (s.image_url as string | null) ?? null,
+      show_on_client_app: (s.show_on_client_app as boolean) ?? false,
     })))
     setLoading(false)
   }
@@ -643,7 +644,7 @@ function SectionServices({ salonId }: { salonId: string }) {
       <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, overflowX: 'auto', marginBottom: 14 }}>
         {loading ? <p style={{ padding: 24, textAlign: 'center', fontSize: 12, color: '#6b7280', margin: 0 }}>Loading…</p> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={TH}>Service</th><th style={TH}>Category</th><th style={TH}>Duration</th><th style={TH}>Price (AED)</th><th style={TH}>Status</th><th style={TH}>Actions</th></tr></thead>
+            <thead><tr><th style={TH}>Service</th><th style={TH}>Category</th><th style={TH}>Duration</th><th style={TH}>Price (AED)</th><th style={TH}>Status</th><th style={TH}>Client app</th><th style={TH}>Actions</th></tr></thead>
             <tbody>
               {(categoryFilter === 'All' ? services : services.filter(s => s.category === categoryFilter)).map(svc => (
                 <tr key={svc.id} style={{ opacity: svc.active ? 1 : 0.5 }}>
@@ -670,6 +671,17 @@ function SectionServices({ salonId }: { salonId: string }) {
                   <td style={TD}>
                     {!svc.active && <span style={{ fontSize: 10, backgroundColor: '#f3f4f6', color: '#6b7280', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>Inactive</span>}
                     {svc.active && <span style={{ fontSize: 10, backgroundColor: '#f0fdf4', color: '#034325', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>Active</span>}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={svc.show_on_client_app || false}
+                      onChange={async (e) => {
+                        await supabase.from('services').update({ show_on_client_app: e.target.checked }).eq('id', svc.id)
+                        load()
+                      }}
+                      style={{ accentColor: '#034325', width: 16, height: 16, cursor: 'pointer' }}
+                    />
                   </td>
                   <td style={TD}>
                     {editId === svc.id ? (
