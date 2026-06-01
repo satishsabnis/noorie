@@ -232,6 +232,8 @@ export default function ClientApp() {
 
   const [loyaltyLedger, setLoyaltyLedger] = useState<Array<{id: string; type: string; points: number; reason: string; created_at: string}>>([])
   const [loyaltyConfig, setLoyaltyConfig] = useState<{pro_threshold: number; max_threshold: number} | null>(null)
+  const [showBBPanel, setShowBBPanel] = useState(false)
+  const [bbRewards, setBbRewards] = useState<Array<{id: string; status: string; expires_at: string; created_at: string; services: {name: string} | null; blind_box_campaigns: {name: string} | null}>>([])
 
   useEffect(() => {
     if (!slug) return
@@ -434,6 +436,12 @@ export default function ClientApp() {
       .eq('is_active', true)
       .maybeSingle()
     if (cfg) setLoyaltyConfig(cfg as any)
+    const { data: bb } = await supabase
+      .from('blind_box_rewards')
+      .select('id, status, expires_at, created_at, services(name), blind_box_campaigns(name)')
+      .eq('client_id', client.id)
+      .order('created_at', { ascending: false })
+    if (bb) setBbRewards(bb as any)
   }
 
   useEffect(() => {
@@ -1442,34 +1450,81 @@ export default function ClientApp() {
   // ── Loyalty screen ────────────────────────────────────────────────────────
 
   if (currentScreen === 'loyalty') {
+    const pts = client?.loyalty_points || 0
+    const proThreshold = loyaltyConfig?.pro_threshold || 500
+    const maxThreshold = loyaltyConfig?.max_threshold || 2000
+    const tier = pts >= maxThreshold ? 'Max' : pts >= proThreshold ? 'Pro' : 'Regular'
+    const nextTier = tier === 'Regular' ? 'Pro' : tier === 'Pro' ? 'Max' : null
+    const ptsToNext = tier === 'Regular' ? Math.max(0, proThreshold - pts) : tier === 'Pro' ? Math.max(0, maxThreshold - pts) : 0
+    const totalBBCount = bbRewards.length
+
     return (
       <div style={{ minHeight: '100vh', background: '#f9fafb', paddingBottom: 40 }}>
         <div style={{ background: '#034325', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => setCurrentScreen('home')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', borderRadius: 6, padding: '4px 12px', fontSize: 13, cursor: 'pointer' }}>Back</button>
-          <span style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>My Loyalty</span>
+          <button onClick={() => setCurrentScreen('home')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', borderRadius: 6, padding: '4px 12px', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>Back</button>
+          <span style={{ color: '#fff', fontSize: 16, fontWeight: 600, flex: 1 }}>My Loyalty</span>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ color: '#C9A227', fontSize: 18, fontWeight: 700 }}>{pts} pts</div>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10 }}>your balance</div>
+          </div>
         </div>
 
         <div style={{ padding: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
-            <div style={{ background: '#fff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14, textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#034325' }}>{client?.loyalty_points || 0}</div>
-              <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>Points</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+            <div style={{ background: '#fff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 16 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#185FA5', marginBottom: 4 }}>{tier}</div>
+              {nextTier ? (
+                <div style={{ fontSize: 12, color: '#888' }}>{ptsToNext} pts to <span style={{ color: '#854F0B', fontWeight: 500 }}>{nextTier}</span></div>
+              ) : (
+                <div style={{ fontSize: 12, color: '#034325', fontWeight: 500 }}>Top tier reached</div>
+              )}
             </div>
-            <div style={{ background: '#fff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14, textAlign: 'center' }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#185FA5' }}>
-                {(client?.loyalty_points || 0) >= (loyaltyConfig?.max_threshold || 2000) ? 'Max' : (client?.loyalty_points || 0) >= (loyaltyConfig?.pro_threshold || 500) ? 'Pro' : 'Regular'}
-              </div>
-              <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>Tier</div>
-            </div>
-            <div style={{ background: '#fff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14, textAlign: 'center' }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#854F0B' }}>
-                {(client?.loyalty_points || 0) >= (loyaltyConfig?.max_threshold || 2000) ? '—' : (client?.loyalty_points || 0) >= (loyaltyConfig?.pro_threshold || 500) ? Math.max(0, (loyaltyConfig?.max_threshold || 2000) - (client?.loyalty_points || 0)) : Math.max(0, (loyaltyConfig?.pro_threshold || 500) - (client?.loyalty_points || 0))}
-              </div>
-              <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
-                {(client?.loyalty_points || 0) >= (loyaltyConfig?.max_threshold || 2000) ? 'Max reached' : 'To next tier'}
-              </div>
+            <div
+              onClick={() => setShowBBPanel(p => !p)}
+              style={{ background: '#fff', border: '1.5px solid #C9A227', borderRadius: 8, padding: 16, textAlign: 'center', cursor: 'pointer' }}
+            >
+              <div style={{ fontSize: 26, fontWeight: 700, color: '#854F0B' }}>{totalBBCount}</div>
+              <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>Blind Box rewards</div>
+              <div style={{ fontSize: 9, color: '#C9A227', marginTop: 4 }}>{showBBPanel ? 'Tap to close' : 'Tap to view'}</div>
             </div>
           </div>
+
+          {showBBPanel && (
+            <div style={{ background: '#fff', border: '1.5px solid #C9A227', borderRadius: 10, padding: 14, marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: '#854F0B', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 12 }}>Your Blind Box rewards</div>
+              {bbRewards.length === 0 && <div style={{ fontSize: 13, color: '#888' }}>No rewards yet.</div>}
+              {bbRewards.map(r => {
+                const svc = r.services as { name: string } | null
+                const campaign = r.blind_box_campaigns as { name: string } | null
+                const statusLabel: Record<string, string> = { redeemed_now: 'Used in appointment', saved: 'Saved for next visit', redeemed_later: 'Redeemed later', expired: 'Expired unused' }
+                const statusColor: Record<string, { bg: string; color: string }> = {
+                  redeemed_now: { bg: '#e6f1fb', color: '#185FA5' },
+                  saved: { bg: '#e8f4ec', color: '#034325' },
+                  redeemed_later: { bg: '#e6f1fb', color: '#185FA5' },
+                  expired: { bg: '#fcebeb', color: '#991b1b' },
+                }
+                const sc = statusColor[r.status] || { bg: '#f0f0f0', color: '#888' }
+                const isSaved = r.status === 'saved'
+                const isExpired = r.status === 'expired'
+                const expiryDate = new Date(r.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                const earnDate = new Date(r.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                return (
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '0.5px solid #f0f0f0' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 6, background: '#faeeda', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#854F0B', flexShrink: 0 }}>BB</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{svc?.name || 'Unknown service'}</div>
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{campaign?.name || ''} · {earnDate}</div>
+                      <span style={{ display: 'inline-block', fontSize: 10, padding: '2px 8px', borderRadius: 4, marginTop: 4, background: sc.bg, color: sc.color }}>{statusLabel[r.status] || r.status}</span>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 10, color: '#888' }}>{isSaved ? 'Expires' : isExpired ? 'Expired' : 'Used'}</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: isSaved ? '#991b1b' : '#888' }}>{expiryDate}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           <div style={{ fontSize: 12, fontWeight: 500, color: '#034325', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 12 }}>Points history</div>
 
