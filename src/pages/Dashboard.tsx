@@ -911,6 +911,163 @@ async function fetchBriefLowStock(salonId: string): Promise<BriefLowStock[]> {
     }))
 }
 
+async function fetchBrief14DayContext(
+  salonId: string,
+  salonName: string,
+  tz: string
+): Promise<string | null> {
+  try {
+    const offset = salonOffsetStr(tz)
+    const now = salonNowUTC(tz)
+    const baseMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    const DAY = 86_400_000
+    const fmt = (ms: number): string => {
+      const dt = new Date(ms)
+      const yy = dt.getUTCFullYear()
+      const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
+      const dd = String(dt.getUTCDate()).padStart(2, '0')
+      return `${yy}-${mm}-${dd}`
+    }
+    const today = fmt(baseMs)
+    const start14 = `${fmt(baseMs - 14 * DAY)}T00:00:00${offset}`
+    const todayEnd = `${today}T23:59:59${offset}`
+    const startPrior14 = `${fmt(baseMs - 28 * DAY)}T00:00:00${offset}`
+    const endPrior14 = `${fmt(baseMs - 15 * DAY)}T23:59:59${offset}`
+    const start7Ms = baseMs - 7 * DAY
+
+    const [revLast14Res, revPrior14Res, visitsRes, visitsPriorRes, staffRes] = await Promise.all([
+      supabase.from('payments')
+        .select('amount, appointments!inner(starts_at)')
+        .eq('salon_id', salonId)
+        .eq('status', 'completed')
+        .gte('appointments.starts_at', start14)
+        .lte('appointments.starts_at', todayEnd),
+      supabase.from('payments')
+        .select('amount, appointments!inner(starts_at)')
+        .eq('salon_id', salonId)
+        .eq('status', 'completed')
+        .gte('appointments.starts_at', startPrior14)
+        .lte('appointments.starts_at', endPrior14),
+      supabase.from('appointments')
+        .select('id, client_id, starts_at, clients(name)')
+        .eq('salon_id', salonId)
+        .eq('status', 'completed')
+        .gte('starts_at', start14)
+        .lte('starts_at', todayEnd),
+      supabase.from('appointments')
+        .select('id')
+        .eq('salon_id', salonId)
+        .eq('status', 'completed')
+        .gte('starts_at', startPrior14)
+        .lte('starts_at', endPrior14),
+      supabase.from('appointment_services')
+        .select('price, staff(name), appointments!inner(starts_at, salon_id, status)')
+        .eq('appointments.salon_id', salonId)
+        .eq('appointments.status', 'completed')
+        .gte('appointments.starts_at', start14)
+        .lte('appointments.starts_at', todayEnd),
+    ])
+
+    const revLast14Rows = (revLast14Res.data ?? []) as unknown as { amount: number | null }[]
+    const revPrior14Rows = (revPrior14Res.data ?? []) as unknown as { amount: number | null }[]
+    const sumAmount = (rows: { amount: number | null }[]): number =>
+      Math.round(rows.reduce((s, r) => s + (r.amount ?? 0), 0))
+    const revenueLast14 = sumAmount(revLast14Rows)
+    const revenuePrior14 = sumAmount(revPrior14Rows)
+
+    let revenueTrend: string
+    if (revenuePrior14 === 0) {
+      revenueTrend = revenueLast14 > 0 ? '+100%' : 'flat'
+    } else {
+      const pct = Math.round(((revenueLast14 - revenuePrior14) / revenuePrior14) * 100)
+      revenueTrend = pct === 0 ? 'flat' : `${pct > 0 ? '+' : ''}${pct}%`
+    }
+
+    const embedName = (v: { name: string } | { name: string }[] | null | undefined): string => {
+      if (!v) return 'Client'
+      if (Array.isArray(v)) return v[0]?.name ?? 'Client'
+      return v.name ?? 'Client'
+    }
+    const embedStarts = (v: { starts_at: string } | { starts_at: string }[] | null | undefined): string => {
+      if (!v) return ''
+      if (Array.isArray(v)) return v[0]?.starts_at ?? ''
+      return v.starts_at ?? ''
+    }
+
+    const visitRows = (visitsRes.data ?? []) as unknown as { id: string; client_id: string; clients: { name: string } | { name: string }[] | null }[]
+    const visitsLast14 = visitRows.length
+    const visitsPrior14 = ((visitsPriorRes.data ?? []) as unknown as { id: string }[]).length
+
+    const clientCounts: Record<string, { name: string; visits: number }> = {}
+    for (const r of visitRows) {
+      const cid = r.client_id
+      if (!cid) continue
+      if (!clientCounts[cid]) clientCounts[cid] = { name: embedName(r.clients), visits: 0 }
+      clientCounts[cid].visits++
+    }
+    const topClients = Object.values(clientCounts).sort((a, b) => b.visits - a.visits).slice(0, 3)
+
+    const staffRows = (staffRes.data ?? []) as unknown as { price: number | null; staff: { name: string } | { name: string }[] | null; appointments: { starts_at: string } | { starts_at: string }[] | null }[]
+    const last7Map: Record<string, number> = {}
+    const prior7Map: Record<string, number> = {}
+    for (const r of staffRows) {
+      const name = embedName(r.staff)
+      const price = r.price ?? 0
+      const starts = embedStarts(r.appointments)
+      const startsMs = starts ? new Date(starts).getTime() : 0
+      if (startsMs >= start7Ms) last7Map[name] = (last7Map[name] ?? 0) + price
+      else prior7Map[name] = (prior7Map[name] ?? 0) + price
+    }
+    const staffLast7 = Object.entries(last7Map)
+      .map(([name, amount]) => ({ name, amount: Math.round(amount) }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 3)
+
+    const topClientsStr = topClients.length
+      ? topClients.map(c => `${c.name} (${c.visits} visit${c.visits === 1 ? '' : 's'})`).join(', ')
+      : 'none'
+    const staffLast7Str = staffLast7.length
+      ? staffLast7.map(s => `${s.name} AED ${s.amount}`).join(', ')
+      : 'none'
+    const staffPrior7Str = staffLast7.length
+      ? staffLast7.map(s => `${s.name} AED ${Math.round(prior7Map[s.name] ?? 0)}`).join(', ')
+      : 'none'
+
+    const contextString =
+      `Salon: ${salonName}. Date: ${today}. ` +
+      `Revenue last 14 days: AED ${revenueLast14} (${revenueTrend} vs prior 14 days: AED ${revenuePrior14}). ` +
+      `Visits: ${visitsLast14} vs ${visitsPrior14} prior. ` +
+      `Top clients this period: ${topClientsStr}. ` +
+      `Staff revenue last 7 days: ${staffLast7Str}. ` +
+      `Compare to prior 7 days: ${staffPrior7Str}.`
+
+    const { data: { session } } = await supabase.auth.getSession()
+
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/noorie-bot`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        system: 'You are Noorie, an AI assistant for salon owners in the GCC. Write a sharp 3 to 4 sentence morning brief for the owner using the data provided. Use specific numbers from the data. Be direct and actionable. No emojis. No bullet points. No greeting. No sign-off. Write in plain English.',
+        tools: [],
+        messages: [{ role: 'user', content: contextString }],
+        salonId,
+      }),
+    })
+
+    if (!res.ok) { console.error('Morning brief noorie-bot error:', res.status); return null }
+    const result = await res.json()
+    return result.content?.[0]?.text ?? null
+  } catch (err) {
+    console.error('fetchBrief14DayContext error:', err)
+    return null
+  }
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
@@ -973,6 +1130,8 @@ function MorningBrief({
   loading: boolean
   errors: { slots: boolean; lapsed: boolean; unpaid: boolean; topClient: boolean; lowStock: boolean }
   tz?: string
+  narrative?: string | null
+  narrativeLoading?: boolean
 }) {
   const isMobile = useIsMobile()
   const salonName = useAuthStore(s => s.salonName)
@@ -1209,6 +1368,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const staffRecord = useAuthStore(s => s.staffRecord)
+  const salonName = useAuthStore(s => s.salonName)
   const { tz, getSalonNow, getSalonTodayString } = useSalonTimezone()
   const [drilldownStack, setDrilldownStack] = useState<Exclude<DrillDown, null>[]>([])
   const drilldown: DrillDown = drilldownStack.length > 0 ? drilldownStack[drilldownStack.length - 1] : null
@@ -1243,6 +1403,8 @@ export default function Dashboard() {
   const [briefLowStock,       setBriefLowStock]       = useState<BriefLowStock[]>([])
   const [briefLoading,        setBriefLoading]        = useState(true)
   const [briefErrors,         setBriefErrors]         = useState({ slots: false, lapsed: false, unpaid: false, topClient: false, lowStock: false })
+  const [briefNarrative,        setBriefNarrative]        = useState<string | null>(null)
+  const [briefNarrativeLoading, setBriefNarrativeLoading] = useState(false)
 
   // ── Product Sales ──────────────────────────────────────────────────────────
   const [showProductSales, setShowProductSales] = useState(false)
@@ -1628,6 +1790,15 @@ export default function Dashboard() {
         setBriefErrors({ slots: slotsRes.e, lapsed: lapsedRes.e, unpaid: unpaidRes.e, topClient: topClientRes.e, lowStock: lowStockRes.e })
         setBriefLoading(false)
       }
+
+      if (!cancelled && briefNarrative === null) {
+        setBriefNarrativeLoading(true)
+        const narrative = await fetchBrief14DayContext(salonId, salonName ?? '', tz)
+        if (!cancelled) {
+          setBriefNarrative(narrative)
+          setBriefNarrativeLoading(false)
+        }
+      }
     }
 
     async function fetchActiveBBCampaign() {
@@ -1712,6 +1883,8 @@ export default function Dashboard() {
           loading={briefLoading}
           errors={briefErrors}
           tz={tz}
+          narrative={briefNarrative}
+          narrativeLoading={briefNarrativeLoading}
         />
 
         {/* ── Product Sales modal ── */}
