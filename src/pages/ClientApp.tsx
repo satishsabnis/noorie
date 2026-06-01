@@ -30,6 +30,7 @@ interface Client {
   id: string
   name: string
   phone: string
+  loyalty_points?: number
 }
 
 interface Service {
@@ -50,7 +51,7 @@ interface StaffMember {
 }
 
 type DayConfig = { open: boolean; from: string; to: string }
-type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm' | 'my-profile' | 'upcoming' | 'history' | 'reviews' | 'about'
+type Screen = 'login' | 'home' | 'change-pin' | 'book-staff' | 'book-service' | 'book-datetime' | 'book-confirm' | 'my-profile' | 'upcoming' | 'history' | 'reviews' | 'about' | 'loyalty'
 
 interface UpcomingAppt {
   id: string
@@ -229,6 +230,8 @@ export default function ClientApp() {
   const [reviewSubmitting, setReviewSubmitting]     = useState(false)
   const [reviewError, setReviewError]               = useState('')
 
+  const [loyaltyLedger, setLoyaltyLedger] = useState<Array<{id: string; type: string; points: number; reason: string; created_at: string}>>([])
+  const [loyaltyConfig, setLoyaltyConfig] = useState<{pro_threshold: number; max_threshold: number} | null>(null)
 
   useEffect(() => {
     if (!slug) return
@@ -413,6 +416,29 @@ export default function ClientApp() {
       setReviewsLoading(false)
     })
   }, [currentScreen, client?.id, salon?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function fetchLoyaltyData() {
+    if (!client || !salon) return
+    const { data: ledger } = await supabase
+      .from('loyalty_points_ledger')
+      .select('id, type, points, reason, created_at')
+      .eq('client_id', client.id)
+      .eq('salon_id', salon.id)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (ledger) setLoyaltyLedger(ledger)
+    const { data: cfg } = await supabase
+      .from('loyalty_config')
+      .select('pro_threshold, max_threshold')
+      .eq('salon_id', salon.id)
+      .eq('is_active', true)
+      .maybeSingle()
+    if (cfg) setLoyaltyConfig(cfg as any)
+  }
+
+  useEffect(() => {
+    if (currentScreen === 'loyalty') fetchLoyaltyData()
+  }, [currentScreen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmitReview = async (appt: PendingReview) => {
     if (!client || !salon) return
@@ -692,7 +718,7 @@ export default function ClientApp() {
           ))}
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('history') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Appointment History</button>
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('reviews') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Reviews</button>
-          <button onClick={() => alert('Coming soon')} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Loyalty</button>
+          <button onClick={() => { setCurrentScreen('loyalty'); setMenuOpen(false) }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Loyalty</button>
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('about') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>About Noorie</button>
           <button onClick={() => { setMenuOpen(false); setCurrentScreen('change-pin') }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '0.5px solid #e0e0e0', padding: '0 16px', height: 44, fontSize: 13, color: '#111', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>Change PIN</button>
           {(salon?.phone || salon?.email) && (
@@ -1408,6 +1434,80 @@ export default function ClientApp() {
             </div>
           )}
           {blueFooter}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Loyalty screen ────────────────────────────────────────────────────────
+
+  if (currentScreen === 'loyalty') {
+    return (
+      <div style={{ minHeight: '100vh', background: '#f9fafb', paddingBottom: 40 }}>
+        <div style={{ background: '#034325', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => setCurrentScreen('home')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', borderRadius: 6, padding: '4px 12px', fontSize: 13, cursor: 'pointer' }}>Back</button>
+          <span style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>My Loyalty</span>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
+            <div style={{ background: '#fff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14, textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#034325' }}>{client?.loyalty_points || 0}</div>
+              <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>Points</div>
+            </div>
+            <div style={{ background: '#fff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14, textAlign: 'center' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#185FA5' }}>
+                {(client?.loyalty_points || 0) >= (loyaltyConfig?.max_threshold || 2000) ? 'Max' : (client?.loyalty_points || 0) >= (loyaltyConfig?.pro_threshold || 500) ? 'Pro' : 'Regular'}
+              </div>
+              <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>Tier</div>
+            </div>
+            <div style={{ background: '#fff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14, textAlign: 'center' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#854F0B' }}>
+                {(client?.loyalty_points || 0) >= (loyaltyConfig?.max_threshold || 2000) ? '—' : (client?.loyalty_points || 0) >= (loyaltyConfig?.pro_threshold || 500) ? Math.max(0, (loyaltyConfig?.max_threshold || 2000) - (client?.loyalty_points || 0)) : Math.max(0, (loyaltyConfig?.pro_threshold || 500) - (client?.loyalty_points || 0))}
+              </div>
+              <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
+                {(client?.loyalty_points || 0) >= (loyaltyConfig?.max_threshold || 2000) ? 'Max reached' : 'To next tier'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 500, color: '#034325', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 12 }}>Points history</div>
+
+          {loyaltyLedger.length === 0 && <div style={{ fontSize: 13, color: '#888', textAlign: 'center', padding: 24 }}>No points recorded yet.</div>}
+
+          {loyaltyLedger.map((row, idx) => {
+            const runningBalance = loyaltyLedger.slice(idx).reduce((s, r) => s + r.points, 0)
+            const reasonLabel: Record<string, string> = {
+              service_payment: 'Service payment',
+              product_sale: 'Product purchase',
+              app_booking: 'App booking bonus',
+              pre_book: 'Pre-booked next visit',
+              off_peak: 'Off-peak booking bonus',
+              review: 'Left a review',
+              streak: 'Monthly streak bonus',
+              referral: 'Referral bonus',
+              redemption: 'Points redeemed',
+              expiry: 'Points expired',
+              adjustment: 'Adjustment',
+            }
+            const isRedeem = row.reason === 'redemption' || row.reason === 'expiry'
+            const iconLabel = row.type === 'spend' ? 'SP' : row.type === 'behaviour' ? 'BP' : 'RD'
+            const iconBg = row.type === 'spend' ? '#e8f4ec' : row.type === 'behaviour' ? '#e6f1fb' : '#fcebeb'
+            const iconColor = row.type === 'spend' ? '#034325' : row.type === 'behaviour' ? '#185FA5' : '#991b1b'
+            return (
+              <div key={row.id} style={{ background: '#fff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 6, background: iconBg, color: iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{iconLabel}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13 }}>{reasonLabel[row.reason] || row.reason}</div>
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{new Date(row.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: isRedeem ? '#991b1b' : '#034325' }}>{isRedeem ? '-' : '+'}{Math.abs(row.points)} pts</div>
+                  <div style={{ fontSize: 11, color: '#888' }}>Balance: {runningBalance}</div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
     )
