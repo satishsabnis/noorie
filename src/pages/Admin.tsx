@@ -740,6 +740,7 @@ interface InventoryItem {
   low_stock_threshold: number; image_url: string | null
   commission_pct: number | null
   margin_pct: number | null
+  show_on_client_app: boolean
 }
 
 function SectionInventory({ salonId }: { salonId: string }) {
@@ -773,7 +774,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
     setLoading(true)
     const { data } = await supabase
       .from('inventory_items')
-      .select('id, name, type, price, stock_count, unit, low_stock_threshold, image_url, commission_pct, margin_pct')
+      .select('id, name, type, price, stock_count, unit, low_stock_threshold, image_url, commission_pct, margin_pct, show_on_client_app')
       .eq('salon_id', salonId).eq('type', type).order('name')
     setItems((data ?? []) as InventoryItem[])
     setLoading(false)
@@ -1023,6 +1024,7 @@ function SectionInventory({ salonId }: { salonId: string }) {
               <th style={TH}>Stock</th>
               <th style={TH}>Unit</th>
               <th style={TH}>Reorder level</th>
+              {isProduct && <th style={TH}>Client app</th>}
               <th style={TH}>Actions</th>
             </tr></thead>
             <tbody>
@@ -1037,6 +1039,19 @@ function SectionInventory({ salonId }: { salonId: string }) {
                   <td style={{ ...TD, color: item.stock_count <= item.low_stock_threshold ? '#991b1b' : '#000' }}>{item.stock_count}</td>
                   <td style={TD}>{item.unit}</td>
                   <td style={TD}>{item.low_stock_threshold}</td>
+                  {isProduct && (
+                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={item.show_on_client_app || false}
+                        onChange={async (e) => {
+                          await supabase.from('inventory_items').update({ show_on_client_app: e.target.checked }).eq('id', item.id)
+                          load('product')
+                        }}
+                        style={{ accentColor: '#034325', width: 16, height: 16, cursor: 'pointer' }}
+                      />
+                    </td>
+                  )}
                   <td style={TD}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => openEdit(item)} style={{ fontSize: 11, border: '0.5px solid #034325', color: '#034325', backgroundColor: 'transparent', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Edit</button>
