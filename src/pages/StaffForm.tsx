@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ export default function StaffForm() {
   const isEdit      = !!id
   const staffRecord = useAuthStore(s => s.staffRecord)
   const salonId     = staffRecord?.salon_id ?? null
+  const isMobile    = useIsMobile()
 
   // Personal details
   const [name,        setName]        = useState('')
@@ -423,7 +425,7 @@ export default function StaffForm() {
         </div>
 
         {/* Two-column layout */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 360px', gap: 16, alignItems: 'start' }}>
 
           {/* ── Left column ── */}
           <div>
