@@ -375,6 +375,43 @@ export default function NewAppointment() {
 
       if (svcErr) { setError(svcErr.message); return }
 
+      try {
+        const start = new Date(startsAt).getTime()
+        const now = Date.now()
+        const sixHours = 6 * 60 * 60 * 1000
+        if (start - now >= sixHours) {
+          const { data: cfg } = await supabase
+            .from('loyalty_config')
+            .select('is_active, bp_pre_book')
+            .eq('salon_id', salonId)
+            .eq('is_active', true)
+            .maybeSingle()
+          if (cfg && cfg.bp_pre_book) {
+            const { data: clientRow } = await supabase
+              .from('clients')
+              .select('loyalty_points')
+              .eq('id', client!.id)
+              .single()
+            if (clientRow) {
+              const currentPoints = (clientRow.loyalty_points as number) || 0
+              await supabase.from('loyalty_points_ledger').insert({
+                salon_id: salonId,
+                client_id: client!.id,
+                type: 'behaviour',
+                points: cfg.bp_pre_book as number,
+                reason: 'pre_book',
+                reference_id: appt.id,
+              })
+              await supabase.from('clients').update({
+                loyalty_points: currentPoints + (cfg.bp_pre_book as number),
+              }).eq('id', client!.id)
+            }
+          }
+        }
+      } catch (pointsErr) {
+        console.error('Pre-book points error:', pointsErr)
+      }
+
       navigate('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
