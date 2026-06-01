@@ -17,6 +17,7 @@ interface LoyaltyConfig {
   max_service_pct: number;
   max_retail_pct: number;
   min_redemption_balance: number;
+  value_per_point: number;
   expiry_months: number;
   regular_birthday_perk: string;
   pro_birthday_perk: string;
@@ -70,6 +71,7 @@ const defaultConfig: LoyaltyConfig = {
   max_service_pct: 14.58139,
   max_retail_pct: 17.32965,
   min_redemption_balance: 200,
+  value_per_point: 0.10,
   expiry_months: 12,
   regular_birthday_perk: 'Double reward rate all month',
   pro_birthday_perk: 'Free add-on (threading, eyebrow, nail polish)',
@@ -173,14 +175,24 @@ const badges: Record<string, React.CSSProperties> = {
   max: { display: 'inline-block', fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 4, marginBottom: 8, background: '#faeeda', color: '#854F0B' },
 };
 
-function TileInput({ label, value, onChange, suffix, subtext, step, badge, wide }: {
+function TileInput({ label, value, onChange, suffix, subtext, step, badge, wide, info }: {
   label: string; value: number | string; onChange: (v: string) => void;
-  suffix?: string; subtext?: string; step?: string; badge?: 'regular' | 'pro' | 'max'; wide?: boolean;
+  suffix?: string; subtext?: string; step?: string; badge?: 'regular' | 'pro' | 'max'; wide?: boolean; info?: string;
 }) {
+  const [showInfo, setShowInfo] = useState(false);
   return (
     <div style={wide ? wideTile : tileStyle}>
       {badge && <span style={badges[badge]}>{badge.charAt(0).toUpperCase() + badge.slice(1)}</span>}
-      <label style={labelStyle}>{label}</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label style={labelStyle}>{label}</label>
+        {info && (
+          <button
+            onClick={() => setShowInfo(v => !v)}
+            aria-label="What this means"
+            style={{ background: 'transparent', border: '1px solid #991b1b', color: '#991b1b', borderRadius: '50%', width: 16, height: 16, fontSize: 11, lineHeight: 1, cursor: 'pointer', padding: 0, flexShrink: 0 }}
+          >i</button>
+        )}
+      </div>
       <div style={inputWrap}>
         <input
           type={typeof value === 'number' ? 'number' : 'text'}
@@ -192,6 +204,13 @@ function TileInput({ label, value, onChange, suffix, subtext, step, badge, wide 
         {suffix && <span style={suffixStyle}>{suffix}</span>}
       </div>
       {subtext && <div style={subText}>{subtext}</div>}
+      {info && showInfo && (
+        <div style={{ marginTop: 10, background: '#fcebeb', border: '0.5px solid #f0a3a3', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#501313', lineHeight: 1.6 }}>
+          Each point is worth AED 0.10 when a client redeems it.<br />
+          A typical AED 134 visit earns about 12 points, roughly AED 1.20 back.<br />
+          Raise this number to be more generous, lower it to cost less.
+        </div>
+      )}
     </div>
   );
 }
@@ -338,6 +357,7 @@ export default function LoyaltyAdmin({ salonId }: LoyaltyAdminProps) {
           <TileInput label="Reward value — services" value={config.max_service_pct} onChange={set('max_service_pct')} suffix="%" step="0.00001" badge="max" />
           <TileInput label="Reward value — retail" value={config.max_retail_pct} onChange={set('max_retail_pct')} suffix="%" step="0.00001" badge="max" />
           <TileInput label="Min balance before redemption" value={config.min_redemption_balance} onChange={set('min_redemption_balance')} suffix="pts" />
+          <TileInput label="Value per point" value={config.value_per_point} onChange={set('value_per_point')} suffix="AED" step="0.01" info="show" />
           <TileInput label="Points expiry" value={config.expiry_months} onChange={set('expiry_months')} suffix="mo" />
         </div>
         <button style={saveBtn} onClick={() => saveSection('tiers')} disabled={saving['tiers']}>
