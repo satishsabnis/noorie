@@ -1868,14 +1868,31 @@ export default function Dashboard() {
     const salonId = staffRecord?.salon_id
     if (!salonId) return
     let cancelled = false
+
     async function fetchNarrative() {
-      setBriefNarrativeLoading(true)
-      const narrative = await fetchBrief14DayContext(salonId, salonName ?? '', tz)
+      const today = getSalonTodayString()
+      const cachedDate = localStorage.getItem('noorie_brief_date')
+      const cachedText = localStorage.getItem('noorie_brief_narrative')
+
+      if (cachedDate === today && cachedText) {
+        if (!cancelled) setBriefNarrative(cachedText)
+        return
+      }
+
+      if (!cancelled) setBriefNarrativeLoading(true)
+      const narrative = await fetchBrief14DayContext(
+        salonId, salonName ?? '', tz
+      )
       if (!cancelled) {
         setBriefNarrative(narrative)
         setBriefNarrativeLoading(false)
+        if (narrative) {
+          localStorage.setItem('noorie_brief_date', today)
+          localStorage.setItem('noorie_brief_narrative', narrative)
+        }
       }
     }
+
     fetchNarrative()
     return () => { cancelled = true }
   }, [staffRecord?.salon_id]) // eslint-disable-line react-hooks/exhaustive-deps
