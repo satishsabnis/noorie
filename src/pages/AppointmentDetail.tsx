@@ -248,6 +248,11 @@ export default function AppointmentDetail() {
   const [servicePrices, setServicePrices] = useState<Record<string, string>>({})
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState<'cash' | 'card'>('cash')
+  const [clientPoints, setClientPoints] = useState<number>(0)
+  const [loyaltyConfig, setLoyaltyConfig] = useState<{
+    is_active: boolean; min_redemption_balance: number; value_per_point: number
+  } | null>(null)
+  const [redeemPoints, setRedeemPoints] = useState<number>(0)
 
   const [allServices, setAllServices] = useState<{ id: string; name: string; price: number }[]>([])
   const [allStaff, setAllStaff] = useState<{ id: string; name: string }[]>([])
@@ -390,6 +395,39 @@ export default function AppointmentDetail() {
 
     return () => { cancelled = true }
   }, [appt?.salon_id])
+
+  useEffect(() => {
+    const clientId = appt?.client_id
+    const salonId = appt?.salon_id
+    if (!clientId || !salonId) return
+    let cancelled = false
+
+    async function loadLoyalty() {
+      try {
+        const [cfgRes, clientRes] = await Promise.all([
+          supabase
+            .from('loyalty_config')
+            .select('is_active, min_redemption_balance, value_per_point')
+            .eq('salon_id', salonId)
+            .eq('is_active', true)
+            .maybeSingle(),
+          supabase
+            .from('clients')
+            .select('loyalty_points')
+            .eq('id', clientId)
+            .single(),
+        ])
+        if (cancelled) return
+        setLoyaltyConfig((cfgRes.data as { is_active: boolean; min_redemption_balance: number; value_per_point: number } | null) ?? null)
+        setClientPoints((clientRes.data?.loyalty_points as number) ?? 0)
+      } catch (err) {
+        if (!cancelled) console.error('Loyalty data fetch error:', err)
+      }
+    }
+
+    loadLoyalty()
+    return () => { cancelled = true }
+  }, [appt?.client_id, appt?.salon_id])
 
   useEffect(() => {
     if (!showBlindBox) return;
@@ -602,9 +640,15 @@ export default function AppointmentDetail() {
         .eq('id', s.id)
     ))
 
+    const valuePerPoint = loyaltyConfig?.value_per_point ?? 0
+    const redeemAED = Math.round(redeemPoints * valuePerPoint * 100) / 100
+    const effectiveBalance = Math.round(Math.max(0, balance - redeemAED) * 100) / 100
+
     const entered = parseFloat(payAmount)
-    if (isNaN(entered) || entered <= 0) { setSaving(false); return }
-    const amount = Math.min(entered, balance)
+    if (effectiveBalance > 0 && (isNaN(entered) || entered <= 0)) {
+      setSaving(false); return
+    }
+    const amount = effectiveBalance > 0 ? Math.min(entered, effectiveBalance) : 0
 
     const { error: payErr } = await supabase.from('payments').insert({
       salon_id: appt.salon_id,
@@ -615,9 +659,26 @@ export default function AppointmentDetail() {
       status: 'completed',
     })
     if (!payErr) {
-      const newBalance = Math.round((balance - amount) * 100) / 100
+      const newBalance = Math.round((balance - redeemAED - amount) * 100) / 100
       if (newBalance <= 0) {
         await supabase.from('appointments').update({ status: 'completed' }).eq('id', appt.id)
+      }
+      if (redeemPoints > 0) {
+        try {
+          await supabase.from('loyalty_points_ledger').insert({
+            salon_id: appt.salon_id,
+            client_id: appt.client_id,
+            type: 'redemption',
+            points: -redeemPoints,
+            reason: 'redemption',
+            reference_id: appt.id,
+          })
+          await supabase.from('clients').update({
+            loyalty_points: Math.max(0, clientPoints - redeemPoints),
+          }).eq('id', appt.client_id)
+        } catch (redeemErr) {
+          console.error('Loyalty redemption error:', redeemErr)
+        }
       }
       await creditLoyaltyPoints(
         appt.client_id as string,
@@ -962,6 +1023,40 @@ export default function AppointmentDetail() {
 
                 {balance > 0 && (
                   <>
+                    {loyaltyConfig && loyaltyConfig.is_active && clientPoints >= loyaltyConfig.min_redemption_balance && (
+                      <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '0.5px solid #e0e0e0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                          <label style={{ fontSize: 10, color: '#6b7280' }}>Loyalty points</label>
+                          <span style={{ fontSize: 10, color: '#6b7280' }}>Available: {clientPoints} pts</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            max={Math.min(clientPoints, Math.floor(balance / loyaltyConfig.value_per_point))}
+                            value={redeemPoints || ''}
+                            onChange={e => {
+                              const max = Math.min(clientPoints, Math.floor(balance / loyaltyConfig.value_per_point))
+                              const v = Math.floor(parseFloat(e.target.value) || 0)
+                              setRedeemPoints(Math.max(0, Math.min(v, max)))
+                            }}
+                            placeholder="0"
+                            style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#034325', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '7px 10px', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                          {redeemPoints > 0 && (
+                            <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>
+                              = AED {(redeemPoints * loyaltyConfig.value_per_point).toFixed(2)} off
+                            </span>
+                          )}
+                        </div>
+                        {redeemPoints > 0 && (
+                          <div style={{ fontSize: 11, color: '#034325', marginTop: 6 }}>
+                            Cash to collect: AED {Math.max(0, balance - redeemPoints * loyaltyConfig.value_per_point).toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                       <div style={{ flex: 1 }}>
                         <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 4 }}>Amount</label>
