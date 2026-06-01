@@ -125,6 +125,9 @@ export default function ClientProfile() {
   const [saving, setSaving] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [activeTab, setActiveTab] = useState<'overview' | 'loyalty' | 'blindbox'>('overview')
+  const [ledger, setLedger] = useState<Array<{id: string; type: string; points: number; reason: string; reference_id: string | null; created_at: string}>>([])
+  const [bbRewards, setBbRewards] = useState<Array<{id: string; status: string; bb_fee_paid: number; catalogue_price: number; discounted_price: number; expires_at: string; created_at: string; services: {name: string} | null; blind_box_campaigns: {name: string} | null}>>([])
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(original) || pin.join('') !== originalPin
 
@@ -240,6 +243,21 @@ export default function ClientProfile() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const storedPin: string = (cd as any).pin ?? ''
       const pinDigits = storedPin ? storedPin.split('') : ['', '', '', '', '']
+
+      const { data: ledgerData } = await supabase
+        .from('loyalty_points_ledger')
+        .select('id, type, points, reason, reference_id, created_at')
+        .eq('client_id', id)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (ledgerData) setLedger(ledgerData)
+
+      const { data: bbData } = await supabase
+        .from('blind_box_rewards')
+        .select('id, status, bb_fee_paid, catalogue_price, discounted_price, expires_at, created_at, services(name), blind_box_campaigns(name)')
+        .eq('client_id', id)
+        .order('created_at', { ascending: false })
+      if (bbData) setBbRewards(bbData as any)
 
       if (!cancelled) {
         setClient(c)
@@ -535,66 +553,184 @@ export default function ClientProfile() {
             </div>
 
             <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: '#034325', margin: '0 0 12px' }}>Visit history</p>
+              <div style={{ display: 'flex', borderBottom: '1px solid #e0e0e0', marginBottom: 20 }}>
+                {(['overview', 'loyalty', 'blindbox'] as const).map(tab => (
+                  <div
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    style={{
+                      fontSize: 13, padding: '10px 18px', cursor: 'pointer',
+                      color: activeTab === tab ? '#034325' : '#888',
+                      borderBottom: activeTab === tab ? '2px solid #034325' : '2px solid transparent',
+                      fontWeight: activeTab === tab ? 500 : 400,
+                    }}
+                  >
+                    {tab === 'overview' ? 'Visit history' : tab === 'loyalty' ? 'Loyalty' : 'Blind Box'}
+                  </div>
+                ))}
+              </div>
 
-              {visits.length === 0 ? (
-                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>No visits yet.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {visits.map(v => (
-                    <div
-                      key={v.id}
-                      onClick={() => navigate(`/appointment/${v.id}`)}
-                      style={{
-                        backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0',
-                        borderRadius: 8, padding: '12px 14px', cursor: 'pointer',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.border = '0.5px solid #034325')}
-                      onMouseLeave={e => (e.currentTarget.style.border = '0.5px solid #e0e0e0')}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <span style={{ fontSize: 12, fontWeight: 500, color: '#000000' }}>
-                          {fmtDate(v.starts_at, tz)}
-                        </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 11, color: '#6b7280' }}>
-                            {fmtTime(v.starts_at, tz)}{v.ends_at ? ` – ${fmtTime(v.ends_at, tz)}` : ''}
-                          </span>
-                          <StatusBadge status={v.status} />
-                        </div>
-                      </div>
-
-                      {v.services.map((s, i) => (
+              {activeTab === 'overview' && (
+                <div>
+                  {visits.length === 0 ? (
+                    <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>No visits yet.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {visits.map(v => (
                         <div
-                          key={i}
+                          key={v.id}
+                          onClick={() => navigate(`/appointment/${v.id}`)}
                           style={{
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                            padding: '4px 0',
-                            borderTop: i === 0 ? '0.5px solid #f0f0f0' : 'none',
+                            backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0',
+                            borderRadius: 8, padding: '12px 14px', cursor: 'pointer',
                           }}
+                          onMouseEnter={e => (e.currentTarget.style.border = '0.5px solid #034325')}
+                          onMouseLeave={e => (e.currentTarget.style.border = '0.5px solid #e0e0e0')}
                         >
-                          <span style={{ fontSize: 12, color: '#000000' }}>{s.serviceName}</span>
-                          <span style={{ fontSize: 11, color: '#6b7280' }}>
-                            {s.staffName} · AED {s.price.toFixed(2)}
-                          </span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: '#000000' }}>
+                              {fmtDate(v.starts_at, tz)}
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 11, color: '#6b7280' }}>
+                                {fmtTime(v.starts_at, tz)}{v.ends_at ? ` – ${fmtTime(v.ends_at, tz)}` : ''}
+                              </span>
+                              <StatusBadge status={v.status} />
+                            </div>
+                          </div>
+
+                          {v.services.map((s, i) => (
+                            <div
+                              key={i}
+                              style={{
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                                padding: '4px 0',
+                                borderTop: i === 0 ? '0.5px solid #f0f0f0' : 'none',
+                              }}
+                            >
+                              <span style={{ fontSize: 12, color: '#000000' }}>{s.serviceName}</span>
+                              <span style={{ fontSize: 11, color: '#6b7280' }}>
+                                {s.staffName} · AED {s.price.toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+
+                          {v.payments.length > 0 && (
+                            <div style={{
+                              marginTop: 8, paddingTop: 8, borderTop: '0.5px solid #f0f0f0',
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            }}>
+                              <span style={{ fontSize: 11, color: '#6b7280' }}>
+                                Paid · {[...new Set(v.payments.map(p => p.method === 'cash' ? 'Cash' : 'Card'))].join(' + ')}
+                              </span>
+                              <span style={{ fontSize: 12, color: '#034325', fontWeight: 500 }}>
+                                AED {v.totalPaid.toFixed(2)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       ))}
-
-                      {v.payments.length > 0 && (
-                        <div style={{
-                          marginTop: 8, paddingTop: 8, borderTop: '0.5px solid #f0f0f0',
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        }}>
-                          <span style={{ fontSize: 11, color: '#6b7280' }}>
-                            Paid · {[...new Set(v.payments.map(p => p.method === 'cash' ? 'Cash' : 'Card'))].join(' + ')}
-                          </span>
-                          <span style={{ fontSize: 12, color: '#034325', fontWeight: 500 }}>
-                            AED {v.totalPaid.toFixed(2)}
-                          </span>
-                        </div>
-                      )}
                     </div>
-                  ))}
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'loyalty' && (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+                    <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14, textAlign: 'center' }}>
+                      <div style={{ fontSize: 20, fontWeight: 600, color: '#034325' }}>{client?.loyalty_points || 0}</div>
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>Total points</div>
+                    </div>
+                    <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14, textAlign: 'center' }}>
+                      <div style={{ fontSize: 20, fontWeight: 600, color: '#185FA5' }}>
+                        {(client?.loyalty_points || 0) >= 2000 ? 'Max' : (client?.loyalty_points || 0) >= 500 ? 'Pro' : 'Regular'}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>Current tier</div>
+                    </div>
+                    <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14, textAlign: 'center' }}>
+                      <div style={{ fontSize: 20, fontWeight: 600, color: '#854F0B' }}>
+                        {(client?.loyalty_points || 0) >= 2000 ? '—' : (client?.loyalty_points || 0) >= 500 ? Math.max(0, 2000 - (client?.loyalty_points || 0)) : Math.max(0, 500 - (client?.loyalty_points || 0))}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
+                        {(client?.loyalty_points || 0) >= 2000 ? 'Max tier reached' : (client?.loyalty_points || 0) >= 500 ? 'Points to Max' : 'Points to Pro'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 12, fontWeight: 500, color: '#034325', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>Points history</div>
+
+                  {ledger.length === 0 && <div style={{ fontSize: 13, color: '#888' }}>No points recorded yet.</div>}
+
+                  {ledger.map((row, idx) => {
+                    const runningBalance = ledger.slice(idx).reduce((s, r) => s + r.points, 0)
+                    const reasonLabel: Record<string, string> = {
+                      service_payment: 'Service payment',
+                      product_sale: 'Product purchase',
+                      app_booking: 'App booking bonus',
+                      pre_book: 'Pre-booked next visit',
+                      off_peak: 'Off-peak booking bonus',
+                      review: 'Left a review',
+                      streak: 'Monthly streak bonus',
+                      referral: 'Referral bonus',
+                      redemption: 'Points redeemed',
+                      expiry: 'Points expired',
+                      adjustment: 'Manual adjustment',
+                    }
+                    const isRedeem = row.type === 'behaviour' ? false : row.reason === 'redemption' || row.reason === 'expiry'
+                    const iconLabel = row.type === 'spend' ? 'SP' : row.type === 'behaviour' ? 'BP' : 'RD'
+                    const iconBg = row.type === 'spend' ? '#e8f4ec' : row.type === 'behaviour' ? '#e6f1fb' : '#fcebeb'
+                    const iconColor = row.type === 'spend' ? '#034325' : row.type === 'behaviour' ? '#185FA5' : '#991b1b'
+                    return (
+                      <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '0.5px solid #f0f0f0' }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 6, background: iconBg, color: iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{iconLabel}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13 }}>{reasonLabel[row.reason] || row.reason}</div>
+                          <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{new Date(row.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: isRedeem ? '#991b1b' : '#034325' }}>{isRedeem ? '-' : '+'}{Math.abs(row.points)} pts</div>
+                          <div style={{ fontSize: 11, color: '#888' }}>Balance: {runningBalance}</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {activeTab === 'blindbox' && (
+                <div>
+                  {bbRewards.length === 0 && <div style={{ fontSize: 13, color: '#888' }}>No Blind Box rewards yet.</div>}
+                  {bbRewards.map(r => {
+                    const svc = r.services as { name: string } | null
+                    const campaign = r.blind_box_campaigns as { name: string } | null
+                    const statusLabel: Record<string, string> = { redeemed_now: 'Used in appointment', saved: 'Saved for next visit', redeemed_later: 'Redeemed later', expired: 'Expired unused' }
+                    const statusColor: Record<string, { bg: string; color: string }> = {
+                      redeemed_now: { bg: '#e6f1fb', color: '#185FA5' },
+                      saved: { bg: '#e8f4ec', color: '#034325' },
+                      redeemed_later: { bg: '#e6f1fb', color: '#185FA5' },
+                      expired: { bg: '#fcebeb', color: '#991b1b' },
+                    }
+                    const sc = statusColor[r.status] || { bg: '#f0f0f0', color: '#888' }
+                    const isExpired = r.status === 'expired'
+                    const isSaved = r.status === 'saved'
+                    const expiryDate = new Date(r.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    const earnDate = new Date(r.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    return (
+                      <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '0.5px solid #f0f0f0' }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 8, background: '#faeeda', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#854F0B', flexShrink: 0 }}>BB</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500 }}>{svc?.name || 'Unknown service'}</div>
+                          <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{campaign?.name || ''} · Earned {earnDate}</div>
+                          <span style={{ display: 'inline-block', fontSize: 10, padding: '2px 8px', borderRadius: 4, marginTop: 4, background: sc.bg, color: sc.color }}>{statusLabel[r.status] || r.status}</span>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ fontSize: 10, color: '#888' }}>{isSaved ? 'Expires' : isExpired ? 'Expired' : 'Was valid until'}</div>
+                          <div style={{ fontSize: 12, fontWeight: 500, color: isSaved ? '#991b1b' : '#034325' }}>{expiryDate}</div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
