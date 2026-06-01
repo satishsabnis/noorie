@@ -63,7 +63,6 @@ interface ConfigData {
   whatsapp_enabled: boolean; whatsapp_confirmation: boolean; whatsapp_reminder: boolean
   whatsapp_reminder_hours: string; whatsapp_birthday: boolean; whatsapp_birthday_timing: string
   whatsapp_payment_receipt: boolean
-  loyalty_points_enabled: boolean; loyalty_earning_rate: number; loyalty_redemption_rate: number
   morning_brief_enabled: boolean; booking_assistant_enabled: boolean
   whatsapp_booking_enabled: boolean; competitor_intelligence_weekly: boolean
   competitor_last_scan: string | null
@@ -104,7 +103,6 @@ const defaultConfig: ConfigData = {
   whatsapp_enabled: false, whatsapp_confirmation: true, whatsapp_reminder: true,
   whatsapp_reminder_hours: '24', whatsapp_birthday: true, whatsapp_birthday_timing: 'on_the_day',
   whatsapp_payment_receipt: true,
-  loyalty_points_enabled: false, loyalty_earning_rate: 1, loyalty_redemption_rate: 100,
   morning_brief_enabled: true, booking_assistant_enabled: false,
   whatsapp_booking_enabled: false, competitor_intelligence_weekly: false,
   competitor_last_scan: null,
@@ -1174,64 +1172,6 @@ function SectionWhatsApp({ config, salonId, onRefresh }: { config: ConfigData; s
       </div>
       <div style={{ backgroundColor: '#fff3cd', border: '0.5px solid #C9A227', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
         <p style={{ fontSize: 12, color: '#92400e', margin: 0 }}>WhatsApp not connected — contact Blue Flute Consulting to configure Twilio.</p>
-      </div>
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setDirty(false) }} />
-    </div>
-  )
-}
-
-// ── Section: Loyalty points ───────────────────────────────────────────────────
-
-function SectionLoyalty({ config, salonId, onRefresh }: { config: ConfigData; salonId: string; onRefresh: () => void }) {
-  const [c, setC] = useState(config)
-  const [dirty, setDirty] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const isMobile = useIsMobile()
-  useEffect(() => { setC(config); setDirty(false) }, [config])
-  function up<K extends keyof ConfigData>(k: K, v: ConfigData[K]) { setC(p => ({ ...p, [k]: v })); setDirty(true) }
-
-  async function save() {
-    setSaving(true)
-    try {
-      const { error } = await supabase.from('salon_config').update({
-        loyalty_points_enabled: c.loyalty_points_enabled,
-        loyalty_earning_rate: c.loyalty_earning_rate,
-        loyalty_redemption_rate: c.loyalty_redemption_rate,
-      }).eq('salon_id', salonId)
-      if (error) console.error('[Admin] Loyalty save error:', error)
-      setSaving(false); setDirty(false); onRefresh()
-    } catch (err) {
-      console.error('[Admin] Loyalty save exception:', err)
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div>
-      <p style={{ fontSize: 16, fontWeight: 500, color: '#111', margin: '0 0 16px' }}>Loyalty points</p>
-      <div style={cardStyle}>
-        <ToggleRow label="Enable loyalty points" on={c.loyalty_points_enabled} onChange={v => up('loyalty_points_enabled', v)} />
-        <div style={{ borderTop: '0.5px solid #e0e0e0', margin: '10px 0', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <label style={labelStyle}>Earning rate</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-              <span style={{ color: '#6b7280' }}>Client earns</span>
-              <input type="number" value={c.loyalty_earning_rate} onChange={e => up('loyalty_earning_rate', parseFloat(e.target.value) || 0)} style={{ ...inputStyle, width: 70 }} />
-              <span style={{ color: '#6b7280' }}>point per</span>
-              <input type="number" value={c.loyalty_redemption_rate} onChange={e => up('loyalty_redemption_rate', parseFloat(e.target.value) || 0)} style={{ ...inputStyle, width: 70 }} />
-              <span style={{ color: '#6b7280' }}>AED spent</span>
-            </div>
-          </div>
-          <div>
-            <label style={labelStyle}>Redemption rate</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-              <input type="number" value={c.loyalty_redemption_rate} onChange={e => up('loyalty_redemption_rate', parseFloat(e.target.value) || 0)} style={{ ...inputStyle, width: 70 }} />
-              <span style={{ color: '#6b7280' }}>points =</span>
-              <input type="number" value={c.loyalty_earning_rate} onChange={e => up('loyalty_earning_rate', parseFloat(e.target.value) || 0)} style={{ ...inputStyle, width: 70 }} />
-              <span style={{ color: '#6b7280' }}>AED discount</span>
-            </div>
-          </div>
-        </div>
       </div>
       <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setDirty(false) }} />
     </div>
