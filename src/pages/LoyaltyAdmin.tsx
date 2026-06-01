@@ -45,6 +45,7 @@ interface BlindBoxCampaign {
   reward_type: string;
   discount_value: number;
   prize_validity_days: number;
+  win_probability: number;
   one_per_visit: boolean;
   max_price_cap: number | null;
   starts_at: string;
@@ -305,6 +306,7 @@ export default function LoyaltyAdmin({ salonId }: LoyaltyAdminProps) {
       reward_type: 'percentage',
       discount_value: 40,
       prize_validity_days: 30,
+      win_probability: 0.50,
       one_per_visit: true,
       max_price_cap: null,
       starts_at: '',
@@ -515,6 +517,23 @@ export default function LoyaltyAdmin({ salonId }: LoyaltyAdminProps) {
                 <span style={suffixStyle}>days</span>
               </div>
               <div style={subText}>Days client has to use the revealed service</div>
+            </div>
+
+            <div style={tileStyle}>
+              <label style={labelStyle}>Win probability</label>
+              <div style={inputWrap}>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.round((campaign.win_probability ?? 0.50) * 100)}
+                  onChange={e => updateCampaign(campaign.id, 'win_probability', (parseFloat(e.target.value) || 0) / 100)}
+                  style={inputStyle}
+                />
+                <span style={suffixStyle}>%</span>
+              </div>
+              <div style={subText}>0 = never wins, 1 = always wins. Default 0.50 = 50% chance.</div>
             </div>
 
             <div style={tileStyle}>
