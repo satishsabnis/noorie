@@ -563,6 +563,7 @@ export default function ClientApp() {
           .select('id, name, category, duration_minutes, price, is_active, image_url')
           .eq('salon_id', salon!.id)
           .eq('is_active', true)
+          .eq('show_on_client_app', true)
           .order('category')
         setServices((svcData as Service[]) ?? [])
 
@@ -579,6 +580,7 @@ export default function ClientApp() {
           .eq('salon_id', salon!.id)
           .eq('type', 'product')
           .eq('is_active', true)
+          .eq('show_on_client_app', true)
           .order('name')
         if (invError) {
           console.error('Products fetch error:', invError)
