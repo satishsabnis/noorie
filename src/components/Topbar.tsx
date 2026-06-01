@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/authStore'
 import { supabase } from '../lib/supabase'
 import blueFlutelogo from '../assets/logo.png'
 import { useIsMobile } from '../hooks/useIsMobile'
+import HelpPanel from './HelpPanel'
 
 const NOORIE_VERSION = 'v2.05.27'
 
@@ -44,6 +45,15 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
   const [navOpen, setNavOpen] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
   const [showPrivacy, setShowPrivacy] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'F1') { e.preventDefault(); setShowHelp(prev => !prev) }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   useEffect(() => {
     const salonId = staffRecord?.salon_id
@@ -141,6 +151,17 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
               </NavLink>
             )
           })}
+          <button
+            onClick={() => setShowHelp(prev => !prev)}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: showHelp ? '#00BF00' : 'rgba(255,255,255,0.6)',
+              fontSize: 12, fontWeight: showHelp ? 600 : 400,
+              padding: 0, whiteSpace: 'nowrap',
+            }}
+          >
+            Help
+          </button>
         </nav>
       )}
 
@@ -213,6 +234,20 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
               </NavLink>
             )
           })}
+          <button
+            onClick={() => { setNavOpen(false); setShowHelp(true) }}
+            style={{
+              display: 'block', width: '100%', boxSizing: 'border-box',
+              padding: '14px 16px', minHeight: 44,
+              fontSize: 15, textDecoration: 'none',
+              color: '#034325', fontWeight: 400,
+              borderBottom: 'none', background: 'none',
+              border: 'none', cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            Help
+          </button>
         </div>
       </>
     )}
@@ -305,6 +340,8 @@ export default function Topbar({ onDashboardClick }: { onDashboardClick?: () => 
         </div>
       </div>
     )}
+
+    {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
     </>
   )
 }
