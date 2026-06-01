@@ -1818,15 +1818,6 @@ export default function Dashboard() {
         setBriefErrors({ slots: slotsRes.e, lapsed: lapsedRes.e, unpaid: unpaidRes.e, topClient: topClientRes.e, lowStock: lowStockRes.e })
         setBriefLoading(false)
       }
-
-      if (!cancelled && briefNarrative === null) {
-        setBriefNarrativeLoading(true)
-        const narrative = await fetchBrief14DayContext(salonId, salonName ?? '', tz)
-        if (!cancelled) {
-          setBriefNarrative(narrative)
-          setBriefNarrativeLoading(false)
-        }
-      }
     }
 
     async function fetchActiveBBCampaign() {
@@ -1872,6 +1863,22 @@ export default function Dashboard() {
     const interval = setInterval(run, 30_000)
     return () => { cancelled = true; clearInterval(interval) }
   }, [staffRecord?.salon_id, focusTick]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const salonId = staffRecord?.salon_id
+    if (!salonId) return
+    let cancelled = false
+    async function fetchNarrative() {
+      setBriefNarrativeLoading(true)
+      const narrative = await fetchBrief14DayContext(salonId, salonName ?? '', tz)
+      if (!cancelled) {
+        setBriefNarrative(narrative)
+        setBriefNarrativeLoading(false)
+      }
+    }
+    fetchNarrative()
+    return () => { cancelled = true }
+  }, [staffRecord?.salon_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sort: unpaid-balance → in_progress → scheduled → completed
   function cardOrder(a: ApptFetched) {
