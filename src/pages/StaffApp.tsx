@@ -480,12 +480,38 @@ function StaffAppointmentDetail() {
   const { id, slug } = useParams<{ id: string; slug: string }>()
   const navigate = useNavigate()
   const { tz } = useSalonTimezone()
+  const salonId = useAuthStore(s => s.staffRecord?.salon_id ?? null)
+  const staffId = useAuthStore(s => s.staffRecord?.id ?? null)
   const [appt, setAppt] = useState<Appointment | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [allServices, setAllServices] = useState<{id: string; name: string}[]>([])
+  const [showAddRow, setShowAddRow] = useState(false)
+  const [addSvcId, setAddSvcId] = useState('')
+  const [addSvcPrice, setAddSvcPrice] = useState('')
+  const [addingSvc, setAddingSvc] = useState(false)
 
   useEffect(() => { if (id) fetchAppt() }, [id])
+
+  useEffect(() => {
+    if (!salonId || !staffId) return
+    async function loadServices() {
+      try {
+        const { data } = await supabase.from('staff_services')
+          .select('service_id, services(id, name)')
+          .eq('staff_id', staffId)
+        if (!data) return
+        const mapped = (data as unknown as { services: { id: string; name: string } | null }[])
+          .map(r => r.services)
+          .filter((s): s is { id: string; name: string } => s !== null)
+        setAllServices(mapped)
+      } catch (err) {
+        console.error('fetchAllServices error:', err)
+      }
+    }
+    loadServices()
+  }, [salonId])
 
   async function fetchAppt() {
     const { data: a } = await supabase
@@ -532,6 +558,32 @@ function StaffAppointmentDetail() {
     if (err) { setError(err.message); setUpdating(false); return }
     setAppt(prev => prev ? { ...prev, status: newStatus } : null)
     setUpdating(false)
+  }
+
+  async function handleAddService() {
+    if (!addSvcId || !(parseFloat(addSvcPrice) > 0)) return
+    setAddingSvc(true)
+    try {
+      const { error: insertErr } = await supabase.from('appointment_services').insert({
+        appointment_id: id,
+        service_id: addSvcId,
+        staff_id: staffId,
+        price: parseFloat(addSvcPrice),
+        commission_pct: 0,
+      })
+      if (!insertErr) {
+        await fetchAppt()
+        setShowAddRow(false)
+        setAddSvcId('')
+        setAddSvcPrice('')
+      } else {
+        console.error('handleAddService error:', insertErr)
+      }
+    } catch (err) {
+      console.error('handleAddService exception:', err)
+    } finally {
+      setAddingSvc(false)
+    }
   }
 
   if (loading) return (
@@ -587,6 +639,38 @@ function StaffAppointmentDetail() {
             <span style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>Total</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: '#034325' }}>AED {appt.totalPrice.toFixed(2)}</span>
           </div>
+          {showAddRow && appt.status === 'in_progress' && (
+            <div style={{ display: 'flex', gap: 8, padding: '8px 0', borderTop: '0.5px solid #e0e0e0' }}>
+              <select
+                value={addSvcId}
+                onChange={e => setAddSvcId(e.target.value)}
+                style={{ flex: 1, minWidth: 0, border: '0.5px solid #1D558F', borderRadius: 6, padding: '7px 8px', fontSize: 12, color: '#111' }}
+              >
+                <option value="" disabled>Select service</option>
+                {allServices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <div style={{ display: 'flex', alignItems: 'center', border: '0.5px solid #1D558F', borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
+                <input
+                  type="number"
+                  value={addSvcPrice}
+                  onChange={e => setAddSvcPrice(e.target.value)}
+                  style={{ width: 56, border: 'none', padding: '7px 6px', fontSize: 13, fontWeight: 500, color: '#034325', outline: 'none', background: '#fff' }}
+                />
+                <span style={{ fontSize: 11, color: '#9ca3af', paddingRight: 6 }}>AED</span>
+              </div>
+              <button
+                onClick={handleAddService}
+                disabled={addingSvc}
+                style={{ background: '#034325', color: '#fff', border: 'none', borderRadius: 6, width: 28, height: 32, fontSize: 16, cursor: 'pointer', flexShrink: 0 }}
+              >✓</button>
+            </div>
+          )}
+          {appt.status === 'in_progress' && !showAddRow && (
+            <button
+              onClick={() => { setShowAddRow(true); setAddSvcId(''); setAddSvcPrice('') }}
+              style={{ width: '100%', background: 'none', border: '0.5px solid #034325', color: '#034325', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 500, cursor: 'pointer', marginTop: 8 }}
+            >+ Add service</button>
+          )}
         </div>
       </div>
 
