@@ -344,11 +344,12 @@ function buildFinancePDF(opts: {
     fixed:    { items: { id: string; name: string; amount: number }[]; total: number }
     variable: { items: { id: string; name: string; amount: number }[]; total: number }
     one_time: { items: { id: string; name: string; amount: number }[]; total: number }
+    marketing: { items: { id: string; name: string; amount: number }[]; total: number }
     grandTotal: number
   }
 }): string {
   const { salonName, month, year, income, expenses } = opts
-  const net = income.total - expenses.grandTotal
+  const net = (income.total + expenses.marketing.total) - expenses.grandTotal
   const periodLabel = `${MONTHS[month - 1]} ${year}`
 
   function expBlock(items: { id: string; name: string; amount: number }[]): string {
@@ -392,7 +393,8 @@ function buildFinancePDF(opts: {
       <tr><td>Card</td><td style="text-align:right;">AED ${formatMoney(income.card)}</td></tr>
       <tr><td>Other</td><td style="text-align:right;">AED ${formatMoney(income.other)}</td></tr>
       <tr><td>Product Sales</td><td style="text-align:right;">AED ${formatMoney(income.productSales)}</td></tr>
-      <tr><td style="font-weight:600;color:#034325;border-bottom:none;">Total income</td><td style="text-align:right;font-weight:600;color:#034325;border-bottom:none;">AED ${formatMoney(income.total)}</td></tr>
+      <tr><td>Cash received</td><td style="text-align:right;">AED ${formatMoney(income.total)}</td></tr>
+      <tr><td style="font-weight:600;color:#034325;border-bottom:none;">Sales (full value)</td><td style="text-align:right;font-weight:600;color:#034325;border-bottom:none;">AED ${formatMoney(income.total + expenses.marketing.total)}</td></tr>
     </table>
     <p class="st">Fixed Expenses</p>
     <table><tbody>${expBlock(expenses.fixed.items)}</tbody></table>
@@ -400,8 +402,10 @@ function buildFinancePDF(opts: {
     <table><tbody>${expBlock(expenses.variable.items)}</tbody></table>
     <p class="st">One-Time Expenses</p>
     <table><tbody>${expBlock(expenses.one_time.items)}</tbody></table>
+    <p class="st">Marketing Expenses</p>
+    <table><tbody>${expBlock(expenses.marketing.items)}</tbody></table>
     <div class="summary">
-      <div class="metric" style="background:#f0fdf4;border-color:#034325;"><span class="lbl">Total income</span><span class="val" style="color:#034325;">AED ${formatMoney(income.total)}</span></div>
+      <div class="metric" style="background:#f0fdf4;border-color:#034325;"><span class="lbl">Sales (full value)</span><span class="val" style="color:#034325;">AED ${formatMoney(income.total + expenses.marketing.total)}</span></div>
       <div class="metric"><span class="lbl">Total expenses</span><span class="val" style="color:#991b1b;">AED ${formatMoney(expenses.grandTotal)}</span></div>
       <div class="metric"><span class="lbl">Net — ${periodLabel}</span><span class="val" style="color:${net > 0 ? '#034325' : net < 0 ? '#991b1b' : '#111'};">AED ${formatMoney(net)}</span></div>
     </div>
@@ -576,6 +580,7 @@ export default function Reports() {
     fixed:    { items: [] as { id: string; name: string; amount: number }[], total: 0 },
     variable: { items: [] as { id: string; name: string; amount: number }[], total: 0 },
     one_time: { items: [] as { id: string; name: string; amount: number }[], total: 0 },
+    marketing: { items: [] as { id: string; name: string; amount: number }[], total: 0 },
     grandTotal: 0,
   })
   const [financeLoading, setFinanceLoading] = useState(false)
@@ -958,11 +963,36 @@ export default function Reports() {
     const fixedTotal    = fixedItems.reduce((s, e) => s + e.amount, 0)
     const variableTotal = variableItems.reduce((s, e) => s + e.amount, 0)
     const oneTimeTotal  = oneTimeItems.reduce((s, e) => s + e.amount, 0)
+    let loyaltyDiscount = 0
+    let blindBoxDiscount = 0
+    if (apptIds.length > 0) {
+      const { data: loyCfg } = await supabase
+        .from('loyalty_config').select('value_per_point').eq('salon_id', salonId).maybeSingle()
+      const valuePerPoint = (loyCfg?.value_per_point as number | null) ?? 0
+      const [{ data: loyRows }, { data: bbRows }] = await Promise.all([
+        supabase.from('loyalty_points_ledger')
+          .select('points').eq('salon_id', salonId).eq('type', 'redemption').in('reference_id', apptIds),
+        supabase.from('blind_box_rewards')
+          .select('appointment_id, redeemed_appointment_id, catalogue_price, discounted_price').eq('salon_id', salonId),
+      ])
+      loyaltyDiscount = (loyRows ?? []).reduce((s, r) => s + Math.abs((r.points as number | null) ?? 0) * valuePerPoint, 0)
+      blindBoxDiscount = (bbRows ?? []).reduce((s, b) => {
+        const applyAppt = (b.redeemed_appointment_id as string | null) ?? (b.appointment_id as string | null)
+        if (!applyAppt || !apptIds.includes(applyAppt)) return s
+        return s + Math.max(0, ((b.catalogue_price as number | null) ?? 0) - ((b.discounted_price as number | null) ?? 0))
+      }, 0)
+    }
+    const marketingItems = [
+      { id: 'mkt_loyalty', name: 'Loyalty discounts', amount: loyaltyDiscount },
+      { id: 'mkt_blind_box', name: 'Blind box discounts', amount: blindBoxDiscount },
+    ].filter(i => i.amount > 0)
+    const marketingTotal = loyaltyDiscount + blindBoxDiscount
     setFinanceExpenses({
       fixed:    { items: fixedItems,    total: fixedTotal },
       variable: { items: variableItems, total: variableTotal },
       one_time: { items: oneTimeItems,  total: oneTimeTotal },
-      grandTotal: fixedTotal + variableTotal + oneTimeTotal,
+      marketing: { items: marketingItems, total: marketingTotal },
+      grandTotal: fixedTotal + variableTotal + oneTimeTotal + marketingTotal,
     })
     setFinanceLoading(false)
   }
@@ -1096,7 +1126,7 @@ export default function Reports() {
       }), { basic: 0, commission: 0, deductions: 0, net: 0 })
     : null
 
-  const financeNet  = financeIncome.total - financeExpenses.grandTotal
+  const financeNet  = (financeIncome.total + financeExpenses.marketing.total) - financeExpenses.grandTotal
   const fyStartYear = (fyStartMonth !== null && selectedMonth >= fyStartMonth) ? selectedYear : selectedYear - 1
   const ytdTitle    = fyStartMonth
     ? `YTD Balance Sheet — ${MONTHS[fyStartMonth - 1]} ${fyStartYear} – ${MONTHS[selectedMonth - 1]} ${selectedYear}`
@@ -1299,8 +1329,12 @@ export default function Reports() {
                     <tr><td style={TD}>Other</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.other)}</td></tr>
                     <tr><td style={TD}>Product Sales</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeProductSales)}</td></tr>
                     <tr>
-                      <td style={{ ...TD, fontWeight: 600, color: '#034325', borderBottom: 'none' }}>Total income</td>
-                      <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: '#034325', borderBottom: 'none' }}>AED {formatMoney(financeIncome.total)}</td>
+                      <td style={TD}>Cash received</td>
+                      <td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(financeIncome.total)}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ ...TD, fontWeight: 600, color: '#034325', borderBottom: 'none' }}>Sales (full value)</td>
+                      <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: '#034325', borderBottom: 'none' }}>AED {formatMoney(financeIncome.total + financeExpenses.marketing.total)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1365,9 +1399,29 @@ export default function Reports() {
                   </tbody>
                 </table>
 
+                {/* Marketing Expenses */}
+                <p style={subLabel}>Marketing Expenses</p>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+                  <tbody>
+                    {financeExpenses.marketing.items.length === 0 ? (
+                      <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No discounts given</td></tr>
+                    ) : (
+                      <>
+                        {financeExpenses.marketing.items.map(e => (
+                          <tr key={e.id}><td style={TD}>{e.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(e.amount)}</td></tr>
+                        ))}
+                        <tr>
+                          <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total marketing</td>
+                          <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.marketing.total)}</td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+
                 {/* Summary footer */}
                 <div style={{ borderTop: '0.5px solid #e0e0e0', paddingTop: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: fyStartMonth !== null ? 16 : 0 }}>
-                  <MetricCard label="Total income" value={financeIncome.total} valueColor="#034325" backgroundColor="#f0fdf4" />
+                  <MetricCard label="Sales (full value)" value={financeIncome.total + financeExpenses.marketing.total} valueColor="#034325" backgroundColor="#f0fdf4" />
                   <MetricCard label="Total expenses" value={financeExpenses.grandTotal} valueColor="#991b1b" />
                   <div style={{ border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <span style={{ fontSize: 10, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
