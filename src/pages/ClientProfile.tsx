@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
 import { useSalonTimezone } from '../hooks/useSalonTimezone'
+import { useAuthStore } from '../stores/authStore'
+import SellPackageModal from '../components/SellPackageModal'
 
 interface ClientDetail {
   id: string
@@ -43,6 +45,21 @@ interface Visit {
   services: VisitService[]
   payments: VisitPayment[]
   totalPaid: number
+}
+
+interface PurchaseServiceOpt { service_id: string; name: string }
+interface Purchase {
+  id: string
+  kind: 'package' | 'membership'
+  price_paid: number
+  purchased_at: string
+  valid_until: string
+  sessions_total: number | null
+  sessions_remaining: number | null
+  status: string
+  staff_id: string
+  name: string
+  services: PurchaseServiceOpt[]
 }
 
 function fmtDate(iso: string | null, tz = 'Asia/Dubai') {
@@ -111,6 +128,8 @@ export default function ClientProfile() {
   const { id, slug } = useParams<{ id: string; slug?: string }>()
   const navigate = useNavigate()
   const { tz } = useSalonTimezone()
+  const { staffRecord } = useAuthStore()
+  const salonId = staffRecord?.salon_id ?? null
 
   const [client, setClient] = useState<ClientDetail | null>(null)
   const [visits, setVisits] = useState<Visit[]>([])
@@ -125,7 +144,13 @@ export default function ClientProfile() {
   const [saving, setSaving] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'loyalty' | 'blindbox'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'loyalty' | 'blindbox' | 'packages'>('overview')
+  const [purchases, setPurchases] = useState<Purchase[]>([])
+  const [refreshTick, setRefreshTick] = useState(0)
+  const [sellOpen, setSellOpen] = useState(false)
+  const [logState, setLogState] = useState<{ purchaseId: string; serviceId: string } | null>(null)
+  const [logErr, setLogErr] = useState<string | null>(null)
+  const [logBusy, setLogBusy] = useState(false)
   const [ledger, setLedger] = useState<Array<{id: string; type: string; points: number; reason: string; reference_id: string | null; created_at: string}>>([])
   const [bbRewards, setBbRewards] = useState<Array<{id: string; status: string; bb_fee_paid: number; catalogue_price: number; discounted_price: number; expires_at: string; created_at: string; services: {name: string} | null; blind_box_campaigns: {name: string} | null}>>([])
 
@@ -259,6 +284,41 @@ export default function ClientProfile() {
         .order('created_at', { ascending: false })
       if (bbData) setBbRewards(bbData as any)
 
+      const { data: purData } = await supabase
+        .from('purchases')
+        .select('id, kind, price_paid, purchased_at, valid_until, sessions_total, sessions_remaining, status, staff_id, package_id, membership_id, packages(name, package_services(service_id, sort_order, services(name))), memberships(name, service_id, services(name))')
+        .eq('client_id', id)
+        .order('purchased_at', { ascending: false })
+      const one = (v: any) => Array.isArray(v) ? v[0] : v
+      const nameOf = (v: any): string => one(v)?.name ?? ''
+      const mappedPurchases: Purchase[] = ((purData ?? []) as any[]).map(row => {
+        const pkg = one(row.packages)
+        const mem = one(row.memberships)
+        let services: PurchaseServiceOpt[] = []
+        if (row.kind === 'package') {
+          const ps = (pkg?.package_services ?? []) as any[]
+          services = [...ps]
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+            .map(r => ({ service_id: r.service_id as string, name: nameOf(r.services) }))
+        } else if (mem?.service_id) {
+          services = [{ service_id: mem.service_id as string, name: nameOf(mem.services) }]
+        }
+        return {
+          id: row.id as string,
+          kind: row.kind as 'package' | 'membership',
+          price_paid: (row.price_paid as number) ?? 0,
+          purchased_at: row.purchased_at as string,
+          valid_until: row.valid_until as string,
+          sessions_total: (row.sessions_total as number | null) ?? null,
+          sessions_remaining: (row.sessions_remaining as number | null) ?? null,
+          status: (row.status as string) ?? 'active',
+          staff_id: row.staff_id as string,
+          name: row.kind === 'package' ? (pkg?.name ?? 'Package') : (mem?.name ?? 'Membership'),
+          services,
+        }
+      })
+      if (!cancelled) setPurchases(mappedPurchases)
+
       if (!cancelled) {
         setClient(c)
         setForm(fv)
@@ -272,7 +332,7 @@ export default function ClientProfile() {
 
     fetchData()
     return () => { cancelled = true }
-  }, [id])
+  }, [id, refreshTick])
 
   async function handleSave() {
     if (!client) return
@@ -315,6 +375,59 @@ export default function ClientProfile() {
     }
   }
 
+  async function handleLogVisit(purchase: Purchase, serviceId: string) {
+    if (!salonId || !id) return
+    setLogErr(null)
+    if (purchase.status !== 'active') { setLogErr('This purchase is not active.'); return }
+    const now = new Date()
+    if (now > new Date(purchase.valid_until)) {
+      await supabase.from('purchases').update({ status: 'expired' }).eq('id', purchase.id)
+      setLogErr('This purchase has expired.')
+      setLogState(null)
+      setRefreshTick(t => t + 1)
+      return
+    }
+    if (purchase.kind === 'package' && (purchase.sessions_remaining ?? 0) <= 0) {
+      setLogErr('No sessions remaining.'); return
+    }
+    if (!serviceId) { setLogErr('Pick a service.'); return }
+
+    setLogBusy(true)
+    const nowIso = now.toISOString()
+    const { data: apptRow } = await supabase.from('appointments').insert({
+      salon_id: salonId,
+      client_id: id,
+      staff_id: purchase.staff_id,
+      starts_at: nowIso,
+      ends_at: nowIso,
+      status: 'completed',
+      purchase_id: purchase.id,
+    }).select('id').single()
+
+    const appointmentId = (apptRow as { id: string } | null)?.id
+    if (appointmentId) {
+      await supabase.from('appointment_services').insert({
+        appointment_id: appointmentId,
+        service_id: serviceId,
+        staff_id: purchase.staff_id,
+        price: 0,
+        status: 'completed',
+      })
+    }
+
+    if (purchase.kind === 'package') {
+      const remaining = (purchase.sessions_remaining ?? 0) - 1
+      await supabase.from('purchases').update({
+        sessions_remaining: remaining,
+        status: remaining <= 0 ? 'completed' : 'active',
+      }).eq('id', purchase.id)
+    }
+
+    setLogBusy(false)
+    setLogState(null)
+    setRefreshTick(t => t + 1)
+  }
+
   const completedVisits = visits.filter(v => v.status === 'completed')
   const totalSpend = visits.reduce((s, v) => s + v.totalPaid, 0)
   const lastVisit = completedVisits.length > 0 ? completedVisits[0].starts_at : null
@@ -341,6 +454,18 @@ export default function ClientProfile() {
           <span style={{ color: '#6b7280', fontSize: 12 }}>
             Clients › {client?.name ?? '…'}
           </span>
+          {client && salonId && (
+            <button
+              onClick={() => setSellOpen(true)}
+              style={{
+                marginLeft: 'auto', backgroundColor: '#034325', color: '#ffffff',
+                border: 'none', borderRadius: 6, padding: '6px 14px',
+                fontSize: 12, fontWeight: 500, cursor: 'pointer',
+              }}
+            >
+              Sell package or membership
+            </button>
+          )}
         </div>
 
         {loading ? (
@@ -554,7 +679,7 @@ export default function ClientProfile() {
 
             <div>
               <div style={{ display: 'flex', borderBottom: '1px solid #e0e0e0', marginBottom: 20 }}>
-                {(['overview', 'loyalty', 'blindbox'] as const).map(tab => (
+                {(['overview', 'loyalty', 'blindbox', 'packages'] as const).map(tab => (
                   <div
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -565,7 +690,7 @@ export default function ClientProfile() {
                       fontWeight: activeTab === tab ? 500 : 400,
                     }}
                   >
-                    {tab === 'overview' ? 'Visit history' : tab === 'loyalty' ? 'Loyalty' : 'Blind Box'}
+                    {tab === 'overview' ? 'Visit history' : tab === 'loyalty' ? 'Loyalty' : tab === 'blindbox' ? 'Blind Box' : 'Packages'}
                   </div>
                 ))}
               </div>
@@ -733,6 +858,77 @@ export default function ClientProfile() {
                   })}
                 </div>
               )}
+
+              {activeTab === 'packages' && (
+                <div>
+                  {purchases.length === 0 && <div style={{ fontSize: 13, color: '#888' }}>No packages or memberships yet.</div>}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {purchases.map(p => {
+                      const statusStyleMap: Record<string, { bg: string; color: string }> = {
+                        active: { bg: '#e8f4ec', color: '#034325' },
+                        completed: { bg: '#f3f4f6', color: '#6b7280' },
+                        expired: { bg: '#fcebeb', color: '#991b1b' },
+                        cancelled: { bg: '#f3f4f6', color: '#6b7280' },
+                      }
+                      const sc = statusStyleMap[p.status] ?? statusStyleMap.active
+                      const statusLabel: Record<string, string> = { active: 'Active', completed: 'Completed', expired: 'Expired', cancelled: 'Cancelled' }
+                      const isLogging = logState?.purchaseId === p.id
+                      return (
+                        <div key={p.id} style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '12px 14px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: '#000000' }}>{p.name}</span>
+                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, fontWeight: 600, background: sc.bg, color: sc.color }}>{statusLabel[p.status] ?? p.status}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>
+                            {p.kind === 'package' ? 'Package' : 'Membership'} · AED {p.price_paid.toFixed(2)} · Bought {fmtDate(p.purchased_at, tz)}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#034325', fontWeight: 500 }}>
+                            {p.kind === 'package'
+                              ? `${p.sessions_remaining ?? 0} of ${p.sessions_total ?? 0} remaining · valid until ${fmtDate(p.valid_until, tz)}`
+                              : `Unlimited, expires ${fmtDate(p.valid_until, tz)}`}
+                          </div>
+
+                          {p.status === 'active' && (
+                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '0.5px solid #f0f0f0' }}>
+                              {!isLogging ? (
+                                <button
+                                  onClick={() => { setLogErr(null); setLogState({ purchaseId: p.id, serviceId: p.services[0]?.service_id ?? '' }) }}
+                                  style={{ backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+                                >Log visit</button>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  {p.kind === 'package' && (
+                                    <select
+                                      value={logState.serviceId}
+                                      onChange={e => setLogState({ purchaseId: p.id, serviceId: e.target.value })}
+                                      style={{ ...inputStyle, fontSize: 12 }}
+                                    >
+                                      {p.services.map(s => <option key={s.service_id} value={s.service_id}>{s.name}</option>)}
+                                    </select>
+                                  )}
+                                  <div style={{ display: 'flex', gap: 8 }}>
+                                    <button
+                                      onClick={() => handleLogVisit(p, logState.serviceId)}
+                                      disabled={logBusy}
+                                      style={{ backgroundColor: logBusy ? '#e0e0e0' : '#034325', color: logBusy ? '#9ca3af' : '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 500, cursor: logBusy ? 'not-allowed' : 'pointer' }}
+                                    >{logBusy ? 'Saving…' : 'Confirm visit'}</button>
+                                    <button
+                                      onClick={() => { setLogState(null); setLogErr(null) }}
+                                      disabled={logBusy}
+                                      style={{ backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325', borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: logBusy ? 'not-allowed' : 'pointer' }}
+                                    >Cancel</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {logErr && <p style={{ fontSize: 12, color: '#991b1b', marginTop: 10 }}>{logErr}</p>}
+                </div>
+              )}
             </div>
 
           </div>
@@ -742,6 +938,16 @@ export default function ClientProfile() {
       <div style={{ textAlign: 'center', padding: '10px 0 14px' }}>
         <p style={{ color: '#9ca3af', fontSize: 10, margin: 0 }}>Powered by Blue Flute Consulting LLC-FZ</p>
       </div>
+
+      {sellOpen && client && salonId && (
+        <SellPackageModal
+          salonId={salonId}
+          clientId={client.id}
+          clientName={client.name}
+          onClose={() => setSellOpen(false)}
+          onDone={() => { setSellOpen(false); setActiveTab('packages'); setRefreshTick(t => t + 1) }}
+        />
+      )}
     </div>
   )
 }
