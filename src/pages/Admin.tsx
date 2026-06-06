@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Topbar from '../components/Topbar'
 import LoyaltyAdmin from './LoyaltyAdmin'
 import PackagesAdmin from './PackagesAdmin'
+import MembershipsAdmin from './MembershipsAdmin'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -11,7 +12,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 
 const SECTIONS = [
   'Salon details', 'Services', 'Payments', 'WhatsApp',
-  'Noorie AI', 'Loyalty Program', 'Packages', 'Inventory', 'Expenses', 'Staff settings', 'Run payroll',
+  'Noorie AI', 'Loyalty Program', 'Packages', 'Memberships', 'Inventory', 'Expenses', 'Staff settings', 'Run payroll',
 ] as const
 type Section = typeof SECTIONS[number]
 
@@ -2116,6 +2117,7 @@ export default function Admin() {
           {activeSection === 'Noorie AI'       && <SectionAI config={config} salonId={salonId} salon={{ name: salon.name, city: salon.city, country: salon.country }} onRefresh={fetchAll} />}
           {activeSection === 'Loyalty Program' && <LoyaltyAdmin salonId={salonId} />}
           {activeSection === 'Packages'        && <PackagesAdmin salonId={salonId} />}
+          {activeSection === 'Memberships'     && <MembershipsAdmin salonId={salonId} />}
           {activeSection === 'Inventory'       && <SectionInventory salonId={salonId} />}
           {activeSection === 'Expenses'        && <SectionExpenses salonId={salonId} />}
           {activeSection === 'Staff settings'  && <SectionStaffSettings config={config} salonId={salonId} onRefresh={fetchAll} />}
