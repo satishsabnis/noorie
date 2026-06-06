@@ -1715,24 +1715,63 @@ function SectionPayroll({ salonId }: { salonId: string }) {
         const revenueByStaff = new Map<string, number>()
         const { data: apptRows } = await supabase
           .from('appointments')
-          .select('id, payments(amount, reference), appointment_services(staff_id, price)')
+          .select('id, payments(amount, reference), appointment_services(staff_id, service_id, price)')
           .eq('salon_id', salonId)
           .eq('status', 'completed')
           .gte('starts_at', periodStart)
           .lt('starts_at', periodEnd)
+        const apptIds = (apptRows ?? []).map(a => a.id as string)
+
+        const { data: loyCfg } = await supabase
+          .from('loyalty_config').select('value_per_point').eq('salon_id', salonId).maybeSingle()
+        const valuePerPoint = (loyCfg?.value_per_point as number | null) ?? 0
+
+        const discountByAppt = new Map<string, number>()
+        const bbCatalogueByKey = new Map<string, number>()
+        if (apptIds.length > 0) {
+          const [{ data: loyRows }, { data: bbRows }] = await Promise.all([
+            supabase.from('loyalty_points_ledger')
+              .select('reference_id, points').eq('salon_id', salonId).eq('type', 'redemption').in('reference_id', apptIds),
+            supabase.from('blind_box_rewards')
+              .select('appointment_id, redeemed_appointment_id, service_id, catalogue_price, discounted_price')
+              .eq('salon_id', salonId),
+          ])
+          for (const r of loyRows ?? []) {
+            const apptId = r.reference_id as string | null
+            if (!apptId) continue
+            const aed = Math.abs((r.points as number | null) ?? 0) * valuePerPoint
+            discountByAppt.set(apptId, (discountByAppt.get(apptId) ?? 0) + aed)
+          }
+          for (const b of bbRows ?? []) {
+            const applyAppt = (b.redeemed_appointment_id as string | null) ?? (b.appointment_id as string | null)
+            if (!applyAppt || !apptIds.includes(applyAppt)) continue
+            const cat = (b.catalogue_price as number | null) ?? 0
+            const disc = (b.discounted_price as number | null) ?? 0
+            discountByAppt.set(applyAppt, (discountByAppt.get(applyAppt) ?? 0) + Math.max(0, cat - disc))
+            const svcId = b.service_id as string | null
+            if (svcId) bbCatalogueByKey.set(`${applyAppt}|${svcId}`, cat)
+          }
+        }
+
         for (const a of apptRows ?? []) {
+          const apptId = a.id as string
           const pays = (a.payments as unknown as { amount: number | null; reference: string | null }[] | null) ?? []
           const collected = pays.reduce((s, p) => {
             const ref = p.reference ?? ''
             if (ref === 'blind_box' || ref === 'product_sale') return s
             return s + ((p.amount) ?? 0)
           }, 0)
-          const svcs = (a.appointment_services as unknown as { staff_id: string | null; price: number | null }[] | null) ?? []
-          const totalPrice = svcs.reduce((s, sv) => s + ((sv.price) ?? 0), 0)
-          if (totalPrice <= 0) continue
+          const commissionable = collected + (discountByAppt.get(apptId) ?? 0)
+          const svcs = (a.appointment_services as unknown as { staff_id: string | null; service_id: string | null; price: number | null }[] | null) ?? []
+          const fullPrice = (sv: { service_id: string | null; price: number | null }) => {
+            const cat = sv.service_id ? bbCatalogueByKey.get(`${apptId}|${sv.service_id}`) : undefined
+            return cat ?? ((sv.price) ?? 0)
+          }
+          const totalFull = svcs.reduce((s, sv) => s + fullPrice(sv), 0)
+          if (totalFull <= 0) continue
           for (const sv of svcs) {
             if (!sv.staff_id) continue
-            const share = ((sv.price ?? 0) / totalPrice) * collected
+            const share = (fullPrice(sv) / totalFull) * commissionable
             revenueByStaff.set(sv.staff_id, (revenueByStaff.get(sv.staff_id) ?? 0) + share)
           }
         }
