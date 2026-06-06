@@ -347,14 +347,22 @@ function buildFinancePDF(opts: {
     marketing: { items: { id: string; name: string; amount: number }[]; total: number }
     grandTotal: number
   }
+  tips: { perStaff: { staffId: string; name: string; amount: number }[]; cardTotal: number }
 }): string {
-  const { salonName, month, year, income, expenses } = opts
+  const { salonName, month, year, income, expenses, tips } = opts
   const net = (income.total + expenses.marketing.total) - expenses.grandTotal
   const periodLabel = `${MONTHS[month - 1]} ${year}`
 
   function expBlock(items: { id: string; name: string; amount: number }[]): string {
     if (items.length === 0) return `<tr><td colspan="2" style="padding:6px 0;font-size:12px;color:#6b7280;">No expenses recorded yet</td></tr>`
     return items.map(e => `<tr><td style="padding:6px 0;font-size:12px;">${escapeHtml(e.name)}</td><td style="padding:6px 0;font-size:12px;text-align:right;">AED ${formatMoney(e.amount)}</td></tr>`).join('')
+  }
+
+  function tipsBlock(t: { perStaff: { staffId: string; name: string; amount: number }[]; cardTotal: number }): string {
+    if (t.perStaff.length === 0) return `<tr><td colspan="2" style="padding:6px 0;font-size:12px;color:#6b7280;">No tips recorded yet</td></tr>`
+    const rows = t.perStaff.map(s => `<tr><td style="padding:6px 0;font-size:12px;">Tips earned, ${escapeHtml(s.name)}</td><td style="padding:6px 0;font-size:12px;text-align:right;">AED ${formatMoney(s.amount)}</td></tr>`).join('')
+    const note = `<tr><td colspan="2" style="padding:6px 0;font-size:11px;color:#6b7280;border-bottom:none;">AED ${formatMoney(t.cardTotal)} in card tips paid out to staff in cash. Not salon income, not commission.</td></tr>`
+    return rows + note
   }
 
   return `<!doctype html>
@@ -404,6 +412,8 @@ function buildFinancePDF(opts: {
     <table><tbody>${expBlock(expenses.one_time.items)}</tbody></table>
     <p class="st">Marketing Expenses</p>
     <table><tbody>${expBlock(expenses.marketing.items)}</tbody></table>
+    <p class="st">Tips</p>
+    <table><tbody>${tipsBlock(tips)}</tbody></table>
     <div class="summary">
       <div class="metric" style="background:#f0fdf4;border-color:#034325;"><span class="lbl">Sales (full value)</span><span class="val" style="color:#034325;">AED ${formatMoney(income.total + expenses.marketing.total)}</span></div>
       <div class="metric"><span class="lbl">Total expenses</span><span class="val" style="color:#991b1b;">AED ${formatMoney(expenses.grandTotal)}</span></div>
@@ -584,6 +594,7 @@ export default function Reports() {
     grandTotal: 0,
   })
   const [financeLoading, setFinanceLoading] = useState(false)
+  const [financeTips, setFinanceTips] = useState<{ perStaff: { staffId: string; name: string; amount: number }[]; cardTotal: number }>({ perStaff: [], cardTotal: 0 })
 
   // ── YTD ─────────────────────────────────────────────────────────────────
   const [ytdData, setYtdData] = useState<{
@@ -994,6 +1005,29 @@ export default function Reports() {
       marketing: { items: marketingItems, total: marketingTotal },
       grandTotal: fixedTotal + variableTotal + oneTimeTotal + marketingTotal,
     })
+
+    const { data: tipRows } = await supabase.from('tips')
+      .select('amount, method, staff_id')
+      .eq('salon_id', salonId)
+      .gte('created_at', start).lt('created_at', end)
+    const tipsData = (tipRows ?? []) as { amount: number | null; method: string | null; staff_id: string | null }[]
+    const tipStaffIds = [...new Set(tipsData.map(t => t.staff_id).filter(Boolean))] as string[]
+    const tipStaffNames: Record<string, string> = {}
+    if (tipStaffIds.length > 0) {
+      const { data: tipStaffRows } = await supabase.from('staff').select('id, name').in('id', tipStaffIds)
+      for (const s of (tipStaffRows ?? [])) tipStaffNames[s.id as string] = s.name as string
+    }
+    const tipPerStaff = new Map<string, number>()
+    let tipCardTotal = 0
+    for (const t of tipsData) {
+      const amt = (t.amount as number) ?? 0
+      if (t.staff_id) tipPerStaff.set(t.staff_id, (tipPerStaff.get(t.staff_id) ?? 0) + amt)
+      if (((t.method as string) ?? '').toLowerCase() === 'card') tipCardTotal += amt
+    }
+    setFinanceTips({
+      perStaff: [...tipPerStaff.entries()].map(([staffId, amount]) => ({ staffId, name: tipStaffNames[staffId] ?? '—', amount })),
+      cardTotal: tipCardTotal,
+    })
     setFinanceLoading(false)
   }
 
@@ -1308,7 +1342,7 @@ export default function Reports() {
                   buildFinancePDF({
                     salonName: resolvedSalonName || 'Salon',
                     month: selectedMonth, year: selectedYear,
-                    income: { ...financeIncome, productSales: financeProductSales }, expenses: financeExpenses,
+                    income: { ...financeIncome, productSales: financeProductSales }, expenses: financeExpenses, tips: financeTips,
                   }),
                   `finance-report-${MONTHS[selectedMonth - 1]}-${selectedYear}`
                 )}
@@ -1413,6 +1447,25 @@ export default function Reports() {
                         <tr>
                           <td style={{ ...TD, fontWeight: 600, borderBottom: 'none' }}>Total marketing</td>
                           <td style={{ ...TD, textAlign: 'right', fontWeight: 600, borderBottom: 'none' }}>AED {formatMoney(financeExpenses.marketing.total)}</td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Tips */}
+                <p style={subLabel}>Tips</p>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+                  <tbody>
+                    {financeTips.perStaff.length === 0 ? (
+                      <tr><td colSpan={2} style={{ ...TD, color: '#6b7280', borderBottom: 'none' }}>No tips recorded yet</td></tr>
+                    ) : (
+                      <>
+                        {financeTips.perStaff.map(s => (
+                          <tr key={s.staffId}><td style={TD}>Tips earned, {s.name}</td><td style={{ ...TD, textAlign: 'right' }}>AED {formatMoney(s.amount)}</td></tr>
+                        ))}
+                        <tr>
+                          <td colSpan={2} style={{ ...TD, fontSize: 11, color: '#6b7280', borderBottom: 'none' }}>AED {formatMoney(financeTips.cardTotal)} in card tips paid out to staff in cash. Not salon income, not commission.</td>
                         </tr>
                       </>
                     )}
