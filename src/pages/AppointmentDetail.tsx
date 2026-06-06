@@ -14,6 +14,7 @@ interface ApptDetail {
   notes: string | null
   client_id: string
   salon_id: string
+  staff_id: string | null
   clients: {
     name: string
     phone: string | null
@@ -302,7 +303,7 @@ export default function AppointmentDetail() {
     async function fetchData() {
       const { data: apptData, error: apptErr } = await supabase
         .from('appointments')
-        .select('id, reference_number, starts_at, ends_at, status, is_walk_in, notes, client_id, salon_id, clients (name, phone, visit_count, last_visit_at)')
+        .select('id, reference_number, starts_at, ends_at, status, is_walk_in, notes, client_id, salon_id, staff_id, clients (name, phone, visit_count, last_visit_at)')
         .eq('id', id)
         .single()
 
@@ -559,10 +560,13 @@ export default function AppointmentDetail() {
     refresh()
   }
 
-  async function handleReassign(serviceId: string, newStaffId: string) {
+  async function handleReassign(newStaffId: string) {
     if (!newStaffId || payrollLocked) return
     setSaving(true)
-    await supabase.from('appointment_services').update({ staff_id: newStaffId }).eq('id', serviceId)
+    await supabase.from('appointments').update({ staff_id: newStaffId }).eq('id', id)
+    if (services.length > 0) {
+      await supabase.from('appointment_services').update({ staff_id: newStaffId }).in('id', services.map(s => s.id))
+    }
     setSaving(false)
     refresh()
   }
@@ -932,29 +936,22 @@ export default function AppointmentDetail() {
               />
             ))}
 
-            {(appt.status === 'scheduled' || appt.status === 'in_progress' || appt.status === 'completed') && services.length > 0 && (
+            {(appt.status === 'scheduled' || appt.status === 'in_progress' || appt.status === 'completed') && (
               <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14 }}>
                 <p style={{ fontSize: 11, fontWeight: 500, color: '#034325', margin: '0 0 10px' }}>Performed by</p>
                 {payrollLocked ? (
                   <p style={{ fontSize: 11, color: '#9ca3af', margin: 0 }}>Staff cannot be changed. Payroll for this month is already done.</p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {services.map(svc => (
-                      <div key={svc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <span style={{ fontSize: 12, color: '#133257' }}>{svc.serviceName}</span>
-                        <select
-                          value={svc.staff_id ?? ''}
-                          onChange={e => handleReassign(svc.id, e.target.value)}
-                          disabled={saving}
-                          style={{ minWidth: 140, fontSize: 12, color: '#000000', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '6px 8px', outline: 'none', cursor: saving ? 'not-allowed' : 'pointer', backgroundColor: '#ffffff' }}
-                        >
-                          {allStaff.map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                  <select
+                    value={appt.staff_id ?? ''}
+                    onChange={e => handleReassign(e.target.value)}
+                    disabled={saving}
+                    style={{ width: '100%', fontSize: 12, color: '#000000', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '6px 8px', outline: 'none', cursor: saving ? 'not-allowed' : 'pointer', backgroundColor: '#ffffff' }}
+                  >
+                    {allStaff.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
-                  </div>
+                  </select>
                 )}
               </div>
             )}
