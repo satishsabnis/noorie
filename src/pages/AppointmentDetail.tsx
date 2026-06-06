@@ -530,6 +530,16 @@ export default function AppointmentDetail() {
     refresh()
   }
 
+  async function handleReopen() {
+    setSaving(true)
+    await supabase.from('appointments').update({ status: 'scheduled' }).eq('id', id)
+    if (services.length > 0) {
+      await supabase.from('appointment_services').update({ status: 'pending' }).in('id', services.map(s => s.id))
+    }
+    setSaving(false)
+    refresh()
+  }
+
   async function creditLoyaltyPoints(
     clientId: string,
     salonId: string,
@@ -894,6 +904,21 @@ export default function AppointmentDetail() {
                 onPhoto={field => triggerPhoto(svc.id, field)}
               />
             ))}
+
+            {appt.status === 'no_show' && (
+              <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <p style={{ fontSize: 12, color: '#133257', margin: 0, lineHeight: 1.5 }}>
+                  This appointment was marked No show. Reopening returns it to Scheduled so you can start the services again.
+                </p>
+                <button
+                  onClick={handleReopen}
+                  disabled={saving}
+                  style={{ backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.5 : 1 }}
+                >
+                  {saving ? '…' : 'Reopen appointment'}
+                </button>
+              </div>
+            )}
 
             {(appt.status === 'scheduled' || appt.status === 'in_progress') && (
               <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14 }}>
