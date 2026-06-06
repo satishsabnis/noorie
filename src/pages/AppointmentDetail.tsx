@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import { supabase } from '../lib/supabase'
-import { useSalonTimezone } from '../hooks/useSalonTimezone'
+import { useSalonTimezone, salonOffsetStr } from '../hooks/useSalonTimezone'
 
 interface ApptDetail {
   id: string
@@ -245,6 +245,8 @@ export default function AppointmentDetail() {
   const [saving, setSaving] = useState(false)
   const [refreshTick, setRefreshTick] = useState(0)
   const [payrollLocked, setPayrollLocked] = useState(false)
+  const [dateInput, setDateInput] = useState('')
+  const [dateErr, setDateErr] = useState<string | null>(null)
 
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [servicePrices, setServicePrices] = useState<Record<string, string>>({})
@@ -293,6 +295,17 @@ export default function AppointmentDetail() {
     checkPayroll()
     return () => { cancelled = true }
   }, [appt])
+
+  useEffect(() => {
+    if (!appt) return
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).formatToParts(new Date(appt.starts_at))
+    const g = (t: string) => parts.find(p => p.type === t)?.value ?? '00'
+    setDateInput(`${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}`)
+    setDateErr(null)
+  }, [appt, tz])
 
   useEffect(() => {
     if (!id) return
@@ -568,6 +581,33 @@ export default function AppointmentDetail() {
       await supabase.from('appointment_services').update({ staff_id: newStaffId }).in('id', services.map(s => s.id))
     }
     setSaving(false)
+    refresh()
+  }
+
+  async function handleSaveDate() {
+    if (!appt || !dateInput || payrollLocked) return
+    const targetYear = parseInt(dateInput.slice(0, 4), 10)
+    const targetMonth = parseInt(dateInput.slice(5, 7), 10)
+    setSaving(true)
+    const { count } = await supabase
+      .from('payroll_runs')
+      .select('id', { count: 'exact', head: true })
+      .eq('salon_id', appt.salon_id)
+      .eq('period_month', targetMonth)
+      .eq('period_year', targetYear)
+      .eq('status', 'completed')
+    if ((count ?? 0) > 0) {
+      setSaving(false)
+      setDateErr('That month is already paid in payroll. Pick a date in an unpaid month.')
+      return
+    }
+    const offset = salonOffsetStr(tz)
+    const newStart = new Date(`${dateInput}:00${offset}`).toISOString()
+    const durationMs = new Date(appt.ends_at).getTime() - new Date(appt.starts_at).getTime()
+    const newEnd = new Date(new Date(newStart).getTime() + durationMs).toISOString()
+    await supabase.from('appointments').update({ starts_at: newStart, ends_at: newEnd }).eq('id', id)
+    setSaving(false)
+    setDateErr(null)
     refresh()
   }
 
@@ -952,6 +992,35 @@ export default function AppointmentDetail() {
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
+                )}
+              </div>
+            )}
+
+            {appt.status !== 'cancelled' && (
+              <div style={{ backgroundColor: '#ffffff', border: '0.5px solid #e0e0e0', borderRadius: 8, padding: 14 }}>
+                <p style={{ fontSize: 11, fontWeight: 500, color: '#034325', margin: '0 0 10px' }}>Date and time</p>
+                {payrollLocked ? (
+                  <p style={{ fontSize: 11, color: '#9ca3af', margin: 0 }}>Date cannot be changed. Payroll for this month is already done.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input
+                        type="datetime-local"
+                        value={dateInput}
+                        onChange={e => setDateInput(e.target.value)}
+                        disabled={saving}
+                        style={{ flex: 1, minWidth: 180, fontSize: 12, color: '#000000', border: '0.5px solid #e0e0e0', borderRadius: 6, padding: '6px 8px', outline: 'none', backgroundColor: '#ffffff' }}
+                      />
+                      <button
+                        onClick={handleSaveDate}
+                        disabled={saving || !dateInput}
+                        style={{ backgroundColor: 'transparent', color: '#034325', border: '0.5px solid #034325', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', cursor: saving || !dateInput ? 'not-allowed' : 'pointer', opacity: saving || !dateInput ? 0.5 : 1 }}
+                      >
+                        {saving ? '…' : 'Save date'}
+                      </button>
+                    </div>
+                    {dateErr && <p style={{ fontSize: 11, color: '#991b1b', margin: 0 }}>{dateErr}</p>}
+                  </div>
                 )}
               </div>
             )}
