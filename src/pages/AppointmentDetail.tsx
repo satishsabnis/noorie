@@ -247,11 +247,15 @@ export default function AppointmentDetail() {
   const [payrollLocked, setPayrollLocked] = useState(false)
   const [dateInput, setDateInput] = useState('')
   const [dateErr, setDateErr] = useState<string | null>(null)
+  const [collectErr, setCollectErr] = useState<string | null>(null)
 
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [servicePrices, setServicePrices] = useState<Record<string, string>>({})
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState<'cash' | 'card'>('cash')
+  const [tipAmount, setTipAmount] = useState('')
+  const [tipMethod, setTipMethod] = useState<'card' | 'cash'>('card')
+  const [tipStaffId, setTipStaffId] = useState('')
   const [clientPoints, setClientPoints] = useState<number>(0)
   const [loyaltyConfig, setLoyaltyConfig] = useState<{
     is_active: boolean; min_redemption_balance: number; value_per_point: number
@@ -713,6 +717,13 @@ export default function AppointmentDetail() {
 
   async function handleCollectPayment() {
     if (!appt) return
+    const tipVal = parseFloat(tipAmount)
+    const resolvedTipStaff = tipStaffId || appt.staff_id || ''
+    if (!isNaN(tipVal) && tipVal > 0 && !resolvedTipStaff) {
+      setCollectErr('Choose which staff the tip is for')
+      return
+    }
+    setCollectErr(null)
     setSaving(true)
 
     await Promise.all(services.map(s =>
@@ -744,6 +755,17 @@ export default function AppointmentDetail() {
       if (newBalance <= 0) {
         await supabase.from('appointments').update({ status: 'completed' }).eq('id', appt.id)
       }
+      const parsedTip = parseFloat(tipAmount)
+      if (!isNaN(parsedTip) && parsedTip > 0) {
+        await supabase.from('tips').insert({
+          salon_id: appt.salon_id,
+          staff_id: resolvedTipStaff,
+          appointment_id: appt.id,
+          client_id: appt.client_id,
+          amount: parsedTip,
+          method: tipMethod,
+        })
+      }
       if (redeemPoints > 0) {
         try {
           await supabase.from('loyalty_points_ledger').insert({
@@ -774,6 +796,7 @@ export default function AppointmentDetail() {
     }
     setSaving(false)
     setPayAmount('')
+    setTipAmount('')
     refresh()
   }
 
@@ -1228,6 +1251,49 @@ export default function AppointmentDetail() {
                         </select>
                       </div>
                     </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 6 }}>Tip (optional)</label>
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 10, color: '#9ca3af', display: 'block', marginBottom: 3 }}>Amount</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={tipAmount}
+                            onChange={e => setTipAmount(e.target.value)}
+                            placeholder="0.00"
+                            style={{ width: '100%', fontSize: 13, fontWeight: 500, color: '#034325', border: '0.5px solid #1D558F', borderRadius: 6, padding: '7px 10px', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 10, color: '#9ca3af', display: 'block', marginBottom: 3 }}>Method</label>
+                          <select
+                            value={tipMethod}
+                            onChange={e => setTipMethod(e.target.value as 'card' | 'cash')}
+                            style={{ width: '100%', fontSize: 12, color: '#000000', border: '0.5px solid #1D558F', borderRadius: 6, padding: '7px 10px', outline: 'none', cursor: 'pointer', backgroundColor: '#ffffff', boxSizing: 'border-box' }}
+                          >
+                            <option value="card">Card</option>
+                            <option value="cash">Cash</option>
+                          </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 10, color: '#9ca3af', display: 'block', marginBottom: 3 }}>To staff</label>
+                          <select
+                            value={tipStaffId || appt?.staff_id || ''}
+                            onChange={e => setTipStaffId(e.target.value)}
+                            style={{ width: '100%', fontSize: 12, color: '#000000', border: '0.5px solid #1D558F', borderRadius: 6, padding: '7px 10px', outline: 'none', cursor: 'pointer', backgroundColor: '#ffffff', boxSizing: 'border-box' }}
+                          >
+                            <option value="">Select staff</option>
+                            {allStaff.map(s => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>Card tips are paid to the staff in cash the same day. Not salon income, not commission.</div>
+                    </div>
+                    {collectErr && <p style={{ fontSize: 11, color: '#991b1b', margin: '0 0 8px' }}>{collectErr}</p>}
                     <button disabled={saving} onClick={handleCollectPayment} style={btnPrimary}>
                       {saving ? 'Processing…' : 'Collect payment'}
                     </button>
