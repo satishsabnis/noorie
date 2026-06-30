@@ -1458,6 +1458,7 @@ export default function Dashboard() {
     const salonId = staffRecord?.salon_id
     if (!salonId) return
     let cancelled = false
+    if (false) {
     supabase
       .from('competitor_reports')
       .select('created_at')
@@ -1469,6 +1470,7 @@ export default function Dashboard() {
         if (cancelled) return
         if (data?.created_at) setMarketPulseLastScan(data.created_at as string)
       })
+    }
     return () => { cancelled = true }
   }, [staffRecord?.salon_id])
 
@@ -1989,6 +1991,7 @@ export default function Dashboard() {
               </span>
             }
           />
+          {false && (
           <div
             onClick={() => setShowMarketPulse(true)}
             onMouseEnter={() => setMpCardHovered(true)}
@@ -2011,6 +2014,7 @@ export default function Dashboard() {
                 : 'No scan yet'}
             </p>
           </div>
+          )}
         </div>
 
         {activeBBCampaign && (
@@ -2087,7 +2091,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Market Pulse modal ── */}
-      {showMarketPulse && (
+      {false && (
         <div
           onClick={() => setShowMarketPulse(false)}
           style={{

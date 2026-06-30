@@ -1328,6 +1328,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
         <ToggleRow label="WhatsApp booking via Noorie" sub="Clients can book appointments through WhatsApp" on={c.whatsapp_booking_enabled} onChange={v => up('whatsapp_booking_enabled', v)} />
       </div>
 
+      {false && (<>
       <div style={{ backgroundColor: '#034325', borderRadius: 8, padding: '14px 16px', marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
           <div>
@@ -1467,6 +1468,7 @@ function SectionAI({ config, salonId, salon, onRefresh }: {
           return <p style={{ fontSize: 12, color: '#991b1b', margin: 0 }}>Report could not be displayed</p>
         }
       })()}
+      </>)}
 
       <SaveBar dirty={dirty} saving={saving} onSave={save} onCancel={() => { setC(config); setDirty(false) }} />
     </div>
